@@ -10,6 +10,7 @@ Local-first, zero-server Bring-Your-Own-Key / Bring-Your-Own-Model (BYOK/BYOM) P
 - **Art Bible Style Lock & Branching DAG Studio:** Persists projects, color palettes (`.gpl` / `.hex`), Golden Style References, sketch/inpaint masks, and non-destructive sprite lineage DAG nodes in local IndexedDB (`Dexie.js`) validated by `Zod`.
 - **Google Antigravity IDE / Agent Integration:** Select **Google Antigravity IDE / Agent Handoff** (`antigravity-agent`) in Sprite Studio to copy style-locked Markdown briefs, export sketch PNGs, or import agent-generated PNG sprites into the DAG via the UI or `window.__NIBGRID_AGENT_BRIDGE__`. Includes [AGENTS.md](AGENTS.md), [GEMINI.md](GEMINI.md), and the workspace skill in [.agents/skills/nibgrid-agent-workflow/SKILL.md](.agents/skills/nibgrid-agent-workflow/SKILL.md).
 - **Worker-Isolated Image Processing & Export:** Sketch normalization, Chroma-Key cutout, interior-RGB defringing, OKLab palette quantization + 4×4 Bayer dithering, Nearest-Neighbor / Area-Average resampling, auto-trim, PoT padding, and `asset.recipe.json` + `.zip` packaging execute purely on-device.
+- **Animated GIF89a & Horizontal Spritesheet Studio:** Sequence sprites directly from the Sprite Lineage DAG, configure FPS (`1–24 FPS`), Ping-Pong looping, Onion Skin overlay, auto color-key cutout, and OKLab palette snap, and export transparent looping `.gif` animations (`src/processing/gif.ts`) plus horizontal `.png` spritesheet strips.
 
 ## Demo Walkthrough: 2D Platformer Red Cat Warrior with Lightsaber
 
@@ -26,12 +27,12 @@ Upload a rough hand-drawn sketch (`Upload Sketch PNG/JPG`) and toggle **Extract 
 ![Normalized Sketch in Sprite Studio](docs/demo/02-sketch-normalized.png)
 
 ### 3. Antigravity IDE Generation & Branching Sprite DAG
-Select **Google Antigravity IDE / Agent Handoff** in the Generation Inspector to copy the compiled Markdown brief, generate style-locked sprite poses using Antigravity's image tooling (`image-generator`), and import them directly into the branching **Sprite Lineage DAG** (creating both an idle combat stance root generation and a masked forward-lunge lightsaber slash child node).
+Select **Google Antigravity IDE / Agent Handoff** in the Generation Inspector to copy the compiled Markdown brief, generate style-locked sprite poses using Antigravity's image tooling (`image-generator`), and import them directly into the branching **Sprite Lineage DAG** (creating an idle combat stance, a mid-charge ignited flare fork, and a masked forward-lunge lightsaber slash child node).
 
 ![Sprite Studio with Antigravity IDE Handoff and Branching DAG](docs/demo/03-antigravity-dag-studio.png)
 
 ### 4. Side-by-Side Variant & Inpaint Comparison
-Compare sibling or ancestor/child iterations in **Side-by-Side Sprite Comparison** (Idle Stance vs. Overcharged Lightsaber Slash Arc).
+Compare sibling or ancestor/child iterations in **Side-by-Side Sprite Comparison** (Mid-Charge Ignited Flare vs. Overcharged Lightsaber Slash Arc).
 
 ![Side-by-Side Comparison of Cat Warrior Stances](docs/demo/04-compare-variants.png)
 
@@ -43,6 +44,16 @@ Inspect and finalize the sprite in **Post-Process & Export Inspector** with **Fa
 **Exported `64×64` Game-Ready Platformer Sprite (`crimson-whisker-lightsaber-cat-generation-1024.png`):**
 
 ![Exported 64x64 Red Cat Warrior Sprite](docs/demo/red-cat-warrior-final-64x64.png)
+
+### 6. Animated GIF89a & Horizontal Spritesheet Export
+Open **Animate & GIF** (`Animation & GIF Studio`) from the Sprite Lineage DAG dock to sequence frames (`#1 Idle Stance` → `#2 Mid-Charge Ignited Flare` → `#3 Overcharged Cyan Slash Arc`), configure **`64×64`**, **`6 FPS`**, **Ping-Pong Loop** (`4 loop steps`), **Auto Color-Key Cutout**, and **OKLab Palette Snap**, preview live playback, and download both a transparent looping GIF89a (`3.2 KB`) and a `192×64` horizontal PNG spritesheet.
+
+![Animation & GIF Studio Modal](docs/demo/06-animation-gif-studio.png)
+
+**Exported `64×64` Looping Animated `.GIF` & `192×64` Horizontal Spritesheet:**
+
+![Animated Red Cat Warrior Lightsaber GIF](docs/demo/red-cat-warrior-lightsaber.gif)
+![Red Cat Warrior Horizontal Spritesheet](docs/demo/red-cat-warrior-spritesheet.png)
 
 ## Development
 

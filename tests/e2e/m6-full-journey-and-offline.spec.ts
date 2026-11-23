@@ -61,6 +61,34 @@ test.describe('M6 Pivot Export Bundle & Offline PWA Resilience', () => {
     await page.getByTestId('inpaint-btn').click();
     await expect(page.locator('[data-node-kind="inpaint"]')).toHaveCount(1);
 
+    // 2b. Animate DAG frames and verify downloadable GIF89a + Horizontal Spritesheet PNG
+    await page.getByTestId('open-animation-studio-btn').click();
+    await expect(page.getByTestId('animation-studio-modal')).toBeVisible();
+    await expect(page.getByTestId('encoded-gif-preview')).toBeVisible();
+    await expect
+      .poll(async () =>
+        page
+          .getByTestId('encoded-gif-preview')
+          .evaluate((el) => (el as HTMLImageElement).naturalWidth),
+      )
+      .toBeGreaterThan(0);
+
+    const gifDownloadPromise = page.waitForEvent('download');
+    await page.getByTestId('download-gif-btn').click();
+    const gifDownload = await gifDownloadPromise;
+    const gifBytes = new Uint8Array(readFileSync((await gifDownload.path())!));
+    expect(String.fromCharCode(...gifBytes.slice(0, 6))).toBe('GIF89a');
+    expect(gifBytes[gifBytes.length - 1]).toBe(0x3b);
+
+    const sheetDownloadPromise = page.waitForEvent('download');
+    await page.getByTestId('download-spritesheet-btn').click();
+    const sheetDownload = await sheetDownloadPromise;
+    const sheetBytes = new Uint8Array(readFileSync((await sheetDownload.path())!));
+    expect(Array.from(sheetBytes.slice(0, 8))).toEqual([
+      0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a,
+    ]);
+    await page.getByTestId('close-animation-modal-btn').click();
+
     // 3. Open Post-Process Inspector -> Fast Color-Key + Palette Snap + 64x64 + Bottom-Center pivot
     await page.getByTestId('open-postprocess-btn').click();
     await expect(page.getByTestId('postprocess-inspector')).toBeVisible();

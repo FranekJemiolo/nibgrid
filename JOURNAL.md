@@ -164,6 +164,12 @@
 
 ## Google Antigravity IDE / Agent Integration
 
-- **Antigravity IDE / Agent Handoff Adapter (`src/providers/antigravityProvider.ts`, `src/db/database.ts`, `src/providers/registry.ts`):** Added built-in `antigravity-agent` provider kind alongside `offline-mock`, exposing structured Style-Locked Markdown brief generation (`buildAntigravityPromptBrief`), clipboard brief copy, sketch PNG export, direct PNG file import into the DAG (`src/ui/studio/GenerationInspector.tsx` & `SpriteStudio.tsx`), and programmatic `window.__NIBGRID_AGENT_BRIDGE__` (`getBrief`, `getState`, `importPngBase64`).
+- **Google Antigravity IDE / Agent Handoff Adapter (`src/providers/antigravityProvider.ts`, `src/db/database.ts`, `src/providers/registry.ts`):** Added built-in `antigravity-agent` provider kind alongside `offline-mock`, exposing structured Style-Locked Markdown brief generation (`buildAntigravityPromptBrief`), clipboard brief copy, sketch PNG export, direct PNG file import into the DAG (`src/ui/studio/GenerationInspector.tsx` & `SpriteStudio.tsx`), and programmatic `window.__NIBGRID_AGENT_BRIDGE__` (`getBrief`, `getState`, `importPngBase64`).
 - **Workspace Customizations (`AGENTS.md`, `GEMINI.md`, `.agents/skills/nibgrid-agent-workflow/`):** Added Antigravity Customization System rules and progressive-disclosure workflow skill + isolated `--new-window` Chromium verification script (`scripts/verify-isolated-browser.mjs`) with deterministic `try / finally` cleanup and zero session leakage.
+
+## Animated GIF89a & Spritesheet Studio
+
+- **Pure-TS GIF89a Encoder & Spritesheet Strip Compositor (`src/processing/gif.ts`):** Implemented pure TypeScript LZW GIF89a encoding (`minCodeSize = 8`, `NETSCAPE2.0` infinite looping, GCE transparency + disposal `2`, deterministic 256-entry GCT mapping, `pingPong` loop expansion) and horizontal spritesheet strip packing testable cleanly inside Node/Vitest.
+- **Animation & GIF Studio UI (`src/export/animationExporter.ts`, `src/ui/studio/AnimationStudioModal.tsx`, `DagTreeDock.tsx`, `SpriteStudio.tsx`):** Added timeline frame ordering/adding/removing, `1–24 FPS` preview playback, Ping-Pong toggle, Onion Skin canvas overlay, auto color-key cutout + OKLab Art Bible palette snap, downloadable looping `.gif` + spritesheet `.png` export, and `exportAnimatedGifBase64()` on `window.__NIBGRID_AGENT_BRIDGE__`.
+- **2D Platformer Red Cat Warrior Animation Demo (`docs/demo/` & `README.md`):** Generated a 3-frame `64×64` Idle → Mid-Charge Ignited Flare → Overcharged Cyan Slash Arc sequence (`4` ping-pong steps at `6 FPS`), verified GIF89a (`3.2 KB`) and `192×64` horizontal spritesheet export via isolated Playwright headless Chromium, and documented the full walkthrough in `README.md`.
 

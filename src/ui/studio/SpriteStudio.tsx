@@ -34,12 +34,22 @@ import {
 } from '../../domain/dag';
 import { compilePrompt } from '../../domain/promptCompiler';
 import type { SpriteNode } from '../../domain/schemas';
+import {
+  buildSpriteAnimationArtifacts,
+  selectDefaultAnimationNodeIds,
+} from '../../export/animationExporter';
 import { toAssetSlug, triggerBlobDownload } from '../../export/zipPackager';
 import { CanvasHistory } from '../../processing/history';
 import { sha256Bytes } from '../../processing/hash';
-import { base64ToUint8, encodeRgbaToPngBytes, rgbaToPngBlob } from '../../processing/png';
+import {
+  base64ToUint8,
+  encodeRgbaToPngBytes,
+  rgbaToPngBlob,
+  uint8ToBase64,
+} from '../../processing/png';
 import {
   buildAntigravityPromptBrief,
+  type ExportAnimatedGifBridgeOptions,
   type NibgridAgentBridge,
 } from '../../providers/antigravityProvider';
 import { ProviderError } from '../../providers/errors';
@@ -47,6 +57,7 @@ import { resolveProviderAdapter } from '../../providers/registry';
 import type { GoldenReferencePayload } from '../../providers/types';
 import { useAppStore } from '../../store/useAppStore';
 import { normalizeSketchInWorker } from '../../workers/normalizeClient';
+import { AnimationStudioModal } from './AnimationStudioModal';
 import { CompareSplitModal } from './CompareSplitModal';
 import { DagTreeDock } from './DagTreeDock';
 import { GenerationInspector } from './GenerationInspector';
@@ -232,6 +243,7 @@ export function SpriteStudio() {
   const [compareNodes, setCompareNodes] = useState<{ leftId: string; rightId: string } | null>(
     null,
   );
+  const [animationStudioOpen, setAnimationStudioOpen] = useState(false);
   const [statusMessage, setStatusMessage] = useState<string | null>(null);
   const [providerError, setProviderError] = useState<{
     message: string;
@@ -336,6 +348,7 @@ export function SpriteStudio() {
     setActiveNodeId(null);
     setForkParentId(null);
     setCompareNodes(null);
+    setAnimationStudioOpen(false);
     setIsNormalized(false);
     syncHistoryFlags();
     renderSketchCanvas();
@@ -1267,6 +1280,27 @@ export function SpriteStudio() {
             promptDeltaOverride,
           );
         },
+        exportAnimatedGifBase64: async (options: ExportAnimatedGifBridgeOptions = {}) => {
+          const selectedIds = selectDefaultAnimationNodeIds(spriteNodes);
+          const orderedNodes = selectedIds
+            .map((id) => spriteNodes.find((n) => n.id === id))
+            .filter((n): n is SpriteNode => n !== undefined);
+          const result = await buildSpriteAnimationArtifacts(orderedNodes, activeProject.artBible, {
+            targetSize: options.targetSize ?? Math.min(256, targetWidth),
+            autoCutout: options.autoCutout ?? true,
+            tolerance: options.tolerance ?? 12,
+            paletteSnap: activeProject.artBible.palette.length > 0,
+            fps: options.fps ?? 6,
+            pingPong: options.pingPong ?? true,
+          });
+          return {
+            gifBase64: uint8ToBase64(result.gifBytes),
+            spritesheetPngBase64: uint8ToBase64(result.spritesheetPngBytes),
+            frameCount: result.frames.length,
+            width: result.width,
+            height: result.height,
+          };
+        },
       }
     : null;
 
@@ -1285,6 +1319,12 @@ export function SpriteStudio() {
           throw new Error('No active Sprite Studio project mounted.');
         }
         return agentBridgeRef.current.importPngBase64(base64Png, promptDeltaOverride);
+      },
+      exportAnimatedGifBase64: async (options?: ExportAnimatedGifBridgeOptions) => {
+        if (!agentBridgeRef.current) {
+          throw new Error('No active Sprite Studio project mounted.');
+        }
+        return agentBridgeRef.current.exportAnimatedGifBase64(options);
       },
     };
     return () => {
@@ -1794,6 +1834,7 @@ export function SpriteStudio() {
             nodeId: targetNodeId,
           })
         }
+        onOpenAnimationStudio={() => setAnimationStudioOpen(true)}
         onDeleteLeafNode={(id) => void handleDeleteLeafNode(id)}
       />
 
@@ -1804,6 +1845,15 @@ export function SpriteStudio() {
           initialLeftId={compareNodes.leftId}
           initialRightId={compareNodes.rightId}
           onClose={() => setCompareNodes(null)}
+        />
+      )}
+
+      {animationStudioOpen && (
+        <AnimationStudioModal
+          nodes={spriteNodes}
+          artBible={activeProject.artBible}
+          projectName={activeProject.name}
+          onClose={() => setAnimationStudioOpen(false)}
         />
       )}
     </div>

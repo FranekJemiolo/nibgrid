@@ -33,10 +33,29 @@ export interface NibgridAgentStateSnapshot {
   selectedProviderId: string;
 }
 
+export interface ExportAnimatedGifBridgeOptions {
+  fps?: number;
+  targetSize?: number;
+  autoCutout?: boolean;
+  tolerance?: number;
+  pingPong?: boolean;
+}
+
+export interface ExportAnimatedGifBridgeResult {
+  gifBase64: string;
+  spritesheetPngBase64: string;
+  frameCount: number;
+  width: number;
+  height: number;
+}
+
 export interface NibgridAgentBridge {
   getBrief: () => string;
   getState: () => NibgridAgentStateSnapshot;
   importPngBase64: (base64Png: string, promptDeltaOverride?: string) => Promise<string>;
+  exportAnimatedGifBase64: (
+    options?: ExportAnimatedGifBridgeOptions,
+  ) => Promise<ExportAnimatedGifBridgeResult>;
 }
 
 declare global {

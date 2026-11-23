@@ -70,3 +70,9 @@ All image-manipulation stages operate on raw `Uint8ClampedArray` buffers in `src
 - **Bundling & Direct Repo Export (`zipPackager.ts` & `fsAccess.ts`):** Uses `fflate.zipSync` for client-side ZIP downloads and `window.showDirectoryPicker()` (where supported) to write directly into a local game project directory.
 - **Zero-Server Offline PWA (`vite.config.ts`, `public/manifest.webmanifest`, `src/main.tsx`):** A custom Vite build plugin emits `dist/sw.js` precaching static HTML, JS, CSS, Worker bundles, manifest, and icon under `VITE_BASE_PATH` while leaving large optional `.wasm` model runtimes lazy-cached on demand and bypassing cross-origin API calls.
 
+## 8. Animated GIF89a & Horizontal Spritesheet Studio
+
+- **Pure-TS GIF89a Encoder & Spritesheet Compositor (`src/processing/gif.ts`):** Builds `256`-entry Global Color Tables reserving index `0` for transparent pixels, emits Graphic Control Extensions (disposal method `2` / restore-to-background, per-frame centisecond delay, transparent color index), injects `NETSCAPE2.0` infinite-loop blocks, compresses frame pixels using LZW `minCodeSize = 8` via open-addressed hash tables, supports `pingPong` forward-plus-reverse loop expansion, and packs frames horizontally via `composeSpritesheetStrip()`.
+- **Animation Exporter & Interactive Studio (`src/export/animationExporter.ts`, `src/ui/studio/AnimationStudioModal.tsx`):** Reuses `runPostProcessPipeline()` and `encodeRgbaToPngBytes()` across user-ordered DAG frames with optional auto color-key cutout, OKLab palette snapping, target frame resolution (`64`/`128`/`256`), live `<canvas>` onion-skin playback, `1–24 FPS` rate slider, and one-click `.gif` / spritesheet `.png` download.
+- **Agent Bridge Export (`src/providers/antigravityProvider.ts`):** Exposes `window.__NIBGRID_AGENT_BRIDGE__.exportAnimatedGifBase64()` for programmatic `.gif` and horizontal spritesheet generation from the current project DAG.
+

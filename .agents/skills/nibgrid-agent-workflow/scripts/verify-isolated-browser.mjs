@@ -63,18 +63,39 @@ async function main() {
       if (!bridge) throw new Error('window.__NIBGRID_AGENT_BRIDGE__ is not registered');
       const brief = bridge.getBrief();
       const importedNodeId = await bridge.importPngBase64(pngB64, 'antigravity-ide bridge test');
+      const secondNodeId = await bridge.importPngBase64(pngB64, 'antigravity-ide frame 2 test');
       const afterState = bridge.getState();
+      const animResult = await bridge.exportAnimatedGifBase64({
+        nodeIds: [importedNodeId, secondNodeId],
+        targetSize: 64,
+        fps: 6,
+        pingPong: true,
+      });
       return {
         briefHasTitle: brief.includes('Nibgrid -> Google Antigravity IDE Sprite Brief'),
         importedNodeId,
         nodeCount: afterState.nodeCount,
         selectedProviderId: afterState.selectedProviderId,
+        gifMagic: atob(animResult.gifBase64).slice(0, 6),
+        spritesheetSize: `${animResult.width}x${animResult.height}x${animResult.frameCount}`,
+        spritesheetPngMagic: Array.from(
+          atob(animResult.spritesheetPngBase64)
+            .slice(0, 4)
+            .split('')
+            .map((c) => c.charCodeAt(0)),
+        ),
       };
     }, SAMPLE_PNG_BASE64);
 
     assert.ok(bridgeSummary.briefHasTitle, 'Missing formatted Antigravity IDE prompt brief');
     assert.ok(bridgeSummary.importedNodeId.length > 0, 'Bridge did not return imported node ID');
     assert.ok(bridgeSummary.nodeCount >= 2, 'Expected root sketch + imported Antigravity node');
+    assert.equal(bridgeSummary.gifMagic, 'GIF89a', 'Expected GIF89a header from bridge export');
+    assert.deepEqual(
+      bridgeSummary.spritesheetPngMagic,
+      [0x89, 0x50, 0x4e, 0x47],
+      'Expected PNG signature on bridge spritesheet export',
+    );
     assert.deepEqual(consoleErrors, [], `Console errors: ${consoleErrors.join('; ')}`);
     assert.deepEqual(pageErrors, [], `Page errors: ${pageErrors.join('; ')}`);
     assert.deepEqual(httpErrors, [], `HTTP >= 400 errors: ${httpErrors.join('; ')}`);
@@ -104,4 +125,3 @@ main().catch((error) => {
   console.error(error);
   process.exit(1);
 });
-

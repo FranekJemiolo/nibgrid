@@ -1,4 +1,4 @@
-import { Columns2, GitBranch, GitFork, Sliders, Trash2 } from 'lucide-react';
+import { Columns2, Film, GitBranch, GitFork, Sliders, Trash2 } from 'lucide-react';
 import { buildDagTreeRows } from '../../domain/dag';
 import type { ArtMode, SpriteNode, SpriteNodeKind } from '../../domain/schemas';
 import { BlobImage } from '../components/BlobImage';
@@ -12,6 +12,7 @@ interface DagTreeDockProps {
   onForkNode: (nodeId: string) => void;
   onCompareNode: (nodeId: string) => void;
   onOpenInspector: (nodeId: string) => void;
+  onOpenAnimationStudio?: () => void;
   onDeleteLeafNode: (nodeId: string) => void;
 }
 
@@ -39,6 +40,7 @@ export function DagTreeDock({
   onForkNode,
   onCompareNode,
   onOpenInspector,
+  onOpenAnimationStudio,
   onDeleteLeafNode,
 }: DagTreeDockProps) {
   const rows = buildDagTreeRows(nodes);
@@ -48,24 +50,37 @@ export function DagTreeDock({
       data-testid="dag-tree-dock"
       className="border-t border-slate-800 bg-slate-900/80 px-4 py-3"
     >
-      <div className="mb-2 flex items-center justify-between">
+      <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
         <div className="flex items-center gap-2">
           <GitBranch className="h-4 w-4 text-indigo-400" />
           <h3 className="text-xs font-semibold tracking-wider text-slate-300 uppercase">
             Sprite Lineage DAG ({nodes.length} {nodes.length === 1 ? 'node' : 'nodes'})
           </h3>
         </div>
-        {nodes.length >= 2 && activeNodeId && (
-          <button
-            type="button"
-            data-testid="open-compare-btn"
-            onClick={() => onCompareNode(activeNodeId)}
-            className="inline-flex items-center gap-1.5 rounded border border-slate-700 bg-slate-800 px-2.5 py-1 text-xs font-medium text-slate-200 hover:bg-slate-700"
-          >
-            <Columns2 className="h-3.5 w-3.5" />
-            Compare Nodes
-          </button>
-        )}
+        <div className="flex items-center gap-2">
+          {nodes.length >= 1 && onOpenAnimationStudio && (
+            <button
+              type="button"
+              data-testid="open-animation-studio-btn"
+              onClick={onOpenAnimationStudio}
+              className="inline-flex items-center gap-1.5 rounded border border-indigo-500/40 bg-indigo-500/20 px-2.5 py-1 text-xs font-medium text-indigo-200 hover:bg-indigo-500/30"
+            >
+              <Film className="h-3.5 w-3.5" />
+              Animate &amp; GIF
+            </button>
+          )}
+          {nodes.length >= 2 && activeNodeId && (
+            <button
+              type="button"
+              data-testid="open-compare-btn"
+              onClick={() => onCompareNode(activeNodeId)}
+              className="inline-flex items-center gap-1.5 rounded border border-slate-700 bg-slate-800 px-2.5 py-1 text-xs font-medium text-slate-200 hover:bg-slate-700"
+            >
+              <Columns2 className="h-3.5 w-3.5" />
+              Compare Nodes
+            </button>
+          )}
+        </div>
       </div>
 
       {rows.length === 0 ? (

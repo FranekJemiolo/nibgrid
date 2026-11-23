@@ -23,6 +23,7 @@ Use this workflow to integrate Google Antigravity IDE / external coding agents s
    - `window.__NIBGRID_AGENT_BRIDGE__.getBrief()`
    - `window.__NIBGRID_AGENT_BRIDGE__.getState()`
    - `window.__NIBGRID_AGENT_BRIDGE__.importPngBase64(base64Png, promptDelta)`
+   - `window.__NIBGRID_AGENT_BRIDGE__.exportAnimatedGifBase64(options)`
 
 ## 2. Isolated Browser Verification (Zero Session Leakage)
 
