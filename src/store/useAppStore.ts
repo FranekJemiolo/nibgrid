@@ -1,6 +1,12 @@
 import { create } from 'zustand';
 import { OFFLINE_MOCK_PROVIDER_ID, repository, type ProjectSummary } from '../db/database';
-import type { ArtBible, Project, ProviderConfig, SpriteNode } from '../domain/schemas';
+import type {
+  AdherenceLevel,
+  ArtBible,
+  Project,
+  ProviderConfig,
+  SpriteNode,
+} from '../domain/schemas';
 
 export type ScreenRoute =
   | { screen: 'hub' }
@@ -45,6 +51,8 @@ interface AppState {
   spriteNodes: SpriteNode[];
   providers: ProviderConfig[];
   selectedProviderId: string;
+  studioAdherence: AdherenceLevel;
+  studioVariantCount: 1 | 2;
   vaultOpen: boolean;
   isLoading: boolean;
   errorMessage: string | null;
@@ -67,6 +75,8 @@ interface AppState {
   saveProvider: (config: ProviderConfig) => Promise<void>;
   deleteProvider: (id: string) => Promise<void>;
   setSelectedProviderId: (id: string) => void;
+  setStudioAdherence: (adherence: AdherenceLevel) => void;
+  setStudioVariantCount: (count: 1 | 2) => void;
 
   refreshSpriteNodes: (projectId: string) => Promise<void>;
 }
@@ -89,6 +99,8 @@ export const useAppStore = create<AppState>((set, get) => ({
   spriteNodes: [],
   providers: [],
   selectedProviderId: OFFLINE_MOCK_PROVIDER_ID,
+  studioAdherence: 'balanced',
+  studioVariantCount: 2,
   vaultOpen: false,
   isLoading: true,
   errorMessage: null,
@@ -96,6 +108,7 @@ export const useAppStore = create<AppState>((set, get) => ({
   initialize: async () => {
     set({ isLoading: true, errorMessage: null });
     try {
+      await repository.cleanupOrphanedBlobs();
       const [projects, providers] = await Promise.all([
         repository.listProjectsWithCounts(),
         repository.listProviderConfigs(),
@@ -169,8 +182,16 @@ export const useAppStore = create<AppState>((set, get) => ({
       return;
     }
 
+    const prevProjectId = get().activeProject?.id;
+    const isSwitchingProject = prevProjectId !== project.id;
     const spriteNodes = await repository.listSpriteNodes(project.id);
-    set({ route, activeProject: project, spriteNodes, errorMessage: null });
+    set({
+      route,
+      activeProject: project,
+      spriteNodes,
+      errorMessage: null,
+      ...(isSwitchingProject ? { studioAdherence: 'balanced', studioVariantCount: 2 } : {}),
+    });
   },
 
   setVaultOpen: (open) => set({ vaultOpen: open }),
@@ -291,6 +312,8 @@ export const useAppStore = create<AppState>((set, get) => ({
   },
 
   setSelectedProviderId: (id) => set({ selectedProviderId: id }),
+  setStudioAdherence: (studioAdherence) => set({ studioAdherence }),
+  setStudioVariantCount: (studioVariantCount) => set({ studioVariantCount }),
 
   refreshSpriteNodes: async (projectId) => {
     const [spriteNodes, projects] = await Promise.all([

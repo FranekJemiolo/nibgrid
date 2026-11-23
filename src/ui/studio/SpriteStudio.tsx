@@ -33,7 +33,7 @@ import {
   getAncestorPath,
 } from '../../domain/dag';
 import { compilePrompt } from '../../domain/promptCompiler';
-import type { AdherenceLevel, SpriteNode } from '../../domain/schemas';
+import type { SpriteNode } from '../../domain/schemas';
 import { CanvasHistory } from '../../processing/history';
 import { sha256Bytes } from '../../processing/hash';
 import { encodeRgbaToPngBytes, rgbaToPngBlob } from '../../processing/png';
@@ -67,8 +67,9 @@ async function decodeBlobToRgba(
   sourceHeight: number;
 }> {
   const bitmap = await createImageBitmap(blob);
+  const srcCanvas = document.createElement('canvas');
+  const dstCanvas = document.createElement('canvas');
   try {
-    const srcCanvas = document.createElement('canvas');
     srcCanvas.width = bitmap.width;
     srcCanvas.height = bitmap.height;
     const srcCtx = srcCanvas.getContext('2d');
@@ -80,7 +81,6 @@ async function decodeBlobToRgba(
       srcCtx.getImageData(0, 0, bitmap.width, bitmap.height).data,
     );
 
-    const dstCanvas = document.createElement('canvas');
     dstCanvas.width = targetWidth;
     dstCanvas.height = targetHeight;
     const dstCtx = dstCanvas.getContext('2d');
@@ -110,6 +110,10 @@ async function decodeBlobToRgba(
     };
   } finally {
     bitmap.close();
+    srcCanvas.width = 0;
+    srcCanvas.height = 0;
+    dstCanvas.width = 0;
+    dstCanvas.height = 0;
   }
 }
 
@@ -192,6 +196,10 @@ export function SpriteStudio() {
     providers,
     selectedProviderId,
     setSelectedProviderId,
+    studioAdherence: adherence,
+    setStudioAdherence: setAdherence,
+    studioVariantCount: variantCount,
+    setStudioVariantCount: setVariantCount,
     refreshSpriteNodes,
     navigate,
   } = useAppStore();
@@ -213,10 +221,8 @@ export function SpriteStudio() {
   const [maskPixelCount, setMaskPixelCount] = useState(0);
   const [activeNodeId, setActiveNodeId] = useState<string | null>(null);
   const [forkParentId, setForkParentId] = useState<string | null>(null);
-  const [adherence, setAdherence] = useState<AdherenceLevel>('balanced');
   const [promptDelta, setPromptDelta] = useState('');
   const [seed, setSeed] = useState(1024);
-  const [variantCount, setVariantCount] = useState<1 | 2>(2);
   const [isGenerating, setIsGenerating] = useState(false);
   const [compareNodes, setCompareNodes] = useState<{ leftId: string; rightId: string } | null>(
     null,

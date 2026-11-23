@@ -233,11 +233,23 @@ export class NibgridRepository {
 
   async saveSpriteNode(node: SpriteNode): Promise<SpriteNode> {
     const validated = SpriteNodeSchema.parse(node);
-    await this.database.spriteNodes.put(validated);
-    await this.database.projects
-      .where('id')
-      .equals(validated.projectId)
-      .modify({ updatedAt: nowIso() });
+    await this.database.transaction(
+      'rw',
+      this.database.spriteNodes,
+      this.database.projects,
+      this.database.blobs,
+      async () => {
+        const existing = await this.database.spriteNodes.get(validated.id);
+        await this.database.spriteNodes.put(validated);
+        await this.database.projects
+          .where('id')
+          .equals(validated.projectId)
+          .modify({ updatedAt: nowIso() });
+        if (existing) {
+          await this.cleanupOrphanedBlobsInTx();
+        }
+      },
+    );
     return validated;
   }
 
@@ -281,32 +293,40 @@ export class NibgridRepository {
   }
 
   private async cleanupOrphanedBlobsInTx(): Promise<number> {
-    const referencedBlobIds = new Set<string>();
-    const allProjects = await this.database.projects.toArray();
-    for (const proj of allProjects) {
-      for (const blobId of proj.artBible.goldenReferenceBlobIds) {
-        referencedBlobIds.add(blobId);
-      }
-    }
-
-    const allNodes = await this.database.spriteNodes.toArray();
-    for (const node of allNodes) {
-      referencedBlobIds.add(node.imageBlobId);
-      if (node.maskBlobId) {
-        referencedBlobIds.add(node.maskBlobId);
-      }
-      if (node.processedBlobId) {
-        referencedBlobIds.add(node.processedBlobId);
-      }
-    }
-
-    const allBlobIds = await this.database.blobs.toCollection().primaryKeys();
-    const orphanedIds = allBlobIds.filter((id) => !referencedBlobIds.has(id));
+    const orphanedIds = await findOrphanBlobIds(this.database);
     if (orphanedIds.length > 0) {
       await this.database.blobs.bulkDelete(orphanedIds);
     }
     return orphanedIds.length;
   }
+}
+
+/**
+ * Pure integrity check scanning all projects and sprite nodes to identify
+ * unreferenced binary blobs in the `blobs` table.
+ */
+export async function findOrphanBlobIds(database: NibgridDatabase = db): Promise<string[]> {
+  const referencedBlobIds = new Set<string>();
+  const allProjects = await database.projects.toArray();
+  for (const proj of allProjects) {
+    for (const blobId of proj.artBible.goldenReferenceBlobIds) {
+      referencedBlobIds.add(blobId);
+    }
+  }
+
+  const allNodes = await database.spriteNodes.toArray();
+  for (const node of allNodes) {
+    referencedBlobIds.add(node.imageBlobId);
+    if (node.maskBlobId) {
+      referencedBlobIds.add(node.maskBlobId);
+    }
+    if (node.processedBlobId) {
+      referencedBlobIds.add(node.processedBlobId);
+    }
+  }
+
+  const allBlobIds = await database.blobs.toCollection().primaryKeys();
+  return allBlobIds.filter((id) => !referencedBlobIds.has(id));
 }
 
 export const repository = new NibgridRepository(db);

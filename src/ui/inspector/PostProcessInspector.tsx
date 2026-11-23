@@ -51,8 +51,8 @@ async function decodeBlobFlexible(blob: Blob): Promise<DecodedImage> {
     return await decodePngBytesToRgba(bytes);
   } catch {
     const bitmap = await createImageBitmap(blob);
+    const canvas = document.createElement('canvas');
     try {
-      const canvas = document.createElement('canvas');
       canvas.width = bitmap.width;
       canvas.height = bitmap.height;
       const ctx = canvas.getContext('2d');
@@ -66,6 +66,8 @@ async function decodeBlobFlexible(blob: Blob): Promise<DecodedImage> {
       };
     } finally {
       bitmap.close();
+      canvas.width = 0;
+      canvas.height = 0;
     }
   }
 }

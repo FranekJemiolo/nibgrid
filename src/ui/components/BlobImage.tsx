@@ -1,38 +1,43 @@
 import { useEffect, useState } from 'react';
-import { repository } from '../../db/database';
+import type { ArtMode } from '../../domain/schemas';
+import { acquireBlobUrl, releaseBlobUrl } from './blobUrlCache';
 
 interface BlobImageProps {
   blobId: string;
   alt: string;
+  artMode?: ArtMode;
   className?: string;
   testId?: string;
 }
 
-export function BlobImage({ blobId, alt, className = '', testId }: BlobImageProps) {
+export function BlobImage({
+  blobId,
+  alt,
+  artMode = 'pixel-art',
+  className = '',
+  testId,
+}: BlobImageProps) {
   const [objectUrl, setObjectUrl] = useState<string | null>(null);
   const [missing, setMissing] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
-    let createdUrl: string | null = null;
     setMissing(false);
+    setObjectUrl(null);
 
-    void repository.getBlob(blobId).then((record) => {
+    void acquireBlobUrl(blobId).then((url) => {
       if (cancelled) return;
-      if (!record) {
+      if (!url) {
         setMissing(true);
         setObjectUrl(null);
         return;
       }
-      createdUrl = URL.createObjectURL(record.bytes);
-      setObjectUrl(createdUrl);
+      setObjectUrl(url);
     });
 
     return () => {
       cancelled = true;
-      if (createdUrl) {
-        URL.revokeObjectURL(createdUrl);
-      }
+      releaseBlobUrl(blobId);
     };
   }, [blobId]);
 
@@ -63,7 +68,7 @@ export function BlobImage({ blobId, alt, className = '', testId }: BlobImageProp
       src={objectUrl}
       alt={alt}
       className={className}
-      style={{ imageRendering: 'pixelated' }}
+      style={{ imageRendering: artMode === 'pixel-art' ? 'pixelated' : 'auto' }}
     />
   );
 }
