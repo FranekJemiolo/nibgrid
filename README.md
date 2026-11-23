@@ -71,6 +71,7 @@ npm run lint
 npm run format:check
 npm run test:unit
 npm run test:e2e
+python3 -m unittest tests/unit/test_nibgrid_bridge.py -v
 npm run build
 VITE_BASE_PATH=/nibgrid/ npm run build
 ```

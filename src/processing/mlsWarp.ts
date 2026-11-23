@@ -12,6 +12,20 @@ export interface MlsSolveResult {
 
 const PIN_EPSILON_SQ = 1e-6;
 
+function sanitizeFiniteFloat32(value: number, fallback: number): number {
+  const f32 = Math.fround(value);
+  return Number.isFinite(f32) ? f32 : fallback;
+}
+
+function arePinsValid(pins: readonly Vec2[]): boolean {
+  for (const p of pins) {
+    if (!Number.isFinite(p.x) || !Number.isFinite(p.y)) {
+      return false;
+    }
+  }
+  return true;
+}
+
 /**
  * Computes rigid/similarity rotation components `(cos, sin)` around a vertex,
  * optionally skipping a pinned index so angle continuity is preserved even directly on pins.
@@ -120,7 +134,12 @@ export function solveMlsMesh(
   const outPos = new Float32Array(restVertices.length);
   const outRot = new Float32Array(vertexCount);
 
-  if (pinCount === 0 || pinCount !== deformedPins.length) {
+  if (
+    pinCount === 0 ||
+    pinCount !== deformedPins.length ||
+    !arePinsValid(restPins) ||
+    !arePinsValid(deformedPins)
+  ) {
     outPos.set(restVertices);
     return { positions: outPos, rotations: outRot };
   }
@@ -129,8 +148,10 @@ export function solveMlsMesh(
     const dx = deformedPins[0]!.x - restPins[0]!.x;
     const dy = deformedPins[0]!.y - restPins[0]!.y;
     for (let vi = 0; vi < vertexCount; vi++) {
-      outPos[vi * 2] = (restVertices[vi * 2] ?? 0) + dx;
-      outPos[vi * 2 + 1] = (restVertices[vi * 2 + 1] ?? 0) + dy;
+      const vx = restVertices[vi * 2] ?? 0;
+      const vy = restVertices[vi * 2 + 1] ?? 0;
+      outPos[vi * 2] = sanitizeFiniteFloat32(vx + dx, vx);
+      outPos[vi * 2 + 1] = sanitizeFiniteFloat32(vy + dy, vy);
     }
     return { positions: outPos, rotations: outRot };
   }
@@ -154,8 +175,8 @@ export function solveMlsMesh(
 
     if (exactPinIdx >= 0) {
       const q = deformedPins[exactPinIdx]!;
-      outPos[vi * 2] = q.x;
-      outPos[vi * 2 + 1] = q.y;
+      outPos[vi * 2] = sanitizeFiniteFloat32(q.x, vx);
+      outPos[vi * 2 + 1] = sanitizeFiniteFloat32(q.y, vy);
       // Estimate continuous rotation using remaining pins centered on the matched pin
       if (pinCount >= 2) {
         const ref = solveAtVertex(
@@ -186,15 +207,16 @@ export function solveMlsMesh(
           S += w * (dx * qdy - dy * qdx);
         }
         const len = Math.hypot(C, S);
-        outRot[vi] = len > 1e-9 ? Math.atan2(S / len, C / len) : Math.atan2(ref.sin, ref.cos);
+        const angle = len > 1e-9 ? Math.atan2(S / len, C / len) : Math.atan2(ref.sin, ref.cos);
+        outRot[vi] = sanitizeFiniteFloat32(angle, 0);
       }
       continue;
     }
 
     const res = solveAtVertex(vx, vy, restPins, deformedPins, mode, alpha, -1, weights);
-    outPos[vi * 2] = res.px;
-    outPos[vi * 2 + 1] = res.py;
-    outRot[vi] = Math.atan2(res.sin, res.cos);
+    outPos[vi * 2] = sanitizeFiniteFloat32(res.px, vx);
+    outPos[vi * 2 + 1] = sanitizeFiniteFloat32(res.py, vy);
+    outRot[vi] = sanitizeFiniteFloat32(Math.atan2(res.sin, res.cos), 0);
   }
 
   return { positions: outPos, rotations: outRot };

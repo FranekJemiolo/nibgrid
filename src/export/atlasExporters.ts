@@ -106,6 +106,14 @@ export interface GodotTresExportResult {
   readonly texturesTresFiles: Record<string, string>;
 }
 
+function toForwardSlash(path: string): string {
+  return path.replace(/\\/g, '/');
+}
+
+function formatIntRect2(x: number, y: number, w: number, h: number): string {
+  return `Rect2(${Math.round(x)}, ${Math.round(y)}, ${Math.round(w)}, ${Math.round(h)})`;
+}
+
 /**
  * Generates Godot 4 `.tres` (`format=3`) `SpriteFrames` + `AtlasTexture` + `CanvasTexture`
  * resources preserving trim margins and setting `texture_filter = 1` for pixel art.
@@ -116,6 +124,7 @@ export function exportGodotTres(
   artMode: ArtMode = 'pixel-art',
   fps = 8,
 ): GodotTresExportResult {
+  const safeSlug = toForwardSlash(baseSlug);
   const textureFilter = artMode === 'pixel-art' ? 1 : 2;
   const extResources: string[] = [];
   const subResources: string[] = [];
@@ -125,7 +134,7 @@ export function exportGodotTres(
   for (const page of atlas.pages) {
     const albedoId = `${nextExtId++}_albedo_${page.pageIndex}`;
     extResources.push(
-      `[ext_resource type="Texture2D" path="${baseSlug}_${page.pageIndex}.png" id="${albedoId}"]`,
+      `[ext_resource type="Texture2D" path="${safeSlug}_${page.pageIndex}.png" id="${albedoId}"]`,
     );
 
     const canvasId = `CanvasTexture_${page.pageIndex}`;
@@ -137,7 +146,7 @@ export function exportGodotTres(
     if (page.normal) {
       const normalId = `${nextExtId++}_normal_${page.pageIndex}`;
       extResources.push(
-        `[ext_resource type="Texture2D" path="${baseSlug}_${page.pageIndex}_n.png" id="${normalId}"]`,
+        `[ext_resource type="Texture2D" path="${safeSlug}_${page.pageIndex}_n.png" id="${normalId}"]`,
       );
       canvasLines.push(`normal_texture = ExtResource("${normalId}")`);
     }
@@ -164,15 +173,15 @@ export function exportGodotTres(
       [
         `[sub_resource type="AtlasTexture" id="${subId}"]`,
         `atlas = ${texRef}`,
-        `region = Rect2(${frame.rect.x}, ${frame.rect.y}, ${frame.rect.width}, ${frame.rect.height})`,
-        `margin = Rect2(${frame.trim.trimX}, ${frame.trim.trimY}, ${marginW}, ${marginH})`,
+        `region = ${formatIntRect2(frame.rect.x, frame.rect.y, frame.rect.width, frame.rect.height)}`,
+        `margin = ${formatIntRect2(frame.trim.trimX, frame.trim.trimY, marginW, marginH)}`,
       ].join('\n'),
     );
 
     // Individual static AtlasTexture .tres file for drop-in Sprite2D usage
     const singlePage = atlas.pages[frame.pageIndex]!;
     const singleExt: string[] = [
-      `[ext_resource type="Texture2D" path="../${baseSlug}_${singlePage.pageIndex}.png" id="1_albedo"]`,
+      `[ext_resource type="Texture2D" path="../${safeSlug}_${singlePage.pageIndex}.png" id="1_albedo"]`,
     ];
     const singleCanvasLines = [
       '[sub_resource type="CanvasTexture" id="CanvasTexture_1"]',
@@ -180,7 +189,7 @@ export function exportGodotTres(
     ];
     if (singlePage.normal) {
       singleExt.push(
-        `[ext_resource type="Texture2D" path="../${baseSlug}_${singlePage.pageIndex}_n.png" id="2_normal"]`,
+        `[ext_resource type="Texture2D" path="../${safeSlug}_${singlePage.pageIndex}_n.png" id="2_normal"]`,
       );
       singleCanvasLines.push('normal_texture = ExtResource("2_normal")');
     }
@@ -188,7 +197,8 @@ export function exportGodotTres(
     const singleSub: string[] = [singleCanvasLines.join('\n')];
     const singleAtlasSource = 'SubResource("CanvasTexture_1")';
     const singleLoadSteps = 1 + singleExt.length + singleSub.length;
-    texturesTresFiles[`textures/${frame.id}.tres`] = [
+    const singleKey = toForwardSlash(`textures/${frame.id}.tres`);
+    texturesTresFiles[singleKey] = [
       `[gd_resource type="AtlasTexture" load_steps=${singleLoadSteps} format=3]`,
       '',
       ...singleExt,
@@ -196,8 +206,8 @@ export function exportGodotTres(
       '',
       '[resource]',
       `atlas = ${singleAtlasSource}`,
-      `region = Rect2(${frame.rect.x}, ${frame.rect.y}, ${frame.rect.width}, ${frame.rect.height})`,
-      `margin = Rect2(${frame.trim.trimX}, ${frame.trim.trimY}, ${marginW}, ${marginH})`,
+      `region = ${formatIntRect2(frame.rect.x, frame.rect.y, frame.rect.width, frame.rect.height)}`,
+      `margin = ${formatIntRect2(frame.trim.trimX, frame.trim.trimY, marginW, marginH)}`,
       '',
     ].join('\n');
 
@@ -228,7 +238,7 @@ export function exportGodotTres(
   ].join('\n');
 
   return {
-    framesTresFilename: `${baseSlug}_frames.tres`,
+    framesTresFilename: toForwardSlash(`${safeSlug}_frames.tres`),
     framesTresContent,
     texturesTresFiles,
   };

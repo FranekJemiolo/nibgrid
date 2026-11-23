@@ -20,6 +20,7 @@ import argparse
 import base64
 import datetime as dt
 import hashlib
+import hmac
 import json
 import os
 import re
@@ -34,6 +35,8 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from typing import Any
 
 BRIDGE_VERSION = "1.0.0"
+MAX_BODY_BYTES = 25 * 1024 * 1024  # 25 MB upload limit
+LOOPBACK_HOSTS = frozenset({"127.0.0.1", "localhost", "::1"})
 ALLOWED_ORIGIN_PATTERNS = [
     re.compile(r"^https://franekjemiolo\.github\.io$"),
     re.compile(r"^http://localhost(?::\d+)?$"),
@@ -105,7 +108,7 @@ class BridgeHandler(BaseHTTPRequestHandler):
 
         auth = self.headers.get("Authorization", "")
         expected = f"Bearer {self.server.session_token}"  # type: ignore[attr-defined]
-        if not secrets.compare_digest(auth, expected):
+        if not hmac.compare_digest(auth, expected):
             self._send_json(401, {"error": "Unauthorized: invalid or missing bridge token."}, origin)
             return False, origin
 
@@ -152,11 +155,25 @@ class BridgeHandler(BaseHTTPRequestHandler):
             self._send_json(200, {"cancelled": True, "requestId": req_id}, origin)
             return
 
-        content_len = int(self.headers.get("Content-Length", "0") or "0")
+        raw_len = self.headers.get("Content-Length", "0") or "0"
+        try:
+            content_len = int(raw_len)
+        except ValueError:
+            self._send_json(400, {"error": "Invalid Content-Length header."}, origin)
+            return
+
+        if content_len < 0:
+            self._send_json(400, {"error": "Invalid negative Content-Length header."}, origin)
+            return
+
+        if content_len > MAX_BODY_BYTES:
+            self._send_json(413, {"error": "Payload Too Large (exceeds 25 MB limit)."}, origin)
+            return
+
         raw_body = self.rfile.read(content_len) if content_len > 0 else b"{}"
         try:
             body = json.loads(raw_body.decode("utf-8"))
-        except json.JSONDecodeError:
+        except (UnicodeDecodeError, json.JSONDecodeError):
             self._send_json(400, {"error": "Malformed JSON request body."}, origin)
             return
 
@@ -288,13 +305,28 @@ class BridgeHandler(BaseHTTPRequestHandler):
         )
 
 
-def run_server(host: str, port: int, mock_mode: bool) -> None:
-    token = f"nbg_{secrets.token_urlsafe(24)}"
+def create_bridge_server(
+    host: str, port: int, mock_mode: bool, token: str | None = None
+) -> ThreadingHTTPServer:
+    if host not in LOOPBACK_HOSTS:
+        raise ValueError(
+            f"Refusing non-loopback host bind '{host}'; only {sorted(LOOPBACK_HOSTS)} are permitted."
+        )
+    resolved_token = token.strip() if isinstance(token, str) and token.strip() else f"nbg_{secrets.token_urlsafe(24)}"
     httpd = ThreadingHTTPServer((host, port), BridgeHandler)
-    httpd.session_token = token  # type: ignore[attr-defined]
+    httpd.session_token = resolved_token  # type: ignore[attr-defined]
     httpd.mock_mode = mock_mode  # type: ignore[attr-defined]
-    print(f"Nibgrid Antigravity Bridge v{BRIDGE_VERSION} listening on http://{host}:{port}", flush=True)
-    print(f"Ephemeral Bearer Token (paste into Provider Vault): {token}", flush=True)
+    return httpd
+
+
+def run_server(host: str, port: int, mock_mode: bool, token: str | None = None) -> None:
+    httpd = create_bridge_server(host, port, mock_mode, token=token)
+    bound_host, bound_port = httpd.server_address[:2]
+    print(
+        f"Nibgrid Antigravity Bridge v{BRIDGE_VERSION} listening on http://{bound_host}:{bound_port}",
+        flush=True,
+    )
+    print(f"Ephemeral Bearer Token (paste into Provider Vault): {httpd.session_token}", flush=True)  # type: ignore[attr-defined]
     try:
         httpd.serve_forever()
     except KeyboardInterrupt:
@@ -305,11 +337,12 @@ def run_server(host: str, port: int, mock_mode: bool) -> None:
 
 def main() -> None:
     parser = argparse.ArgumentParser(description="Nibgrid local loopback bridge for Google Antigravity")
-    parser.add_argument("--host", default="127.0.0.1", help="Bind address (strictly 127.0.0.1 recommended)")
+    parser.add_argument("--host", default="127.0.0.1", help="Bind address (strictly loopback: 127.0.0.1, localhost, or ::1)")
     parser.add_argument("--port", type=int, default=4188, help="TCP port (default 4188)")
     parser.add_argument("--mock", action="store_true", help="Serve deterministic mock sprites without GEMINI_API_KEY")
+    parser.add_argument("--token", default=None, help="Optional fixed nbg_ token for controlled test sessions")
     args = parser.parse_args()
-    run_server(args.host, args.port, args.mock)
+    run_server(args.host, args.port, args.mock, token=args.token)
 
 
 if __name__ == "__main__":

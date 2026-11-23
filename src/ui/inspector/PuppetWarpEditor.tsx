@@ -57,8 +57,21 @@ export function PuppetWarpEditor({
   const [frameIdx, setFrameIdx] = useState(0);
   const [draggedPins, setDraggedPins] = useState<Vec2[] | null>(null);
   const [usingCpuFallback, setUsingCpuFallback] = useState(false);
+  const [isContextLost, setIsContextLost] = useState(false);
+  const [isDocumentVisible, setIsDocumentVisible] = useState(() =>
+    typeof document === 'undefined' ? true : !document.hidden,
+  );
+  const [restoreTick, setRestoreTick] = useState(0);
 
   const dragPinIndexRef = useRef<number | null>(null);
+
+  useEffect(() => {
+    const onVisibilityChange = () => {
+      setIsDocumentVisible(!document.hidden);
+    };
+    document.addEventListener('visibilitychange', onVisibilityChange);
+    return () => document.removeEventListener('visibilitychange', onVisibilityChange);
+  }, []);
 
   const mesh = useMemo(() => buildAlphaClippedMesh(sprite, { artMode }), [sprite, artMode]);
 
@@ -84,33 +97,60 @@ export function PuppetWarpEditor({
     return seq;
   }, [keyframes.length, puppetConfig.pingPong]);
 
-  // Playback timer loop
+  // Playback rAF loop (pauses cleanly when tab is hidden, paused, dragging, or context lost)
   useEffect(() => {
-    if (!isPlaying || puppetConfig.pins.length === 0 || draggedPins !== null) {
+    if (
+      !isPlaying ||
+      !isDocumentVisible ||
+      isContextLost ||
+      puppetConfig.pins.length === 0 ||
+      draggedPins !== null ||
+      playbackIndices.length <= 1
+    ) {
       return;
     }
-    const intervalMs = Math.max(30, Math.round(1000 / Math.max(1, puppetConfig.fps)));
-    const id = window.setInterval(() => {
-      setFrameIdx((prev) => (prev + 1) % Math.max(1, playbackIndices.length));
-    }, intervalMs);
-    return () => window.clearInterval(id);
-  }, [isPlaying, puppetConfig.fps, puppetConfig.pins.length, playbackIndices.length, draggedPins]);
+    const intervalMs = Math.max(30, 1000 / Math.max(1, puppetConfig.fps));
+    let lastStepTime = performance.now();
+    let rafId = 0;
+
+    const tick = (now: number) => {
+      if (now - lastStepTime >= intervalMs) {
+        lastStepTime = now;
+        setFrameIdx((prev) => (prev + 1) % playbackIndices.length);
+      }
+      rafId = requestAnimationFrame(tick);
+    };
+
+    rafId = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(rafId);
+  }, [
+    isPlaying,
+    isDocumentVisible,
+    isContextLost,
+    puppetConfig.fps,
+    puppetConfig.pins.length,
+    playbackIndices.length,
+    draggedPins,
+  ]);
 
   // Initialize disposable WebGL2 renderer once
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
     try {
-      const renderer = new PuppetRenderer(canvas);
+      const renderer = new PuppetRenderer(canvas, {
+        onContextLost: () => {
+          setIsContextLost(true);
+        },
+        onContextRestored: () => {
+          setIsContextLost(false);
+          setRestoreTick((t) => t + 1);
+        },
+      });
       rendererRef.current = renderer;
       setUsingCpuFallback(false);
-      const onLost = (e: Event) => {
-        e.preventDefault();
-        setUsingCpuFallback(true);
-      };
-      canvas.addEventListener('webglcontextlost', onLost);
+      setIsContextLost(renderer.isContextLost());
       return () => {
-        canvas.removeEventListener('webglcontextlost', onLost);
         renderer.dispose();
         rendererRef.current = null;
       };
@@ -120,15 +160,15 @@ export function PuppetWarpEditor({
     }
   }, []);
 
-  // Upload assets whenever sprite, mesh, artMode, or padding changes
+  // Upload assets whenever sprite, mesh, artMode, padding, or context restore changes
   useEffect(() => {
     const renderer = rendererRef.current;
-    if (!renderer || usingCpuFallback) return;
+    if (!renderer || usingCpuFallback || isContextLost || renderer.isContextLost()) return;
     renderer.setAssets(sprite, mesh, {
       artMode,
       paddingPx: puppetConfig.paddingPx,
     });
-  }, [sprite, mesh, artMode, puppetConfig.paddingPx, usingCpuFallback]);
+  }, [sprite, mesh, artMode, puppetConfig.paddingPx, usingCpuFallback, isContextLost, restoreTick]);
 
   // Render active deformed pose (or live drag pose + optional onion skins)
   useEffect(() => {
@@ -140,6 +180,7 @@ export function PuppetWarpEditor({
 
     const renderer = rendererRef.current;
     if (renderer && !usingCpuFallback) {
+      if (isContextLost || renderer.isContextLost()) return;
       renderer.clearPreview();
       if (onionSkin && draggedPins === null && keyframes.length > 1) {
         const prevIdx = (activeKfIdx - 1 + keyframes.length) % keyframes.length;
@@ -150,13 +191,13 @@ export function PuppetWarpEditor({
         const prevSolve = solveMlsMesh(mesh.vertices, restPins, prevPins, puppetConfig.mode);
         renderer.drawMeshPass(prevSolve.positions, prevSolve.rotations, {
           targetFbo: false,
-          tint: [1.0, 0.35, 0.35, 0.28],
+          tint: [1.0, 0.32, 0.32, 0.36],
         });
 
         const nextSolve = solveMlsMesh(mesh.vertices, restPins, nextPins, puppetConfig.mode);
         renderer.drawMeshPass(nextSolve.positions, nextSolve.rotations, {
           targetFbo: false,
-          tint: [0.35, 0.6, 1.0, 0.28],
+          tint: [0.32, 0.62, 1.0, 0.36],
         });
       }
       renderer.drawMeshPass(currentSolve.positions, currentSolve.rotations, {
@@ -176,8 +217,8 @@ export function PuppetWarpEditor({
       currentSolve.rotations,
       { paddingPx: puppetConfig.paddingPx, pixelArt: artMode === 'pixel-art' },
     );
-    canvas.width = frameBuf.width;
-    canvas.height = frameBuf.height;
+    if (canvas.width !== frameBuf.width) canvas.width = frameBuf.width;
+    if (canvas.height !== frameBuf.height) canvas.height = frameBuf.height;
     const ctx = canvas.getContext('2d');
     if (ctx) {
       ctx.putImageData(
@@ -199,13 +240,15 @@ export function PuppetWarpEditor({
     draggedPins,
     onionSkin,
     usingCpuFallback,
+    isContextLost,
+    restoreTick,
   ]);
 
   const frameW = sprite.width + puppetConfig.paddingPx * 2;
   const frameH = sprite.height + puppetConfig.paddingPx * 2;
 
   const clientToSpriteCoords = (clientX: number, clientY: number): Vec2 | null => {
-    const el = stageRef.current;
+    const el = canvasRef.current ?? stageRef.current;
     if (!el) return null;
     const rect = el.getBoundingClientRect();
     const fx = ((clientX - rect.left) / Math.max(1, rect.width)) * frameW;
@@ -325,13 +368,18 @@ export function PuppetWarpEditor({
             onPointerUp={handleStagePointerUp}
             onPointerCancel={handleStagePointerUp}
             onContextMenu={handleStageContextMenu}
-            className="relative aspect-square w-full max-w-[440px] cursor-crosshair overflow-hidden rounded-lg border border-slate-700 bg-slate-950/60 shadow-2xl select-none"
-            style={{ touchAction: 'none' }}
+            className="relative max-h-[440px] max-w-[440px] cursor-crosshair overflow-hidden rounded-lg border border-slate-700 bg-slate-950/60 shadow-2xl select-none"
+            style={{
+              touchAction: 'none',
+              aspectRatio: `${frameW} / ${frameH}`,
+              width: frameW >= frameH ? 'min(100%, 440px)' : 'auto',
+              height: frameH > frameW ? '440px' : 'auto',
+            }}
           >
             <canvas
               ref={canvasRef}
               data-testid="puppet-pin-canvas"
-              className="h-full w-full object-contain"
+              className="block h-full w-full"
               style={{ imageRendering: artMode === 'pixel-art' ? 'pixelated' : 'auto' }}
             />
 
@@ -356,8 +404,10 @@ export function PuppetWarpEditor({
                 <div
                   key={pin.id}
                   data-testid={`puppet-pin-marker-${idx}`}
+                  data-pin-x={pin.x.toFixed(2)}
+                  data-pin-y={pin.y.toFixed(2)}
                   title={`${style.label} #${idx + 1} (${Math.round(pin.x)}, ${Math.round(pin.y)})`}
-                  className={`pointer-events-none absolute h-3.5 w-3.5 -translate-x-1/2 -translate-y-1/2 border-2 shadow-md ${style.bg} ${
+                  className={`pointer-events-none absolute h-4 w-4 -translate-x-1/2 -translate-y-1/2 border-2 shadow-md ring-2 ring-slate-950/90 ${style.bg} ${
                     pin.role === 'anchor'
                       ? 'rounded-xs'
                       : pin.role === 'driver'
@@ -373,6 +423,16 @@ export function PuppetWarpEditor({
             })}
           </div>
         </div>
+        {(isContextLost || usingCpuFallback) && (
+          <div
+            data-testid="puppet-context-status"
+            className="border-t border-amber-500/30 bg-amber-950/40 px-4 py-1.5 text-[11px] text-amber-200"
+          >
+            {isContextLost
+              ? 'WebGL2 context lost; awaiting GPU restore…'
+              : 'WebGL2 unavailable; using CPU fallback.'}
+          </div>
+        )}
       </section>
 
       {/* Right Pane: Procedural Presets, Playback & Strip Export */}

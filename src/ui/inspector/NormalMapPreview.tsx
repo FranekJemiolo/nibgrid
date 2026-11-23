@@ -42,10 +42,15 @@ export function NormalMapPreview({
   const [roughness, setRoughness] = useState(0.45);
   const [pinned, setPinned] = useState(false);
   const [usingCpuFallback, setUsingCpuFallback] = useState(false);
+  const [isContextLost, setIsContextLost] = useState(false);
+  const [restoreTick, setRestoreTick] = useState(0);
   const [webglError, setWebglError] = useState<string | null>(null);
+  const lastBakedNormalRef = useRef<RgbaBuffer | null>(null);
 
   const pinnedRef = useRef(false);
   pinnedRef.current = pinned;
+  const isContextLostRef = useRef(false);
+  isContextLostRef.current = isContextLost;
 
   const lightRef = useRef<PointLightParams>({
     x: 0.3,
@@ -66,10 +71,20 @@ export function NormalMapPreview({
       roughness,
       viewMode,
     };
-    if (rendererRef.current) {
-      rendererRef.current.renderPreview(lightRef.current, normalConfig.convention);
+    const renderer = rendererRef.current;
+    if (renderer && !usingCpuFallback && !isContextLost && !renderer.isContextLost()) {
+      renderer.renderPreview(lightRef.current, normalConfig.convention);
     }
-  }, [lightZ, intensity, roughness, viewMode, normalConfig.convention]);
+  }, [
+    lightZ,
+    intensity,
+    roughness,
+    viewMode,
+    normalConfig.convention,
+    usingCpuFallback,
+    isContextLost,
+    restoreTick,
+  ]);
 
   useEffect(() => {
     const stage = stageRef.current;
@@ -77,6 +92,7 @@ export function NormalMapPreview({
     const onWheel = (e: WheelEvent) => {
       if (!e.altKey) return;
       e.preventDefault();
+      e.stopPropagation();
       setLightZ((prev) =>
         Math.max(0.08, Math.min(0.8, Number((prev - e.deltaY * 0.0008).toFixed(2)))),
       );
@@ -86,24 +102,47 @@ export function NormalMapPreview({
   }, []);
 
   useEffect(() => {
+    const onVisibility = () => {
+      if (document.hidden) {
+        cancelAnimationFrame(rafRef.current);
+        rafRef.current = 0;
+        return;
+      }
+      const renderer = rendererRef.current;
+      if (renderer && !isContextLostRef.current && !renderer.isContextLost()) {
+        renderer.renderPreview(lightRef.current, normalConfig.convention);
+      }
+    };
+    document.addEventListener('visibilitychange', onVisibility);
+    return () => document.removeEventListener('visibilitychange', onVisibility);
+  }, [normalConfig.convention]);
+
+  useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
     try {
-      const renderer = new NormalMapRenderer(canvas);
+      const renderer = new NormalMapRenderer(canvas, {
+        artMode,
+        onContextLost: () => {
+          cancelAnimationFrame(rafRef.current);
+          rafRef.current = 0;
+          setIsContextLost(true);
+          setWebglError('WebGL2 context lost; awaiting GPU restore…');
+        },
+        onContextRestored: () => {
+          setIsContextLost(false);
+          setWebglError(null);
+          setRestoreTick((t) => t + 1);
+        },
+      });
       rendererRef.current = renderer;
       setUsingCpuFallback(false);
+      setIsContextLost(renderer.isContextLost());
       setWebglError(null);
-
-      const onLost = (event: Event) => {
-        event.preventDefault();
-        setWebglError('WebGL2 context lost; switched to CPU fallback.');
-        setUsingCpuFallback(true);
-      };
-      canvas.addEventListener('webglcontextlost', onLost);
 
       return () => {
         cancelAnimationFrame(rafRef.current);
-        canvas.removeEventListener('webglcontextlost', onLost);
+        rafRef.current = 0;
         renderer.dispose();
         rendererRef.current = null;
       };
@@ -114,9 +153,18 @@ export function NormalMapPreview({
       );
       return undefined;
     }
+    // Initialize a single WebGL2 context per mount; artMode updates run through setArtMode().
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Re-bake normal map whenever sprite or bake params change
+  useEffect(() => {
+    rendererRef.current?.setArtMode(artMode);
+    if (rendererRef.current && !usingCpuFallback && !isContextLost) {
+      rendererRef.current.renderPreview(lightRef.current, normalConfig.convention);
+    }
+  }, [artMode, normalConfig.convention, usingCpuFallback, isContextLost]);
+
+  // Re-bake normal map whenever sprite or bake params change (or after context restore)
   useEffect(() => {
     const renderer = rendererRef.current;
     const params = {
@@ -128,21 +176,52 @@ export function NormalMapPreview({
     };
 
     if (renderer && !usingCpuFallback) {
+      renderer.setArtMode(artMode);
       renderer.setSprite(sprite);
       renderer.bakeNormalMap(params);
-      renderer.renderPreview(lightRef.current, normalConfig.convention);
-      onNormalBufferBaked?.(renderer.readNormalMapBuffer());
+      if (!isContextLost && !renderer.isContextLost()) {
+        renderer.renderPreview(lightRef.current, normalConfig.convention);
+      }
+      const baked = renderer.readNormalMapBuffer();
+      lastBakedNormalRef.current = baked;
+      onNormalBufferBaked?.(baked);
       return;
     }
 
-    // Pure-TS 2D Canvas fallback
+    const normalBuf = bakeNormalMapCpu(sprite, params);
+    lastBakedNormalRef.current = normalBuf;
+    onNormalBufferBaked?.(normalBuf);
+  }, [
+    sprite,
+    artMode,
+    normalConfig.bevelRadiusPx,
+    normalConfig.bevelProfile,
+    normalConfig.bevelStrength,
+    normalConfig.detailStrength,
+    normalConfig.convention,
+    usingCpuFallback,
+    isContextLost,
+    restoreTick,
+    onNormalBufferBaked,
+  ]);
+
+  // CPU 2D Canvas preview draw when WebGL2 is unavailable at startup
+  useEffect(() => {
+    if (!usingCpuFallback) return;
     const canvas = canvasRef.current;
     if (!canvas) return;
-    const normalBuf = bakeNormalMapCpu(sprite, params);
-    onNormalBufferBaked?.(normalBuf);
+    const normalBuf =
+      lastBakedNormalRef.current ??
+      bakeNormalMapCpu(sprite, {
+        bevelRadiusPx: normalConfig.bevelRadiusPx,
+        bevelProfile: normalConfig.bevelProfile,
+        bevelStrength: normalConfig.bevelStrength,
+        detailStrength: normalConfig.detailStrength,
+        convention: normalConfig.convention,
+      });
 
-    canvas.width = sprite.width;
-    canvas.height = sprite.height;
+    if (canvas.width !== sprite.width) canvas.width = sprite.width;
+    if (canvas.height !== sprite.height) canvas.height = sprite.height;
     const ctx = canvas.getContext('2d');
     if (!ctx) return;
     if (viewMode === 'height') {
@@ -167,19 +246,20 @@ export function NormalMapPreview({
       );
     }
   }, [
+    usingCpuFallback,
     sprite,
     normalConfig.bevelRadiusPx,
     normalConfig.bevelProfile,
     normalConfig.bevelStrength,
     normalConfig.detailStrength,
     normalConfig.convention,
-    usingCpuFallback,
     viewMode,
-    onNormalBufferBaked,
   ]);
 
-  const updateLightPosition = (clientX: number, clientY: number, currentTarget: HTMLDivElement) => {
-    const rect = currentTarget.getBoundingClientRect();
+  const updateLightPosition = (clientX: number, clientY: number) => {
+    const rectEl = canvasRef.current ?? stageRef.current;
+    if (!rectEl) return;
+    const rect = rectEl.getBoundingClientRect();
     const nx = Math.max(0, Math.min(1, (clientX - rect.left) / Math.max(1, rect.width)));
     const nyTopDown = Math.max(0, Math.min(1, (clientY - rect.top) / Math.max(1, rect.height)));
     const nyWebGL = 1 - nyTopDown;
@@ -196,9 +276,13 @@ export function NormalMapPreview({
       orbRef.current.style.top = `${nyTopDown * 100}%`;
     }
 
+    if (isContextLostRef.current) return;
     cancelAnimationFrame(rafRef.current);
     rafRef.current = requestAnimationFrame(() => {
-      rendererRef.current?.renderPreview(lightRef.current, normalConfig.convention);
+      const renderer = rendererRef.current;
+      if (renderer && !isContextLostRef.current && !renderer.isContextLost()) {
+        renderer.renderPreview(lightRef.current, normalConfig.convention);
+      }
     });
   };
 
@@ -245,24 +329,29 @@ export function NormalMapPreview({
             data-testid="normal-light-stage"
             onPointerMove={(e) => {
               if (pinnedRef.current) return;
-              updateLightPosition(e.clientX, e.clientY, e.currentTarget);
+              updateLightPosition(e.clientX, e.clientY);
             }}
             onClick={(e) => {
               const nextPinned = !pinnedRef.current;
               setPinned(nextPinned);
               if (nextPinned) {
-                updateLightPosition(e.clientX, e.clientY, e.currentTarget);
+                updateLightPosition(e.clientX, e.clientY);
               }
             }}
-            className="relative aspect-square w-full max-w-[440px] cursor-crosshair overflow-hidden rounded-lg border border-slate-700 bg-slate-950/90 shadow-2xl select-none"
+            className="relative max-h-[440px] max-w-[440px] cursor-crosshair overflow-hidden rounded-lg border border-slate-700 bg-slate-950/90 shadow-2xl select-none"
+            style={{
+              aspectRatio: `${sprite.width} / ${sprite.height}`,
+              width: sprite.width >= sprite.height ? 'min(100%, 440px)' : 'auto',
+              height: sprite.height > sprite.width ? '440px' : 'auto',
+            }}
           >
             <canvas
               ref={canvasRef}
               data-testid="normal-preview-canvas"
-              className="h-full w-full object-contain"
+              className="block h-full w-full"
               style={{ imageRendering: artMode === 'pixel-art' ? 'pixelated' : 'auto' }}
             />
-            {viewMode === 'lit' && !usingCpuFallback && (
+            {viewMode === 'lit' && !usingCpuFallback && !isContextLost && (
               <div
                 ref={orbRef}
                 className={`pointer-events-none absolute h-4 w-4 -translate-x-1/2 -translate-y-1/2 rounded-full border shadow-[0_0_16px_rgba(251,191,36,0.9)] ${
@@ -274,7 +363,10 @@ export function NormalMapPreview({
           </div>
         </div>
         {webglError && (
-          <div className="border-t border-amber-500/30 bg-amber-950/40 px-4 py-1.5 text-[11px] text-amber-200">
+          <div
+            data-testid="normal-context-status"
+            className="border-t border-amber-500/30 bg-amber-950/40 px-4 py-1.5 text-[11px] text-amber-200"
+          >
             {webglError}
           </div>
         )}
@@ -412,7 +504,9 @@ export function NormalMapPreview({
           <label className="block space-y-1 text-xs">
             <div className="flex justify-between text-slate-400">
               <span>Light Height (Z)</span>
-              <span className="font-mono">{lightZ.toFixed(2)}</span>
+              <span data-testid="normal-light-z-readout" className="font-mono">
+                {lightZ.toFixed(2)}
+              </span>
             </div>
             <input
               type="range"

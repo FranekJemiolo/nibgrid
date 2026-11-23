@@ -36,6 +36,7 @@ export function AtlasWorkshop() {
   const [showOverlay, setShowOverlay] = useState(true);
   const [previewChannel, setPreviewChannel] = useState<'albedo' | 'normal'>('albedo');
   const [activePageIndex, setActivePageIndex] = useState(0);
+  const [highlightedNodeId, setHighlightedNodeId] = useState<string | null>(null);
   const [exportNotice, setExportNotice] = useState<string | null>(null);
 
   const sourceNodes = useMemo(() => {
@@ -103,8 +104,17 @@ export function AtlasWorkshop() {
       ? 'Rotation is locked OFF automatically when Godot 4 or Normal Maps are enabled.'
       : null;
 
-  const atlasResult = useMemo(() => {
-    if (!activeProject || decodedAssets.length === 0) return null;
+  useEffect(() => {
+    if (rotationLockedReason !== null && allowRotation) {
+      setAllowRotation(false);
+    }
+  }, [rotationLockedReason, allowRotation]);
+
+  const { atlasResult, packError, frameNodeMap } = useMemo(() => {
+    const emptyMap = new Map<string, string>();
+    if (!activeProject || decodedAssets.length === 0) {
+      return { atlasResult: null, packError: null as string | null, frameNodeMap: emptyMap };
+    }
 
     const frames: AtlasFrameInput[] = [];
     for (let idx = 0; idx < decodedAssets.length; idx++) {
@@ -128,6 +138,7 @@ export function AtlasWorkshop() {
           normalMap: bakedNorm,
           pivotNorm: pivot,
         });
+        emptyMap.set(nodeSlug, asset.node.id);
       }
 
       if (
@@ -173,28 +184,41 @@ export function AtlasWorkshop() {
             }
             frameNorm = { width: fw, height: fh, data: nData };
           }
+          const frameId = `${loopName}_${fIdx}`;
           frames.push({
-            id: `${loopName}_${fIdx}`,
+            id: frameId,
             sprite: frameBuf,
             normalMap: frameNorm,
             pivotNorm: pivot,
             animationName: loopName,
           });
+          emptyMap.set(frameId, asset.node.id);
         }
       }
     }
 
-    if (frames.length === 0) return null;
+    if (frames.length === 0) {
+      return { atlasResult: null, packError: null as string | null, frameNodeMap: emptyMap };
+    }
 
-    return composeAtlasPages(frames, {
-      maxWidth: maxSize,
-      maxHeight: maxSize,
-      padding,
-      extrude,
-      powerOfTwo,
-      allowRotation,
-      disableRotationForEngine: engines.includes('godot') || includeNormals,
-    });
+    try {
+      const packed = composeAtlasPages(frames, {
+        maxWidth: maxSize,
+        maxHeight: maxSize,
+        padding,
+        extrude,
+        powerOfTwo,
+        allowRotation: rotationLockedReason !== null ? false : allowRotation,
+        disableRotationForEngine: engines.includes('godot') || includeNormals,
+      });
+      return { atlasResult: packed, packError: null as string | null, frameNodeMap: emptyMap };
+    } catch (err) {
+      return {
+        atlasResult: null,
+        packError: err instanceof Error ? err.message : 'Failed to pack selected sprites.',
+        frameNodeMap: emptyMap,
+      };
+    }
   }, [
     activeProject,
     decodedAssets,
@@ -206,34 +230,81 @@ export function AtlasWorkshop() {
     extrude,
     powerOfTwo,
     allowRotation,
+    rotationLockedReason,
     engines,
   ]);
 
   const safePageIndex =
     atlasResult && activePageIndex < atlasResult.pages.length ? activePageIndex : 0;
   const activePage = atlasResult?.pages[safePageIndex] ?? null;
+  const isPixelArtMode = activeProject?.artBible.artMode === 'pixel-art';
 
   // Render live packed preview canvas + optional UV bounds & extrusion overlay
   useEffect(() => {
     const canvas = previewCanvasRef.current;
     if (!canvas || !activePage) return;
-    canvas.width = activePage.width;
-    canvas.height = activePage.height;
+    if (canvas.width !== activePage.width) canvas.width = activePage.width;
+    if (canvas.height !== activePage.height) canvas.height = activePage.height;
     const ctx = canvas.getContext('2d');
     if (!ctx) return;
+    ctx.imageSmoothingEnabled = !isPixelArtMode;
 
     const src =
       previewChannel === 'normal' && activePage.normal ? activePage.normal : activePage.albedo;
     ctx.putImageData(new ImageData(new Uint8ClampedArray(src.data), src.width, src.height), 0, 0);
 
     if (showOverlay) {
-      ctx.strokeStyle = 'rgba(129, 140, 248, 0.85)';
-      ctx.lineWidth = 1;
       for (const rect of activePage.rects) {
+        const ownerNodeId = frameNodeMap.get(rect.id);
+        const isHighlighted = Boolean(highlightedNodeId && ownerNodeId === highlightedNodeId);
+
+        if (extrude > 0) {
+          ctx.strokeStyle = 'rgba(245, 158, 11, 0.65)';
+          ctx.lineWidth = 1;
+          ctx.strokeRect(
+            rect.x - extrude + 0.5,
+            rect.y - extrude + 0.5,
+            rect.width + extrude * 2 - 1,
+            rect.height + extrude * 2 - 1,
+          );
+        }
+
+        if (isHighlighted) {
+          ctx.fillStyle = 'rgba(16, 185, 129, 0.16)';
+          ctx.fillRect(rect.x, rect.y, rect.width, rect.height);
+        }
+
+        ctx.strokeStyle = isHighlighted ? 'rgba(52, 211, 153, 0.98)' : 'rgba(129, 140, 248, 0.85)';
+        ctx.lineWidth = isHighlighted ? 2 : 1;
         ctx.strokeRect(rect.x + 0.5, rect.y + 0.5, rect.width - 1, rect.height - 1);
       }
     }
-  }, [activePage, previewChannel, showOverlay]);
+  }, [
+    activePage,
+    previewChannel,
+    showOverlay,
+    extrude,
+    highlightedNodeId,
+    frameNodeMap,
+    isPixelArtMode,
+  ]);
+
+  const handleCanvasClick = (clientX: number, clientY: number) => {
+    const canvas = previewCanvasRef.current;
+    if (!canvas || !activePage) return;
+    const rect = canvas.getBoundingClientRect();
+    const ax = ((clientX - rect.left) / Math.max(1, rect.width)) * activePage.width;
+    const ay = ((clientY - rect.top) / Math.max(1, rect.height)) * activePage.height;
+    const hit = activePage.rects.find(
+      (r) => ax >= r.x && ax <= r.x + r.width && ay >= r.y && ay <= r.y + r.height,
+    );
+    if (!hit) {
+      setHighlightedNodeId(null);
+      return;
+    }
+    const ownerNodeId = frameNodeMap.get(hit.id) ?? null;
+    setHighlightedNodeId(ownerNodeId);
+  };
 
   const toggleEngine = (target: AtlasEngineTarget) => {
     setEngines((prev) => {
@@ -359,10 +430,18 @@ export function AtlasWorkshop() {
               const hasRig = Boolean(
                 asset.node.puppetAnim && asset.node.puppetAnim.pins.length > 0,
               );
+              const isHighlighted = highlightedNodeId === asset.node.id;
               return (
                 <div
                   key={asset.node.id}
-                  className="space-y-1.5 rounded-lg border border-slate-800 bg-slate-950/70 p-2.5 text-xs"
+                  data-testid={`atlas-card-${idx}`}
+                  data-highlighted={isHighlighted ? 'true' : 'false'}
+                  onClick={() => setHighlightedNodeId(asset.node.id)}
+                  className={`space-y-1.5 rounded-lg border p-2.5 text-xs transition-colors ${
+                    isHighlighted
+                      ? 'border-emerald-400 bg-emerald-950/30 ring-1 ring-emerald-400/50'
+                      : 'border-slate-800 bg-slate-950/70'
+                  }`}
                 >
                   <label className="flex items-center gap-2 font-medium text-slate-200">
                     <input
@@ -486,18 +565,40 @@ export function AtlasWorkshop() {
           </div>
 
           <div className="flex flex-1 items-center justify-center overflow-auto bg-checkerboard p-8">
-            {activePage ? (
-              <canvas
-                ref={previewCanvasRef}
-                data-testid="atlas-preview-canvas"
-                className="max-h-[540px] max-w-full rounded border border-slate-700 shadow-2xl"
-                style={{
-                  imageRendering:
-                    activeProject.artBible.artMode === 'pixel-art' ? 'pixelated' : 'auto',
-                }}
-              />
+            {packError ? (
+              <div
+                data-testid="atlas-error-banner"
+                className="max-w-md rounded-lg border border-rose-500/40 bg-rose-950/50 px-4 py-3 text-xs text-rose-200"
+              >
+                <p className="font-semibold text-rose-100">Atlas Packing Constraint Exceeded</p>
+                <p className="mt-1">{packError}</p>
+              </div>
+            ) : activePage ? (
+              (() => {
+                const intZoom = isPixelArtMode
+                  ? Math.max(
+                      1,
+                      Math.min(8, Math.floor(420 / Math.max(activePage.width, activePage.height))),
+                    )
+                  : 1;
+                return (
+                  <canvas
+                    ref={previewCanvasRef}
+                    data-testid="atlas-preview-canvas"
+                    onClick={(e) => handleCanvasClick(e.clientX, e.clientY)}
+                    className="max-h-[520px] max-w-full cursor-pointer rounded border border-slate-700 object-contain shadow-2xl"
+                    style={{
+                      width: `${activePage.width * intZoom}px`,
+                      height: `${activePage.height * intZoom}px`,
+                      imageRendering: isPixelArtMode ? 'pixelated' : 'auto',
+                    }}
+                  />
+                );
+              })()
             ) : (
-              <p className="text-xs text-slate-400">Select at least one sprite or loop to pack.</p>
+              <p data-testid="atlas-empty-state" className="text-xs text-slate-400">
+                Select at least one sprite or loop to pack.
+              </p>
             )}
           </div>
         </section>

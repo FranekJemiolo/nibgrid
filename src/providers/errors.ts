@@ -28,10 +28,10 @@ export class ProviderError extends Error {
   readonly retryable: boolean;
 
   constructor(options: ProviderErrorOptions) {
-    super(options.message);
+    super(redactSecrets(options.message));
     this.name = 'ProviderError';
     this.code = options.code;
-    this.remediation = options.remediation;
+    this.remediation = redactSecrets(options.remediation);
     this.providerId = options.providerId;
     this.status = options.status;
     this.retryable = options.retryable;
