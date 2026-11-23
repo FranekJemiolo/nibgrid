@@ -35,7 +35,10 @@ import { packageSpriteZip, toAssetSlug, triggerBlobDownload } from '../../export
 import { runPostProcessPipeline } from '../../processing/pipeline';
 import { decodePngBytesToRgba, encodeRgbaToPngBytes, rgbaToPngBlob } from '../../processing/png';
 import { useAppStore } from '../../store/useAppStore';
-import { runPostProcessInWorker } from '../../workers/postprocessClient';
+import {
+  createMonotonicRequestGuard,
+  runPostProcessInWorker,
+} from '../../workers/postprocessClient';
 
 export type InspectorBackdrop = 'checkerboard' | 'dark' | 'light' | 'game-green';
 
@@ -102,6 +105,14 @@ export function PostProcessInspector({ nodeId }: { nodeId: string }) {
   const processedCanvasRef = useRef<HTMLCanvasElement | null>(null);
   const comparatorRef = useRef<HTMLDivElement | null>(null);
   const draggingSplitRef = useRef(false);
+  const requestGuardRef = useRef(createMonotonicRequestGuard());
+
+  useEffect(() => {
+    const guard = requestGuardRef.current;
+    return () => {
+      guard.invalidate();
+    };
+  }, []);
 
   const rawImageRef = useRef<DecodedImage | null>(null);
   const processedArtifactRef = useRef<{
@@ -175,11 +186,14 @@ export function PostProcessInspector({ nodeId }: { nodeId: string }) {
   useEffect(() => {
     if (!activeProject || !targetNodeId) return;
     let cancelled = false;
+    const guard = requestGuardRef.current;
+    const startedProjectId = activeProject.id;
 
     const timer = window.setTimeout(() => {
       const raw = rawImageRef.current;
-      if (!raw) return;
+      if (!raw || cancelled) return;
 
+      const token = guard.next();
       const activeConfig = latestConfigRef.current;
       setIsProcessing(true);
       setWorkerError(null);
@@ -194,13 +208,13 @@ export function PostProcessInspector({ nodeId }: { nodeId: string }) {
         config: activeConfig,
         paletteHex: activeProject.artBible.palette,
         onProgress: (phase, progress) => {
-          if (!cancelled) {
+          if (!cancelled && guard.isCurrent(token)) {
             setAiProgress({ phase, progress });
           }
         },
       })
         .then(async (result) => {
-          if (cancelled) return;
+          if (cancelled || !guard.isCurrent(token)) return;
           processedArtifactRef.current = {
             rgba: result.rgba,
             width: result.width,
@@ -214,21 +228,33 @@ export function PostProcessInspector({ nodeId }: { nodeId: string }) {
           setIsProcessing(false);
 
           const nodeSnapshot = latestNodeRef.current;
-          if (!nodeSnapshot) return;
+          if (!nodeSnapshot || nodeSnapshot.id !== targetNodeId) return;
           const processedBlob = rgbaToPngBlob(result.rgba, result.width, result.height);
           const stored = await repository.storeBlob(processedBlob, 'image/png');
+          if (
+            cancelled ||
+            !guard.isCurrent(token) ||
+            useAppStore.getState().activeProject?.id !== startedProjectId
+          ) {
+            await repository.cleanupOrphanedBlobs();
+            return;
+          }
           await repository.saveSpriteNode({
             ...nodeSnapshot,
             processedBlobId: stored.id,
             postProcessConfig: latestConfigRef.current,
           });
           await repository.cleanupOrphanedBlobs();
-          if (!cancelled) {
-            await refreshSpriteNodes(activeProject.id);
+          if (
+            !cancelled &&
+            guard.isCurrent(token) &&
+            useAppStore.getState().activeProject?.id === startedProjectId
+          ) {
+            await refreshSpriteNodes(startedProjectId);
           }
         })
         .catch((error: unknown) => {
-          if (cancelled) return;
+          if (cancelled || !guard.isCurrent(token)) return;
           setWorkerError(
             error instanceof Error ? error.message : 'Post-processing pipeline failed.',
           );
@@ -239,6 +265,7 @@ export function PostProcessInspector({ nodeId }: { nodeId: string }) {
 
     return () => {
       cancelled = true;
+      guard.invalidate();
       window.clearTimeout(timer);
     };
   }, [
@@ -842,6 +869,16 @@ export function PostProcessInspector({ nodeId }: { nodeId: string }) {
                 />
               ))}
             </div>
+
+            {config.paletteSnap && activeProject.artBible.palette.length === 0 && (
+              <p
+                data-testid="empty-palette-snap-hint"
+                className="rounded border border-amber-500/30 bg-amber-500/10 px-2.5 py-1.5 text-[11px] text-amber-200"
+              >
+                Your Art Bible palette is empty — add swatches in the Art Bible Editor to snap
+                colors cleanly.
+              </p>
+            )}
 
             {config.paletteSnap && (
               <div className="space-y-2 border-t border-slate-800 pt-2">

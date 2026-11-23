@@ -28,7 +28,7 @@ function estimateBackgroundLuminance(luminances: Float32Array): number {
   }
 
   // 75th percentile captures dominant paper tone even when dark ink covers up to 74% of frame
-  const targetRank = Math.floor(luminances.length * 0.75);
+  const targetRank = Math.max(1, Math.floor(luminances.length * 0.75));
   let cumulative = 0;
   let p75 = 255;
   for (let bin = 0; bin < 256; bin++) {

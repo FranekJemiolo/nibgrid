@@ -1,4 +1,4 @@
-import { Dices, Paintbrush, Sparkles, Wand2 } from 'lucide-react';
+import { Dices, Paintbrush, Sparkles, Wand2, X } from 'lucide-react';
 import { compilePrompt } from '../../domain/promptCompiler';
 import type { AdherenceLevel, ArtBible, ProviderConfig, SpriteNode } from '../../domain/schemas';
 import { resolveProviderAdapter } from '../../providers/registry';
@@ -22,6 +22,7 @@ interface GenerationInspectorProps {
   isGenerating: boolean;
   onGenerate: () => void;
   onInpaint: () => void;
+  onCancel?: () => void;
 }
 
 export function GenerationInspector({
@@ -43,6 +44,7 @@ export function GenerationInspector({
   isGenerating,
   onGenerate,
   onInpaint,
+  onCancel,
 }: GenerationInspectorProps) {
   const activeConfig = providers.find((p) => p.id === selectedProviderId) ?? providers[0];
   const adapter = activeConfig ? resolveProviderAdapter(activeConfig) : null;
@@ -213,6 +215,18 @@ export function GenerationInspector({
           <Wand2 className="h-3.5 w-3.5" />
           Inpaint Masked Region
         </button>
+
+        {isGenerating && onCancel && (
+          <button
+            type="button"
+            data-testid="cancel-generation-btn"
+            onClick={onCancel}
+            className="inline-flex items-center justify-center gap-2 rounded-md border border-amber-500/40 bg-amber-500/15 px-3 py-1.5 text-xs font-semibold text-amber-200 hover:bg-amber-500/25"
+          >
+            <X className="h-3.5 w-3.5" />
+            Cancel Generation
+          </button>
+        )}
       </div>
 
       <div className="space-y-1 border-t border-slate-800 pt-3">

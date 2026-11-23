@@ -18,6 +18,16 @@ export function resampleRgba(
   targetHeight: number,
   mode: ResampleMode,
 ): SizedRgbaBuffer {
+  if (srcWidth <= 0 || srcHeight <= 0 || targetWidth <= 0 || targetHeight <= 0) {
+    throw new Error(
+      `Invalid resample dimensions: ${srcWidth}x${srcHeight} -> ${targetWidth}x${targetHeight}`,
+    );
+  }
+  if (rgba.length !== srcWidth * srcHeight * 4) {
+    throw new Error(
+      `RGBA buffer mismatch: expected ${srcWidth * srcHeight * 4}, got ${rgba.length}`,
+    );
+  }
   if (srcWidth === targetWidth && srcHeight === targetHeight) {
     return { rgba: new Uint8ClampedArray(rgba), width: targetWidth, height: targetHeight };
   }
@@ -105,6 +115,12 @@ export function autoTrimTransparent(
   height: number,
   margin = 0,
 ): SizedRgbaBuffer {
+  if (width <= 0 || height <= 0) {
+    throw new Error(`Invalid image dimensions: ${width}x${height}`);
+  }
+  if (rgba.length !== width * height * 4) {
+    throw new Error(`RGBA buffer mismatch: expected ${width * height * 4}, got ${rgba.length}`);
+  }
   let minX = width;
   let minY = height;
   let maxX = -1;

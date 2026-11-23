@@ -92,3 +92,27 @@ export async function runPostProcessInWorker(
     worker.postMessage(request, [copy.buffer]);
   });
 }
+
+export interface MonotonicRequestGuard {
+  next: () => number;
+  isCurrent: (token: number) => boolean;
+  invalidate: () => void;
+}
+
+/**
+ * Tracks a monotonically increasing request token so rapid UI adjustments or
+ * unmounts deterministically discard stale out-of-order worker completions.
+ */
+export function createMonotonicRequestGuard(): MonotonicRequestGuard {
+  let latestToken = 0;
+  return {
+    next: () => {
+      latestToken += 1;
+      return latestToken;
+    },
+    isCurrent: (token: number) => token === latestToken,
+    invalidate: () => {
+      latestToken += 1;
+    },
+  };
+}

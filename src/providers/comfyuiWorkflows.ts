@@ -152,6 +152,71 @@ function replacePlaceholders(value: unknown, tokens: Record<string, string | num
   return value;
 }
 
+function containsPlaceholderToken(value: unknown, token: string): boolean {
+  if (typeof value === 'string') {
+    return value.includes(token);
+  }
+  if (Array.isArray(value)) {
+    return value.some((item) => containsPlaceholderToken(item, token));
+  }
+  if (value !== null && typeof value === 'object') {
+    return Object.values(value).some((entry) => containsPlaceholderToken(entry, token));
+  }
+  return false;
+}
+
+/**
+ * Validates that a custom ComfyUI API workflow JSON string parses to a non-empty
+ * graph of ComfyUI nodes and contains the required `{{PROMPT}}` injection token.
+ */
+export function validateComfyUiWorkflowTemplate(rawJson: string): ComfyUiWorkflowGraph {
+  const trimmed = rawJson.trim();
+  if (!trimmed) {
+    throw new Error('ComfyUI workflow template JSON cannot be empty.');
+  }
+
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(trimmed);
+  } catch {
+    throw new Error('ComfyUI workflow template must be valid JSON.');
+  }
+
+  if (parsed === null || typeof parsed !== 'object' || Array.isArray(parsed)) {
+    throw new Error('ComfyUI workflow template must be a JSON object keyed by node ID.');
+  }
+
+  const entries = Object.entries(parsed as Record<string, unknown>);
+  if (entries.length === 0) {
+    throw new Error('ComfyUI workflow template must define at least one node.');
+  }
+
+  for (const [nodeId, nodeValue] of entries) {
+    if (nodeValue === null || typeof nodeValue !== 'object' || Array.isArray(nodeValue)) {
+      throw new Error(`ComfyUI node "${nodeId}" must be a JSON object.`);
+    }
+    const candidate = nodeValue as Record<string, unknown>;
+    if (typeof candidate.class_type !== 'string' || !candidate.class_type.trim()) {
+      throw new Error(
+        `ComfyUI node "${nodeId}" is missing a valid "class_type" string (use API format, not UI export).`,
+      );
+    }
+    if (
+      candidate.inputs === null ||
+      typeof candidate.inputs !== 'object' ||
+      Array.isArray(candidate.inputs)
+    ) {
+      throw new Error(`ComfyUI node "${nodeId}" must include an "inputs" object.`);
+    }
+  }
+
+  if (!containsPlaceholderToken(parsed, '{{PROMPT}}')) {
+    throw new Error('ComfyUI workflow template must include the {{PROMPT}} placeholder token.');
+  }
+
+  return parsed as ComfyUiWorkflowGraph;
+}
+
 /**
  * Purely injects prompt, negativePrompt, seed, adherence denoise weight, and image filenames
  * into a cloned ComfyUI API workflow template without mutating the base template.
@@ -159,12 +224,9 @@ function replacePlaceholders(value: unknown, tokens: Record<string, string | num
 export function injectComfyUiWorkflow(
   params: InjectComfyUiWorkflowParams,
 ): InjectedComfyUiWorkflow {
-  let templateSource: ComfyUiWorkflowGraph;
-  if (params.customTemplateJson?.trim()) {
-    templateSource = JSON.parse(params.customTemplateJson) as ComfyUiWorkflowGraph;
-  } else {
-    templateSource = params.baseTemplate ?? DEFAULT_COMFYUI_WORKFLOW_TEMPLATE;
-  }
+  const templateSource = params.customTemplateJson?.trim()
+    ? validateComfyUiWorkflowTemplate(params.customTemplateJson)
+    : (params.baseTemplate ?? DEFAULT_COMFYUI_WORKFLOW_TEMPLATE);
 
   const cloned = deepCloneValue(templateSource);
   const denoise = ADHERENCE_DENOISE_WEIGHTS[params.adherence];

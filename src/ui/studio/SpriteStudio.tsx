@@ -235,6 +235,12 @@ export function SpriteStudio() {
 
   const generationAbortRef = useRef<AbortController | null>(null);
 
+  useEffect(() => {
+    return () => {
+      generationAbortRef.current?.abort();
+    };
+  }, [activeProject?.id]);
+
   const sketchCanvasRef = useRef<HTMLCanvasElement | null>(null);
   const maskCanvasRef = useRef<HTMLCanvasElement | null>(null);
   const stageRef = useRef<HTMLDivElement | null>(null);
@@ -767,6 +773,11 @@ export function SpriteStudio() {
       return;
     }
 
+    const startedProjectId = activeProject.id;
+    const isStaleOrAborted = () =>
+      abortController.signal.aborted ||
+      useAppStore.getState().activeProject?.id !== startedProjectId;
+
     const abortController = new AbortController();
     generationAbortRef.current = abortController;
     setIsGenerating(true);
@@ -786,6 +797,8 @@ export function SpriteStudio() {
         parentNode = savedRoot;
       }
 
+      if (isStaleOrAborted()) return;
+
       let sourceRgba: Uint8ClampedArray = new Uint8ClampedArray(sketchBufferRef.current);
       if (parentNode.id !== activeViewportNode?.id) {
         const parentBlob = await repository.getBlob(parentNode.imageBlobId);
@@ -800,11 +813,15 @@ export function SpriteStudio() {
         }
       }
 
+      if (isStaleOrAborted()) return;
+
       const ancestry = getAncestorPath(workingNodes, parentNode.id);
       const rootSketchSha = ancestry[0]?.sketchSha256 ?? parentNode.sketchSha256;
       const compiled = compilePrompt(activeProject.artBible, { adherence, promptDelta });
       const adapter = resolveProviderAdapter(providerConfig);
       const goldenReferenceImages = await loadGoldenReferencePayloads();
+
+      if (isStaleOrAborted()) return;
 
       const outputs = await adapter.generate(
         {
@@ -824,12 +841,18 @@ export function SpriteStudio() {
         abortController.signal,
       );
 
+      if (isStaleOrAborted()) return;
+
       const createdNodes: SpriteNode[] = [];
       for (const output of outputs) {
+        if (isStaleOrAborted()) {
+          await repository.cleanupOrphanedBlobs();
+          return;
+        }
         const blobRecord = await repository.storeBlob(output.blob, 'image/png');
         const childNode: SpriteNode = {
           id: globalThis.crypto.randomUUID(),
-          projectId: activeProject.id,
+          projectId: startedProjectId,
           parentId: parentNode.id,
           kind: 'generation',
           imageBlobId: blobRecord.id,
@@ -844,10 +867,16 @@ export function SpriteStudio() {
             createdAt: new Date(Date.now() + output.variantIndex).toISOString(),
           },
         };
+        if (isStaleOrAborted()) {
+          await repository.cleanupOrphanedBlobs();
+          return;
+        }
         workingNodes = appendChildNode(workingNodes, childNode);
         await repository.saveSpriteNode(childNode);
         createdNodes.push(childNode);
       }
+
+      if (isStaleOrAborted()) return;
 
       const firstOutput = outputs[0];
       const firstNode = createdNodes[0];
@@ -863,6 +892,7 @@ export function SpriteStudio() {
             targetHeight,
             'stretch',
           );
+          if (isStaleOrAborted()) return;
           displayRgba = resized.rgba;
         }
         sketchBufferRef.current = displayRgba;
@@ -873,20 +903,33 @@ export function SpriteStudio() {
         setForkParentId(firstNode.id);
       }
 
-      await refreshSpriteNodes(activeProject.id);
+      await refreshSpriteNodes(startedProjectId);
       setStatusMessage(`Generated ${createdNodes.length} variant(s) under ${parentNode.kind}.`);
     } catch (error) {
-      if (error instanceof ProviderError) {
-        setProviderError({ message: error.message, remediation: error.remediation });
-      } else {
-        setProviderError({
-          message: error instanceof Error ? error.message : 'Generation failed.',
-        });
+      if (
+        abortController.signal.aborted ||
+        (error instanceof ProviderError && error.code === 'ABORTED')
+      ) {
+        if (useAppStore.getState().activeProject?.id === startedProjectId) {
+          setStatusMessage('Generation cancelled.');
+        }
+      } else if (useAppStore.getState().activeProject?.id === startedProjectId) {
+        if (error instanceof ProviderError) {
+          setProviderError({ message: error.message, remediation: error.remediation });
+        } else {
+          setProviderError({
+            message: error instanceof Error ? error.message : 'Generation failed.',
+          });
+        }
+        setStatusMessage(null);
       }
-      setStatusMessage(null);
     } finally {
-      generationAbortRef.current = null;
-      setIsGenerating(false);
+      if (generationAbortRef.current === abortController) {
+        generationAbortRef.current = null;
+      }
+      if (useAppStore.getState().activeProject?.id === startedProjectId) {
+        setIsGenerating(false);
+      }
     }
   };
 
@@ -894,6 +937,11 @@ export function SpriteStudio() {
     if (!activeProject || isGenerating || !activeViewportNode || maskPixelCount === 0) return;
     const providerConfig = providers.find((p) => p.id === selectedProviderId) ?? providers[0];
     if (!providerConfig) return;
+
+    const startedProjectId = activeProject.id;
+    const isStaleOrAborted = () =>
+      abortController.signal.aborted ||
+      useAppStore.getState().activeProject?.id !== startedProjectId;
 
     const abortController = new AbortController();
     generationAbortRef.current = abortController;
@@ -914,14 +962,13 @@ export function SpriteStudio() {
           maskRgba[i * 4 + 3] = 255;
         }
       }
-      const maskBlobRecord = await repository.storeBlob(
-        rgbaToPngBlob(maskRgba, targetWidth, targetHeight),
-        'image/png',
-      );
+      const maskBlob = rgbaToPngBlob(maskRgba, targetWidth, targetHeight);
 
       const compiled = compilePrompt(activeProject.artBible, { adherence, promptDelta });
       const adapter = resolveProviderAdapter(providerConfig);
       const goldenReferenceImages = await loadGoldenReferencePayloads();
+
+      if (isStaleOrAborted()) return;
 
       const outputs = await adapter.inpaint(
         {
@@ -943,15 +990,23 @@ export function SpriteStudio() {
         abortController.signal,
       );
 
+      if (isStaleOrAborted()) return;
+
       const inpaintOutput = outputs[0];
       if (!inpaintOutput) {
         throw new Error('Provider returned zero inpaint outputs.');
       }
 
+      const maskBlobRecord = await repository.storeBlob(maskBlob, 'image/png');
       const imageBlobRecord = await repository.storeBlob(inpaintOutput.blob, 'image/png');
+      if (isStaleOrAborted()) {
+        await repository.cleanupOrphanedBlobs();
+        return;
+      }
+
       const inpaintNode: SpriteNode = {
         id: globalThis.crypto.randomUUID(),
-        projectId: activeProject.id,
+        projectId: startedProjectId,
         parentId: activeViewportNode.id,
         kind: 'inpaint',
         imageBlobId: imageBlobRecord.id,
@@ -970,6 +1025,7 @@ export function SpriteStudio() {
 
       appendChildNode(spriteNodes, inpaintNode);
       await repository.saveSpriteNode(inpaintNode);
+      if (isStaleOrAborted()) return;
 
       lastLoadedNodeIdRef.current = inpaintNode.id;
       let displayRgba: Uint8ClampedArray;
@@ -982,6 +1038,7 @@ export function SpriteStudio() {
           targetHeight,
           'stretch',
         );
+        if (isStaleOrAborted()) return;
         displayRgba = resized.rgba;
       }
       sketchBufferRef.current = displayRgba;
@@ -993,20 +1050,33 @@ export function SpriteStudio() {
       setActiveNodeId(inpaintNode.id);
       setForkParentId(inpaintNode.id);
 
-      await refreshSpriteNodes(activeProject.id);
+      await refreshSpriteNodes(startedProjectId);
       setStatusMessage(`Created inpaint child node (seed #${inpaintNode.generationMeta.seed}).`);
     } catch (error) {
-      if (error instanceof ProviderError) {
-        setProviderError({ message: error.message, remediation: error.remediation });
-      } else {
-        setProviderError({
-          message: error instanceof Error ? error.message : 'Inpainting failed.',
-        });
+      if (
+        abortController.signal.aborted ||
+        (error instanceof ProviderError && error.code === 'ABORTED')
+      ) {
+        if (useAppStore.getState().activeProject?.id === startedProjectId) {
+          setStatusMessage('Inpainting cancelled.');
+        }
+      } else if (useAppStore.getState().activeProject?.id === startedProjectId) {
+        if (error instanceof ProviderError) {
+          setProviderError({ message: error.message, remediation: error.remediation });
+        } else {
+          setProviderError({
+            message: error instanceof Error ? error.message : 'Inpainting failed.',
+          });
+        }
+        setStatusMessage(null);
       }
-      setStatusMessage(null);
     } finally {
-      generationAbortRef.current = null;
-      setIsGenerating(false);
+      if (generationAbortRef.current === abortController) {
+        generationAbortRef.current = null;
+      }
+      if (useAppStore.getState().activeProject?.id === startedProjectId) {
+        setIsGenerating(false);
+      }
     }
   };
 
@@ -1483,6 +1553,7 @@ export function SpriteStudio() {
           isGenerating={isGenerating}
           onGenerate={() => void handleGenerate()}
           onInpaint={() => void handleInpaint()}
+          onCancel={() => generationAbortRef.current?.abort()}
         />
       </div>
 

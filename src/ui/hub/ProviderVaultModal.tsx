@@ -15,6 +15,7 @@ import { DEFAULT_COMFYUI_BASE_URL } from '../../providers/comfyuiProvider';
 import {
   COMFYUI_PLACEHOLDER_TOKENS,
   DEFAULT_COMFYUI_WORKFLOW_TEMPLATE,
+  validateComfyUiWorkflowTemplate,
 } from '../../providers/comfyuiWorkflows';
 import { DEFAULT_GEMINI_BASE_URL } from '../../providers/geminiProvider';
 import { resolveProviderAdapter } from '../../providers/registry';
@@ -115,9 +116,9 @@ export function ProviderVaultModal() {
 
     if (kind === 'comfyui' && customWorkflowJson.trim()) {
       try {
-        JSON.parse(customWorkflowJson);
-      } catch {
-        setFormError('ComfyUI workflow template must be valid JSON.');
+        validateComfyUiWorkflowTemplate(customWorkflowJson);
+      } catch (error) {
+        setFormError(error instanceof Error ? error.message : 'Invalid ComfyUI workflow template.');
         return;
       }
     }
@@ -407,7 +408,11 @@ export function ProviderVaultModal() {
               </div>
             )}
 
-            {formError && <p className="text-xs text-rose-400">{formError}</p>}
+            {formError && (
+              <p data-testid="vault-form-error" className="text-xs text-rose-400">
+                {formError}
+              </p>
+            )}
 
             <button
               type="submit"
