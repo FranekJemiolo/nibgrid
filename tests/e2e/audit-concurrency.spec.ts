@@ -93,7 +93,13 @@ test.describe('Phase 2 Audit: Concurrency, Cancellation & Adversarial Edge Cases
   test('drops stale worker results under rapid slider thrashing & warns on empty palette snap', async ({
     page,
   }) => {
+    const consoleErrors: string[] = [];
     const pageErrors: string[] = [];
+    page.on('console', (msg) => {
+      if (msg.type() === 'error') {
+        consoleErrors.push(msg.text());
+      }
+    });
     page.on('pageerror', (err) => pageErrors.push(err.message));
 
     await page.goto('/');
@@ -121,18 +127,28 @@ test.describe('Phase 2 Audit: Concurrency, Cancellation & Adversarial Edge Cases
     await page.getByTestId('pp-palette-snap-toggle').check();
     await expect(page.getByTestId('empty-palette-snap-hint')).toBeVisible();
 
-    // Rapidly thrash sliders/presets/toggles without waiting between interactions
+    // Rapidly scrub sliders and presets 10+ times without awaiting intermediate worker runs
     await page.getByTestId('pp-bg-mode').selectOption('color-key');
     await page.getByTestId('pp-resample-toggle').check();
+    const tolSlider = page.getByTestId('pp-bg-tolerance');
+    const alphaSlider = page.getByTestId('pp-alpha-threshold');
+    await tolSlider.fill('10');
+    await alphaSlider.fill('32');
+    await tolSlider.fill('20');
     await page.getByTestId('pp-preset-256').click();
+    await alphaSlider.fill('64');
+    await tolSlider.fill('35');
     await page.getByTestId('pp-preset-64').click();
+    await alphaSlider.fill('24');
     await page.getByTestId('pp-preset-128').click();
+    await tolSlider.fill('45');
     await page.getByTestId('pp-preset-64').click();
 
     await expect(page.getByTestId('processed-dimensions-badge')).toContainText('64×64', {
       timeout: 5000,
     });
 
+    expect(consoleErrors).toEqual([]);
     expect(pageErrors).toEqual([]);
   });
 });

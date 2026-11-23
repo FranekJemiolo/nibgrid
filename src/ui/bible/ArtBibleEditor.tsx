@@ -436,6 +436,7 @@ export function ArtBibleEditor() {
                     <BlobImage
                       blobId={blobId}
                       alt={`Golden Reference ${index + 1}`}
+                      artMode={bible.artMode}
                       testId={`golden-ref-image-${index}`}
                       className="aspect-square w-full object-contain"
                     />

@@ -1,6 +1,5 @@
-import { useEffect, useState } from 'react';
 import type { ArtMode } from '../../domain/schemas';
-import { acquireBlobUrl, releaseBlobUrl } from './blobUrlCache';
+import { useBlobUrl } from './blobUrlCache';
 
 interface BlobImageProps {
   blobId: string;
@@ -17,29 +16,7 @@ export function BlobImage({
   className = '',
   testId,
 }: BlobImageProps) {
-  const [objectUrl, setObjectUrl] = useState<string | null>(null);
-  const [missing, setMissing] = useState(false);
-
-  useEffect(() => {
-    let cancelled = false;
-    setMissing(false);
-    setObjectUrl(null);
-
-    void acquireBlobUrl(blobId).then((url) => {
-      if (cancelled) return;
-      if (!url) {
-        setMissing(true);
-        setObjectUrl(null);
-        return;
-      }
-      setObjectUrl(url);
-    });
-
-    return () => {
-      cancelled = true;
-      releaseBlobUrl(blobId);
-    };
-  }, [blobId]);
+  const { objectUrl, missing } = useBlobUrl(blobId);
 
   if (missing) {
     return (

@@ -528,17 +528,22 @@ export function PostProcessInspector({ nodeId }: { nodeId: string }) {
             <div className="flex items-center gap-2">
               <button
                 type="button"
+                data-testid="inspector-zoom-out-btn"
                 onClick={() => setZoomPercent((z) => Math.max(50, z - 50))}
                 className="rounded border border-slate-700 bg-slate-900 p-1.5 text-slate-200 hover:bg-slate-800"
                 aria-label="Zoom out"
               >
                 <ZoomOut className="h-3.5 w-3.5" />
               </button>
-              <span className="min-w-12 text-center font-mono text-xs text-slate-200">
+              <span
+                data-testid="inspector-zoom-badge"
+                className="min-w-12 text-center font-mono text-xs text-slate-200"
+              >
                 {zoomPercent}%
               </span>
               <button
                 type="button"
+                data-testid="inspector-zoom-in-btn"
                 onClick={() => setZoomPercent((z) => Math.min(800, z + 50))}
                 className="rounded border border-slate-700 bg-slate-900 p-1.5 text-slate-200 hover:bg-slate-800"
                 aria-label="Zoom in"

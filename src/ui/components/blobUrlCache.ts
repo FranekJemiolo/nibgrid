@@ -1,3 +1,4 @@
+import { useEffect, useState } from 'react';
 import { repository } from '../../db/database';
 
 interface CacheEntry {
@@ -85,4 +86,32 @@ export function clearBlobUrlCacheForTests(): void {
     }
   }
   cache.clear();
+}
+
+export function useBlobUrl(blobId: string): { objectUrl: string | null; missing: boolean } {
+  const [objectUrl, setObjectUrl] = useState<string | null>(null);
+  const [missing, setMissing] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+    setMissing(false);
+    setObjectUrl(null);
+
+    void acquireBlobUrl(blobId).then((url) => {
+      if (cancelled) return;
+      if (!url) {
+        setMissing(true);
+        setObjectUrl(null);
+        return;
+      }
+      setObjectUrl(url);
+    });
+
+    return () => {
+      cancelled = true;
+      releaseBlobUrl(blobId);
+    };
+  }, [blobId]);
+
+  return { objectUrl, missing };
 }
