@@ -52,8 +52,20 @@ test.describe('M17C Project-Wide Asset Audit Matrix & 1-Click Batch Recipe Runne
     // 2. Post-process node 3 once so it stamps recipeArtBibleHash, then mutate Art Bible to make it Stale
     await page.getByTestId('open-postprocess-btn').click();
     await expect(page.getByTestId('postprocess-inspector')).toBeVisible();
+    await expect
+      .poll(async () =>
+        page.getByTestId('raw-preview-canvas').evaluate((el) => {
+          const ctx = (el as HTMLCanvasElement).getContext('2d');
+          return ctx ? (ctx.getImageData(0, 0, 1, 1).data[3] ?? 0) : 0;
+        }),
+      )
+      .toBe(255);
+    await page.getByTestId('pp-bg-mode').selectOption('color-key');
+    await expect(page.getByTestId('postprocess-inspector')).toHaveAttribute(
+      'data-recipe-synced',
+      'true',
+    );
     await expect(page.getByText('Processing in Worker...')).toHaveCount(0);
-    await page.waitForTimeout(250);
 
     await page.getByTestId('nav-art-bible').click();
     await expect(page.getByTestId('art-bible-editor')).toBeVisible();

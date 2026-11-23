@@ -169,6 +169,7 @@ export function PostProcessInspector({
       ),
   );
   const [rawSize, setRawSize] = useState({ width: 128, height: 128 });
+  const [rawLoadRev, setRawLoadRev] = useState(0);
   const [processedSize, setProcessedSize] = useState({ width: 128, height: 128 });
   const [splitPercent, setSplitPercent] = useState(50);
   const [zoomPercent, setZoomPercent] = useState(300);
@@ -353,6 +354,7 @@ export function PostProcessInspector({
       if (cancelled) return;
       rawImageRef.current = decoded;
       setRawSize({ width: decoded.width, height: decoded.height });
+      setRawLoadRev((rev) => rev + 1);
       setActiveSpriteBuffer({ width: decoded.width, height: decoded.height, data: decoded.rgba });
       drawCanvasBuffer(rawCanvasRef.current, decoded.rgba, decoded.width, decoded.height);
     });
@@ -410,10 +412,12 @@ export function PostProcessInspector({
           });
           drawCanvasBuffer(processedCanvasRef.current, result.rgba, result.width, result.height);
           setAiProgress(null);
-          setIsProcessing(false);
 
           const nodeSnapshot = latestNodeRef.current;
-          if (!nodeSnapshot || nodeSnapshot.id !== targetNodeId) return;
+          if (!nodeSnapshot || nodeSnapshot.id !== targetNodeId) {
+            setIsProcessing(false);
+            return;
+          }
           const processedBlob = rgbaToPngBlob(result.rgba, result.width, result.height);
           const stored = await repository.storeBlob(processedBlob, 'image/png');
           if (
@@ -422,6 +426,9 @@ export function PostProcessInspector({
             useAppStore.getState().activeProject?.id !== startedProjectId
           ) {
             await repository.cleanupOrphanedBlobs();
+            if (!cancelled && guard.isCurrent(token)) {
+              setIsProcessing(false);
+            }
             return;
           }
           await repository.saveSpriteNode({
@@ -456,6 +463,9 @@ export function PostProcessInspector({
           ) {
             await refreshSpriteNodes(startedProjectId);
           }
+          if (!cancelled && guard.isCurrent(token)) {
+            setIsProcessing(false);
+          }
         })
         .catch((error: unknown) => {
           if (cancelled || !guard.isCurrent(token)) return;
@@ -476,6 +486,7 @@ export function PostProcessInspector({
     pipelineKey,
     rawSize.width,
     rawSize.height,
+    rawLoadRev,
     activeProject,
     targetNodeId,
     drawCanvasBuffer,
@@ -913,7 +924,11 @@ export function PostProcessInspector({
   );
 
   return (
-    <div data-testid="postprocess-inspector" className="flex flex-1 flex-col overflow-hidden">
+    <div
+      data-testid="postprocess-inspector"
+      data-recipe-synced={String(Boolean(targetNode.recipeArtBibleHash))}
+      className="flex flex-1 flex-col overflow-hidden"
+    >
       <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-800 bg-slate-900/80 px-4 py-2.5">
         <div className="flex items-center gap-3">
           <button
