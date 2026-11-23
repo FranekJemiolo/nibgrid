@@ -204,6 +204,87 @@ export function createDefaultPaletteLutConfig(): PaletteLutConfig {
   return PaletteLutConfigSchema.parse({});
 }
 
+export const OscShapeSchema = z.enum(['sine', 'triangle', 'sawtooth', 'square']);
+
+export const ProceduralSfxParamsSchema = z.object({
+  seed: z.number().int().min(0).max(0xffffffff),
+  durationSec: z.number().min(0.05).max(4.0),
+  sampleRate: z.number().int().min(8000).max(96000).optional(),
+  transientGain: z.number().min(0).max(1),
+  transientDecayMs: z.number().min(2).max(40),
+  transientFreqHz: z.number().min(80).max(4000),
+  bodyGain: z.number().min(0).max(1),
+  bodyShape: OscShapeSchema,
+  bodyStartHz: z.number().min(20).max(2400),
+  bodyEndHz: z.number().min(20).max(2400),
+  bodyAttackMs: z.number().min(0).max(50),
+  bodyDecayMs: z.number().min(15).max(2000),
+  fmRatio: z.number().min(0).max(8),
+  fmDepth: z.number().min(0).max(600),
+  noiseGain: z.number().min(0).max(1),
+  noiseDecayMs: z.number().min(15).max(2500),
+  filterStartHz: z.number().min(100).max(14000),
+  filterEndHz: z.number().min(80).max(12000),
+  filterQ: z.number().min(0.5).max(8.0),
+  bitDepth: z.number().int().min(4).max(16),
+  drive: z.number().min(1.0).max(6.0),
+});
+
+export const AudioPostProcessConfigSchema = z.object({
+  trimSilence: z.boolean().default(true),
+  silenceThresholdDb: z.number().min(-80).max(-12).default(-48),
+  fadeInMs: z.number().min(0).max(100).default(2),
+  fadeOutMs: z.number().min(0).max(250).default(8),
+  normalizeLufs: z.boolean().default(true),
+  targetLufs: z.number().min(-32).max(-6).default(-14),
+  ceilingDb: z.number().min(-6).max(0).default(-1.0),
+  seamlessLoop: z.boolean().default(false),
+  loopCrossfadeMs: z.number().min(10).max(1000).default(120),
+  cropStartSec: z.number().min(0).default(0),
+  cropEndSec: z.number().min(0).default(0),
+  pitchShiftPercent: z.number().min(-50).max(50).optional(),
+});
+
+export function createDefaultAudioPostProcessConfig() {
+  return AudioPostProcessConfigSchema.parse({});
+}
+
+export const GoogleAudioRouteSchema = z.enum([
+  'lyria-clip',
+  'lyria-full',
+  'gemini-tts',
+  'gemini-to-synth',
+  'local-synth',
+]);
+
+export const AudioCategorySchema = z.enum(['sfx', 'ui', 'ambience', 'music', 'voice']);
+
+export const AudioBindingsSchema = z.object({
+  hitSfxId: z.string().min(1).optional(),
+  stepSfxId: z.string().min(1).optional(),
+  bgmLoopId: z.string().min(1).optional(),
+  uiClickSfxId: z.string().min(1).optional(),
+  frameSfxMap: z.record(z.string(), z.string().min(1)).optional(),
+});
+export type AudioBindings = z.infer<typeof AudioBindingsSchema>;
+
+export const AudioAssetSchema = z.object({
+  id: z.string().min(1),
+  projectId: z.string().min(1),
+  name: z.string().trim().min(1).max(120),
+  presetId: z.string().min(1),
+  route: GoogleAudioRouteSchema,
+  modelId: z.string().min(1),
+  wavBlobId: z.string().min(1),
+  variationBlobIds: z.array(z.string().min(1)).default([]),
+  synthParams: ProceduralSfxParamsSchema.optional(),
+  postProcess: AudioPostProcessConfigSchema,
+  lufs: z.number(),
+  durationSec: z.number().min(0),
+  createdAt: z.string().min(1),
+});
+export type AudioAsset = z.infer<typeof AudioAssetSchema>;
+
 export const DemixelModeSchema = z.enum(['auto', 'manual']);
 export type DemixelMode = z.infer<typeof DemixelModeSchema>;
 
@@ -295,6 +376,7 @@ export const SpriteNodeSchema = z.object({
   seamlessTile: SeamlessTileConfigSchema.optional(),
   nineSlice: NineSliceConfigSchema.optional(),
   paletteLut: PaletteLutConfigSchema.optional(),
+  audioBindings: AudioBindingsSchema.optional(),
   sketchSha256: z.string().regex(/^[0-9a-f]{64}$/, 'sketchSha256 must be a 64-char hex SHA-256'),
   generationMeta: GenerationMetaSchema,
 });
@@ -304,6 +386,7 @@ export const ProjectSchema = z.object({
   id: z.string().min(1),
   name: z.string().trim().min(1, 'Project name is required').max(120),
   artBible: ArtBibleSchema,
+  audioBindings: AudioBindingsSchema.optional(),
   createdAt: z.string().min(1),
   updatedAt: z.string().min(1),
 });

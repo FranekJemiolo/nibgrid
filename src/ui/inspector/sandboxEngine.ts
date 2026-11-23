@@ -123,6 +123,8 @@ export class SandboxEngine {
   private disposed = false;
   private ticks = 0;
   private readonly onContrastUpdate?: (report: BiomeContrastReport) => void;
+  private readonly onHitTriggered?: () => void;
+  private readonly onFrameAdvance?: (frameIndex: number) => void;
   private readonly handleVisibilityBound: () => void;
 
   constructor(
@@ -130,6 +132,8 @@ export class SandboxEngine {
     initialConfig: SandboxEngineConfig,
     initialFrames: readonly RgbaBuffer[],
     onContrastUpdate?: (report: BiomeContrastReport) => void,
+    onHitTriggered?: () => void,
+    onFrameAdvance?: (frameIndex: number) => void,
   ) {
     this.displayCanvas = displayCanvas;
     this.displayCtx = displayCanvas.getContext('2d');
@@ -140,6 +144,8 @@ export class SandboxEngine {
 
     this.config = initialConfig;
     this.onContrastUpdate = onContrastUpdate;
+    this.onHitTriggered = onHitTriggered;
+    this.onFrameAdvance = onFrameAdvance;
     this.state = createInitialSandboxState({
       posX: Math.round(initialConfig.cameraWidth * 0.5),
       posY: Math.round(initialConfig.cameraHeight * 0.68),
@@ -306,6 +312,7 @@ export class SandboxEngine {
   public triggerHit(): void {
     if (this.disposed) return;
     this.state = triggerHit(this.state);
+    this.onHitTriggered?.();
     this.renderFrame();
   }
 
@@ -350,7 +357,11 @@ export class SandboxEngine {
         pingPong: this.config.pingPong,
       };
 
+      const prevFrame = this.state.frameIndex;
       this.state = stepSandboxState(this.state, stepInput, dt);
+      if (this.state.frameIndex !== prevFrame && this.frameBank.length > 1) {
+        this.onFrameAdvance?.(this.state.frameIndex);
+      }
       this.renderFrame();
       this.rafId = window.requestAnimationFrame(loop);
     };

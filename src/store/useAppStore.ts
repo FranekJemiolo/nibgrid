@@ -3,6 +3,8 @@ import { OFFLINE_MOCK_PROVIDER_ID, repository, type ProjectSummary } from '../db
 import type {
   AdherenceLevel,
   ArtBible,
+  AudioAsset,
+  AudioBindings,
   Project,
   ProviderConfig,
   SpriteNode,
@@ -16,7 +18,8 @@ export type ScreenRoute =
   | { screen: 'bible'; projectId: string }
   | { screen: 'studio'; projectId: string }
   | { screen: 'inspector'; projectId: string; nodeId: string; initialTab?: InspectorTab }
-  | { screen: 'atlas'; projectId: string };
+  | { screen: 'atlas'; projectId: string }
+  | { screen: 'audio'; projectId: string };
 
 const VALID_INSPECTOR_TABS = new Set<InspectorTab>([
   'postprocess',
@@ -55,6 +58,10 @@ export function parseHashRoute(hash: string): ScreenRoute {
   if (atlasMatch?.[1]) {
     return { screen: 'atlas', projectId: atlasMatch[1] };
   }
+  const audioMatch = /^\/project\/([^/]+)\/audio$/.exec(path);
+  if (audioMatch?.[1]) {
+    return { screen: 'audio', projectId: audioMatch[1] };
+  }
   return { screen: 'hub' };
 }
 
@@ -72,6 +79,9 @@ export function formatHashRoute(route: ScreenRoute): string {
   if (route.screen === 'atlas') {
     return `#/project/${route.projectId}/atlas`;
   }
+  if (route.screen === 'audio') {
+    return `#/project/${route.projectId}/audio`;
+  }
   return '#/';
 }
 
@@ -80,6 +90,7 @@ interface AppState {
   projects: ProjectSummary[];
   activeProject: Project | null;
   spriteNodes: SpriteNode[];
+  audioAssets: AudioAsset[];
   providers: ProviderConfig[];
   selectedProviderId: string;
   studioAdherence: AdherenceLevel;
@@ -110,6 +121,10 @@ interface AppState {
   setStudioVariantCount: (count: 1 | 2) => void;
 
   refreshSpriteNodes: (projectId: string) => Promise<void>;
+  refreshAudioAssets: (projectId: string) => Promise<void>;
+  saveAudioAssetRecord: (asset: AudioAsset) => Promise<AudioAsset>;
+  deleteAudioAssetRecord: (assetId: string, projectId: string) => Promise<void>;
+  patchProjectAudioBindings: (patch: Partial<AudioBindings>) => Promise<void>;
 }
 
 let projectWriteQueue: Promise<void> = Promise.resolve();
@@ -128,6 +143,7 @@ export const useAppStore = create<AppState>((set, get) => ({
   projects: [],
   activeProject: null,
   spriteNodes: [],
+  audioAssets: [],
   providers: [],
   selectedProviderId: OFFLINE_MOCK_PROVIDER_ID,
   studioAdherence: 'balanced',
@@ -151,13 +167,17 @@ export const useAppStore = create<AppState>((set, get) => ({
       if (initialRoute.screen !== 'hub') {
         const project = await repository.getProject(initialRoute.projectId);
         if (project) {
-          const spriteNodes = await repository.listSpriteNodes(project.id);
+          const [spriteNodes, audioAssets] = await Promise.all([
+            repository.listSpriteNodes(project.id),
+            repository.listAudioAssets(project.id),
+          ]);
           set({
             route: initialRoute,
             projects,
             providers,
             activeProject: project,
             spriteNodes,
+            audioAssets,
             isLoading: false,
           });
           return;
@@ -173,6 +193,7 @@ export const useAppStore = create<AppState>((set, get) => ({
         providers,
         activeProject: null,
         spriteNodes: [],
+        audioAssets: [],
         isLoading: false,
       });
     } catch (error) {
@@ -193,7 +214,14 @@ export const useAppStore = create<AppState>((set, get) => ({
 
     if (route.screen === 'hub') {
       const projects = await repository.listProjectsWithCounts();
-      set({ route, projects, activeProject: null, spriteNodes: [], errorMessage: null });
+      set({
+        route,
+        projects,
+        activeProject: null,
+        spriteNodes: [],
+        audioAssets: [],
+        errorMessage: null,
+      });
       return;
     }
 
@@ -208,6 +236,7 @@ export const useAppStore = create<AppState>((set, get) => ({
         projects,
         activeProject: null,
         spriteNodes: [],
+        audioAssets: [],
         errorMessage: `Project "${route.projectId}" was not found.`,
       });
       return;
@@ -215,11 +244,15 @@ export const useAppStore = create<AppState>((set, get) => ({
 
     const prevProjectId = get().activeProject?.id;
     const isSwitchingProject = prevProjectId !== project.id;
-    const spriteNodes = await repository.listSpriteNodes(project.id);
+    const [spriteNodes, audioAssets] = await Promise.all([
+      repository.listSpriteNodes(project.id),
+      repository.listAudioAssets(project.id),
+    ]);
     set({
       route,
       activeProject: project,
       spriteNodes,
+      audioAssets,
       errorMessage: null,
       ...(isSwitchingProject ? { studioAdherence: 'balanced', studioVariantCount: 2 } : {}),
     });
@@ -249,7 +282,13 @@ export const useAppStore = create<AppState>((set, get) => ({
       if (typeof window !== 'undefined') {
         window.location.hash = '#/';
       }
-      set({ route: { screen: 'hub' }, activeProject: null, spriteNodes: [], projects });
+      set({
+        route: { screen: 'hub' },
+        activeProject: null,
+        spriteNodes: [],
+        audioAssets: [],
+        projects,
+      });
     } else {
       set({ projects });
     }
@@ -352,5 +391,57 @@ export const useAppStore = create<AppState>((set, get) => ({
       repository.listProjectsWithCounts(),
     ]);
     set({ spriteNodes, projects });
+  },
+
+  refreshAudioAssets: async (projectId) => {
+    const audioAssets = await repository.listAudioAssets(projectId);
+    set({ audioAssets });
+  },
+
+  saveAudioAssetRecord: async (asset) => {
+    const saved = await repository.saveAudioAsset(asset);
+    const audioAssets = await repository.listAudioAssets(saved.projectId);
+    set({ audioAssets });
+    return saved;
+  },
+
+  deleteAudioAssetRecord: async (assetId, projectId) => {
+    await repository.deleteAudioAsset(assetId);
+    const audioAssets = await repository.listAudioAssets(projectId);
+    set({ audioAssets });
+  },
+
+  patchProjectAudioBindings: async (patch) => {
+    const activeProject = get().activeProject;
+    if (!activeProject) return;
+    const merged: AudioBindings = { ...(activeProject.audioBindings ?? {}), ...patch };
+    const optimistic: Project = {
+      ...activeProject,
+      audioBindings: merged,
+      updatedAt: new Date().toISOString(),
+    };
+    set({ activeProject: optimistic, errorMessage: null });
+
+    await enqueueProjectWrite(async () => {
+      const latest = get().activeProject;
+      if (!latest || latest.id !== activeProject.id) return;
+      const updated = await repository.updateProjectMeta(latest.id, {
+        audioBindings: latest.audioBindings ?? merged,
+      });
+      const projects = await repository.listProjectsWithCounts();
+      const postWriteLatest = get().activeProject;
+      if (postWriteLatest && postWriteLatest.id === updated.id) {
+        set({
+          activeProject: {
+            ...updated,
+            audioBindings: postWriteLatest.audioBindings,
+          },
+          projects,
+          errorMessage: null,
+        });
+      } else {
+        set({ projects, errorMessage: null });
+      }
+    });
   },
 }));

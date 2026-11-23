@@ -1,5 +1,7 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
-import { FlipHorizontal2, Pause, Play, Sparkles, Zap } from 'lucide-react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { FlipHorizontal2, Pause, Play, Sparkles, Volume2, VolumeX, Zap } from 'lucide-react';
+import { AudioPlaybackEngine } from '../../audio/playbackEngine';
+import { repository } from '../../db/database';
 import type { ArtMode, Projection, PuppetAnimConfig } from '../../domain/schemas';
 import {
   clusterPaletteRamps,
@@ -21,6 +23,7 @@ import type {
 } from '../../processing/sandboxState';
 import { buildAlphaClippedMesh } from '../../processing/spriteMesh';
 import type { RgbaBuffer } from '../../processing/types';
+import { useAppStore } from '../../store/useAppStore';
 import { buildPuppetStripArtifacts } from '../../webgl/puppetRenderer';
 import { SANDBOX_CAMERA_PRESETS, SandboxEngine, type SandboxEngineConfig } from './sandboxEngine';
 
@@ -55,8 +58,11 @@ export function GameSandbox({
   puppetConfig,
   lutVariants,
 }: GameSandboxProps) {
+  const { activeProject, audioAssets, patchProjectAudioBindings } = useAppStore();
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const engineRef = useRef<SandboxEngine | null>(null);
+  const sfxPlayerRef = useRef<AudioPlaybackEngine | null>(null);
+  const bgmPlayerRef = useRef<AudioPlaybackEngine | null>(null);
 
   const [biomeId, setBiomeId] = useState<BiomeId>('dark-dungeon');
   const [scale, setScale] = useState<SandboxScale>(2);
@@ -69,6 +75,9 @@ export function GameSandbox({
   const [playing, setPlaying] = useState<boolean>(true);
   const [fps, setFps] = useState<number>(() => Math.max(4, Math.min(24, puppetConfig.fps)));
   const [selectedLutIdx, setSelectedLutIdx] = useState<number>(0);
+  const [muted, setMuted] = useState<boolean>(false);
+  const [audioTriggerCount, setAudioTriggerCount] = useState<number>(0);
+  const [lastPlayedSfxId, setLastPlayedSfxId] = useState<string>('');
   const [contrastReport, setContrastReport] = useState<BiomeContrastReport>({
     edgePixelCount: 0,
     edgeLuminance: 0.5,
@@ -78,6 +87,37 @@ export function GameSandbox({
     rating: 'weak',
     suggestion: 'Computing perimeter separation...',
   });
+
+  const bindings = activeProject?.audioBindings;
+  const latestAudioStateRef = useRef({
+    muted,
+    bindings,
+    audioAssets,
+    frameCount: puppetConfig.frameCount,
+  });
+  latestAudioStateRef.current = {
+    muted,
+    bindings,
+    audioAssets,
+    frameCount: puppetConfig.frameCount,
+  };
+
+  const triggerBoundSfx = useCallback((assetId?: string) => {
+    const snap = latestAudioStateRef.current;
+    if (snap.muted || !assetId) return;
+    const asset = snap.audioAssets.find((a) => a.id === assetId);
+    if (!asset) return;
+
+    const pool = asset.variationBlobIds.length > 0 ? asset.variationBlobIds : [asset.wavBlobId];
+    const pickedBlobId = pool[Math.floor(Math.random() * pool.length)] ?? asset.wavBlobId;
+    setAudioTriggerCount((c) => c + 1);
+    setLastPlayedSfxId(asset.id);
+    void repository.getBlob(pickedBlobId).then((rec) => {
+      if (rec && sfxPlayerRef.current) {
+        void sfxPlayerRef.current.playWavBlob(rec.bytes, { loop: false });
+      }
+    });
+  }, []);
 
   const cameraPreset = SANDBOX_CAMERA_PRESETS[cameraIdx] ?? SANDBOX_CAMERA_PRESETS[0]!;
 
@@ -172,18 +212,77 @@ export function GameSandbox({
     ],
   );
 
-  // Mount & dispose Canvas2D engine strictly without WebGL/WebGL2 overhead
+  // Mount & dispose Canvas2D engine + AudioPlaybackEngines cleanly on unmount
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
-    const engine = new SandboxEngine(canvas, engineConfig, activeFrames, setContrastReport);
+    const sfxPlayer = new AudioPlaybackEngine();
+    const bgmPlayer = new AudioPlaybackEngine();
+    sfxPlayerRef.current = sfxPlayer;
+    bgmPlayerRef.current = bgmPlayer;
+
+    const handleHit = () => {
+      triggerBoundSfx(latestAudioStateRef.current.bindings?.hitSfxId);
+    };
+
+    const handleFrameAdvance = (frameIdx: number) => {
+      const snap = latestAudioStateRef.current;
+      const mapped = snap.bindings?.frameSfxMap?.[String(frameIdx)];
+      if (mapped) {
+        triggerBoundSfx(mapped);
+        return;
+      }
+      const midpoint = Math.max(1, Math.floor(snap.frameCount / 2));
+      if (snap.bindings?.stepSfxId && (frameIdx === 0 || frameIdx === midpoint)) {
+        triggerBoundSfx(snap.bindings.stepSfxId);
+      }
+    };
+
+    const engine = new SandboxEngine(
+      canvas,
+      engineConfig,
+      activeFrames,
+      setContrastReport,
+      handleHit,
+      handleFrameAdvance,
+    );
     engineRef.current = engine;
     return () => {
       engine.dispose();
       engineRef.current = null;
+      void sfxPlayer.dispose();
+      void bgmPlayer.dispose();
+      sfxPlayerRef.current = null;
+      bgmPlayerRef.current = null;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [triggerBoundSfx]);
+
+  // Keep optional looping BGM synchronized with Play/Pause and Mute toggles
+  useEffect(() => {
+    const bgmPlayer = bgmPlayerRef.current;
+    if (!bgmPlayer) return;
+    const bgmId = bindings?.bgmLoopId;
+    if (!playing || muted || !bgmId) {
+      bgmPlayer.stop();
+      return;
+    }
+    const asset = audioAssets.find((a) => a.id === bgmId);
+    if (!asset) {
+      bgmPlayer.stop();
+      return;
+    }
+    let cancelled = false;
+    void repository.getBlob(asset.wavBlobId).then((rec) => {
+      if (!cancelled && rec) {
+        void bgmPlayer.playWavBlob(rec.bytes, { loop: true });
+      }
+    });
+    return () => {
+      cancelled = true;
+      bgmPlayer.stop();
+    };
+  }, [playing, muted, bindings?.bgmLoopId, audioAssets]);
 
   useEffect(() => {
     engineRef.current?.updateConfig(engineConfig);
@@ -441,6 +540,8 @@ export function GameSandbox({
         <canvas
           ref={canvasRef}
           data-testid="sandbox-canvas"
+          data-audio-trigger-count={audioTriggerCount}
+          data-last-played-sfx={lastPlayedSfxId}
           className="rounded border border-slate-700 shadow-2xl"
           style={{
             width: `${cameraPreset.width * scale}px`,
@@ -548,6 +649,96 @@ export function GameSandbox({
               M9 Puppet Loop Active ({puppetConfig.frameCount}f)
             </span>
           )}
+        </div>
+      </div>
+
+      {/* M14C Audio Juice Binding Strip */}
+      <div
+        data-testid="sandbox-audio-juice-bar"
+        className="flex flex-wrap items-center justify-between gap-3 border-t border-slate-800/80 bg-slate-950/90 px-4 py-2 text-xs"
+      >
+        <div className="flex flex-wrap items-center gap-3">
+          <span className="font-semibold text-indigo-300">Audio Juice:</span>
+          <label className="flex items-center gap-1.5 text-slate-300">
+            <span>Hit SFX (H)</span>
+            <select
+              data-testid="sandbox-hit-sfx-select"
+              value={bindings?.hitSfxId ?? ''}
+              onChange={(e) =>
+                void patchProjectAudioBindings({ hitSfxId: e.target.value || undefined })
+              }
+              className="rounded border border-slate-700 bg-slate-900 px-2 py-1 text-[11px] text-slate-200"
+            >
+              <option value="">None</option>
+              {audioAssets.map((a) => (
+                <option key={a.id} value={a.id}>
+                  {a.name}
+                </option>
+              ))}
+            </select>
+          </label>
+
+          <label className="flex items-center gap-1.5 text-slate-300">
+            <span>Step / Frame SFX</span>
+            <select
+              data-testid="sandbox-step-sfx-select"
+              value={bindings?.stepSfxId ?? ''}
+              onChange={(e) =>
+                void patchProjectAudioBindings({ stepSfxId: e.target.value || undefined })
+              }
+              className="rounded border border-slate-700 bg-slate-900 px-2 py-1 text-[11px] text-slate-200"
+            >
+              <option value="">None</option>
+              {audioAssets.map((a) => (
+                <option key={a.id} value={a.id}>
+                  {a.name}
+                </option>
+              ))}
+            </select>
+          </label>
+
+          <label className="flex items-center gap-1.5 text-slate-300">
+            <span>BGM Loop</span>
+            <select
+              data-testid="sandbox-bgm-sfx-select"
+              value={bindings?.bgmLoopId ?? ''}
+              onChange={(e) =>
+                void patchProjectAudioBindings({ bgmLoopId: e.target.value || undefined })
+              }
+              className="rounded border border-slate-700 bg-slate-900 px-2 py-1 text-[11px] text-slate-200"
+            >
+              <option value="">None</option>
+              {audioAssets.map((a) => (
+                <option key={a.id} value={a.id}>
+                  {a.name}
+                </option>
+              ))}
+            </select>
+          </label>
+        </div>
+
+        <div className="flex items-center gap-2">
+          <span
+            data-testid="sandbox-audio-trigger-badge"
+            data-audio-trigger-count={audioTriggerCount}
+            data-last-played-sfx={lastPlayedSfxId}
+            className="font-mono text-[11px] text-slate-400"
+          >
+            SFX Triggers: {audioTriggerCount}
+          </span>
+          <button
+            type="button"
+            data-testid="sandbox-audio-mute-toggle"
+            onClick={() => setMuted((m) => !m)}
+            className={`inline-flex items-center gap-1 rounded border px-2 py-1 text-[11px] font-medium ${
+              muted
+                ? 'border-rose-500/40 bg-rose-500/20 text-rose-200'
+                : 'border-slate-700 bg-slate-800 text-slate-200'
+            }`}
+          >
+            {muted ? <VolumeX className="h-3.5 w-3.5" /> : <Volume2 className="h-3.5 w-3.5" />}
+            {muted ? 'Muted' : 'Audio On'}
+          </button>
         </div>
       </div>
     </div>

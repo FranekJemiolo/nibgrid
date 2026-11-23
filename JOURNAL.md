@@ -248,3 +248,22 @@
 - **M9/M12 Synergy & Screen 3 Quick-Launch (`PostProcessInspector.tsx`, `PaletteLutWorkshop.tsx`, `DagTreeDock.tsx`, `SpriteStudio.tsx`, `useAppStore.ts`, `App.tsx`):** Bound M9 Puppet-Warp strips (`buildPuppetStripArtifacts`) and shared/persisted M12 LUT variant switching (`decodeIndexedSprite`) directly inside Screen 4F, and added a **"1× Preview"** pill in Screen 3's DAG dock routing straight to `#/project/:id/inspector/:nodeId?tab=sandbox`.
 - **Verification:** Verified via `tests/unit/m13-game-sandbox.test.ts` and `tests/e2e/m13-sandbox-e2e.spec.ts` alongside the full unit, E2E, lint, typecheck, format, and GitHub Pages build suite.
 
+## Milestone 14A: Pure-TS Procedural Synth, PCM Post-Processor & Google Audio Presets
+
+- **Pure-TS Synth & PCM Post-Processor (`src/audio/proceduralSynth.ts`, `src/audio/pcmPostProcess.ts`, `src/audio/variations.ts`):** Implemented the deterministic Mulberry32 3-layer synth (Transient + FM/Subtractive Body + SVF Noise Tail), region cropping, zero-crossing silence trimming, K-weighted LUFS normalization with soft-knee true-peak limiting, equal-power seamless loop crossfading, RIFF/WAVE 16-bit encoder/decoder, and `1`/`4`/`6` anti-repetition variation generators.
+- **Curated Google Audio Presets & ZIP Recipe Packager (`src/audio/googlePresets.ts`, `src/export/audioExport.ts`, `src/domain/schemas.ts`):** Added all 12 curated presets across Lyria 3/3.5, Gemini 3.8 TTS, and Gemini-to-Synth routes, extended `ProjectSchema` and `SpriteNodeSchema` with `audioBindings`, and implemented secret-redacted `AudioRecipeSchema` + `.zip` bundling.
+- **Verification:** Verified via `tests/unit/m14a-audio-core.test.ts` alongside the full TypeScript, ESLint, Prettier, unit, E2E, and GitHub Pages production build gate.
+
+## Milestone 14B: Google Audio Provider, IndexedDB Audio Bank & Screen 6 UI
+
+- **Google Audio Adapters & Synth Schema (`src/audio/synthResponseSchema.ts`, `src/audio/googleAudioProvider.ts`):** Added typed request builders and fetch orchestration for Lyria 3/3.5 Interactions API, Gemini 3.8 Flash/Flash-Lite TTS (`responseModalities: ["AUDIO"]`), and Gemini JSON → `ProceduralSfxParams` with single-key Provider Vault inheritance, transparent per-call cost badges, and secret-redacted HTTP diagnostics.
+- **Audio Worker, Playback Engine & Dexie v2 Persistence (`src/workers/audio.worker.ts`, `src/workers/audioClient.ts`, `src/audio/playbackEngine.ts`, `src/db/database.ts`, `src/store/useAppStore.ts`):** Added transferable Web Worker execution, lazy headless-safe `AudioContext` auditioning/MP3 decoding, and `audioAssets` persistence with full cascade + orphan blob cleanup.
+- **Screen 6 UI (`src/ui/audio/AudioFoundry.tsx`, `src/App.tsx`):** Built the **Audio Foundry** navigation screen with 12 clickable Google presets, vocal-tag warning chips, interactive Canvas2D waveform + Region Crop sliders, LUFS/Peak/Duration metering, Raw/Processed A/B toggle, project Audio Bank, and ZIP / File System Access export.
+- **Verification:** Verified via `tests/unit/m14b-google-audio-db.test.ts`, `tests/e2e/m14b-audio-foundry.spec.ts`, and the full TypeScript, ESLint, Prettier, unit, E2E, and GitHub Pages production build suite.
+
+## Milestone 14C: 1× Game Scale Sandbox & 9-Slice Audio-Visual Juice Binding
+
+- **Sandbox Hit, Puppet-Warp Frame & BGM Bindings (`src/ui/inspector/sandboxEngine.ts`, `src/ui/inspector/GameSandbox.tsx`):** Added **Audio Juice** strip (`Hit SFX`, `Step / Frame SFX`, `BGM Loop`, `Mute`), synchronizing `H` hit-flash variation playback with `40ms` hitstop, M9 animation step triggers, and seamless looping background tracks cleanly cleaned up on unmount.
+- **9-Slice Click SFX Auditioning (`src/ui/inspector/TileAndSliceWorkshop.tsx`):** Added **Click SFX** binding and tactile clickable matrix previews (`Wide Button`, `Tall Sidebar`, `Square Dialog`) backed by `patchProjectAudioBindings` in IndexedDB.
+- **Verification:** Verified via `tests/e2e/m14c-sandbox-audio-binding.spec.ts` (including hard-reload persistence) and the full TypeScript, ESLint, Prettier, unit, Python bridge, E2E, and GitHub Pages production build gate.
+

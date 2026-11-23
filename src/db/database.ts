@@ -1,12 +1,16 @@
 import Dexie, { type Table } from 'dexie';
 import {
   ArtBibleSchema,
+  AudioAssetSchema,
+  AudioBindingsSchema,
   BlobRecordSchema,
   ProjectSchema,
   ProviderConfigSchema,
   SpriteNodeSchema,
   createDefaultArtBible,
   type ArtBible,
+  type AudioAsset,
+  type AudioBindings,
   type BlobRecord,
   type Project,
   type ProviderConfig,
@@ -27,6 +31,7 @@ export class NibgridDatabase extends Dexie {
   blobs!: Table<BlobRecord, string>;
   spriteNodes!: Table<SpriteNode, string>;
   providerConfigs!: Table<ProviderConfig, string>;
+  audioAssets!: Table<AudioAsset, string>;
 
   constructor(dbName = 'nibgrid-db') {
     super(dbName);
@@ -35,6 +40,13 @@ export class NibgridDatabase extends Dexie {
       blobs: 'id, sha256, createdAt',
       spriteNodes: 'id, projectId, parentId, [projectId+createdAt]',
       providerConfigs: 'id, kind, updatedAt',
+    });
+    this.version(2).stores({
+      projects: 'id, updatedAt, name',
+      blobs: 'id, sha256, createdAt',
+      spriteNodes: 'id, projectId, parentId, [projectId+createdAt]',
+      providerConfigs: 'id, kind, updatedAt',
+      audioAssets: 'id, projectId, presetId, createdAt',
     });
   }
 }
@@ -173,7 +185,7 @@ export class NibgridRepository {
 
   async updateProjectMeta(
     projectId: string,
-    updates: { name?: string; artBible?: ArtBible },
+    updates: { name?: string; artBible?: ArtBible; audioBindings?: AudioBindings },
   ): Promise<Project> {
     const existing = await this.getProject(projectId);
     if (!existing) {
@@ -184,6 +196,10 @@ export class NibgridRepository {
       ...existing,
       name: updates.name ?? existing.name,
       artBible: updates.artBible ? ArtBibleSchema.parse(updates.artBible) : existing.artBible,
+      audioBindings:
+        updates.audioBindings !== undefined
+          ? AudioBindingsSchema.parse(updates.audioBindings)
+          : existing.audioBindings,
       updatedAt: nowIso(),
     });
 
@@ -263,9 +279,12 @@ export class NibgridRepository {
     const validated = SpriteNodeSchema.parse(node);
     await this.database.transaction(
       'rw',
-      this.database.spriteNodes,
-      this.database.projects,
-      this.database.blobs,
+      [
+        this.database.spriteNodes,
+        this.database.projects,
+        this.database.audioAssets,
+        this.database.blobs,
+      ],
       async () => {
         const existing = await this.database.spriteNodes.get(validated.id);
         await this.database.spriteNodes.put(validated);
@@ -284,13 +303,64 @@ export class NibgridRepository {
   async deleteSpriteNode(nodeId: string): Promise<void> {
     await this.database.transaction(
       'rw',
-      this.database.spriteNodes,
-      this.database.projects,
-      this.database.blobs,
+      [
+        this.database.spriteNodes,
+        this.database.projects,
+        this.database.audioAssets,
+        this.database.blobs,
+      ],
       async () => {
         const node = await this.database.spriteNodes.get(nodeId);
         if (!node) return;
         await this.database.spriteNodes.delete(nodeId);
+        await this.cleanupOrphanedBlobsInTx();
+      },
+    );
+  }
+
+  async listAudioAssets(projectId: string): Promise<AudioAsset[]> {
+    const rows = await this.database.audioAssets.where('projectId').equals(projectId).toArray();
+    return rows
+      .map((row) => AudioAssetSchema.parse(row))
+      .sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+  }
+
+  async saveAudioAsset(asset: AudioAsset): Promise<AudioAsset> {
+    const validated = AudioAssetSchema.parse(asset);
+    await this.database.transaction(
+      'rw',
+      [
+        this.database.audioAssets,
+        this.database.spriteNodes,
+        this.database.projects,
+        this.database.blobs,
+      ],
+      async () => {
+        const existing = await this.database.audioAssets.get(validated.id);
+        await this.database.audioAssets.put(validated);
+        await this.database.projects
+          .where('id')
+          .equals(validated.projectId)
+          .modify({ updatedAt: nowIso() });
+        if (existing) {
+          await this.cleanupOrphanedBlobsInTx();
+        }
+      },
+    );
+    return validated;
+  }
+
+  async deleteAudioAsset(assetId: string): Promise<void> {
+    await this.database.transaction(
+      'rw',
+      this.database.audioAssets,
+      this.database.projects,
+      this.database.spriteNodes,
+      this.database.blobs,
+      async () => {
+        const found = await this.database.audioAssets.get(assetId);
+        if (!found) return;
+        await this.database.audioAssets.delete(assetId);
         await this.cleanupOrphanedBlobsInTx();
       },
     );
@@ -301,9 +371,11 @@ export class NibgridRepository {
       'rw',
       this.database.projects,
       this.database.spriteNodes,
+      this.database.audioAssets,
       this.database.blobs,
       async () => {
         await this.database.spriteNodes.where('projectId').equals(projectId).delete();
+        await this.database.audioAssets.where('projectId').equals(projectId).delete();
         await this.database.projects.delete(projectId);
         await this.cleanupOrphanedBlobsInTx();
       },
@@ -315,6 +387,7 @@ export class NibgridRepository {
       'rw',
       this.database.projects,
       this.database.spriteNodes,
+      this.database.audioAssets,
       this.database.blobs,
       async () => this.cleanupOrphanedBlobsInTx(),
     );
@@ -330,7 +403,7 @@ export class NibgridRepository {
 }
 
 /**
- * Pure integrity check scanning all projects and sprite nodes to identify
+ * Pure integrity check scanning all projects, sprite nodes, and audio assets to identify
  * unreferenced binary blobs in the `blobs` table.
  */
 export async function findOrphanBlobIds(database: NibgridDatabase = db): Promise<string[]> {
@@ -350,6 +423,14 @@ export async function findOrphanBlobIds(database: NibgridDatabase = db): Promise
     }
     if (node.processedBlobId) {
       referencedBlobIds.add(node.processedBlobId);
+    }
+  }
+
+  const allAudio = await database.audioAssets.toArray();
+  for (const asset of allAudio) {
+    referencedBlobIds.add(asset.wavBlobId);
+    for (const varBlobId of asset.variationBlobIds) {
+      referencedBlobIds.add(varBlobId);
     }
   }
 

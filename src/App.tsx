@@ -5,11 +5,13 @@ import {
   Grid2X2,
   KeyRound,
   Layers,
+  Music,
   Paintbrush,
   ShieldCheck,
 } from 'lucide-react';
 import { parseHashRoute, useAppStore } from './store/useAppStore';
 import { AtlasWorkshop } from './ui/atlas/AtlasWorkshop';
+import { AudioFoundry } from './ui/audio/AudioFoundry';
 import { ArtBibleEditor } from './ui/bible/ArtBibleEditor';
 import { ProjectHub } from './ui/hub/ProjectHub';
 import { ProviderVaultModal } from './ui/hub/ProviderVaultModal';
@@ -118,6 +120,19 @@ export function App() {
                 <Grid2X2 className="h-3.5 w-3.5" />
                 Atlas Packer
               </button>
+              <button
+                type="button"
+                data-testid="nav-audio-foundry"
+                onClick={() => void navigate({ screen: 'audio', projectId: activeProject.id })}
+                className={`inline-flex items-center gap-2 rounded-md px-3 py-1.5 text-xs font-medium transition-colors ${
+                  route.screen === 'audio'
+                    ? 'bg-indigo-600 text-white'
+                    : 'text-slate-300 hover:bg-slate-800 hover:text-white'
+                }`}
+              >
+                <Music className="h-3.5 w-3.5" />
+                Audio Foundry
+              </button>
             </>
           )}
 
@@ -164,6 +179,8 @@ export function App() {
           <PostProcessInspector nodeId={route.nodeId} initialTab={route.initialTab} />
         ) : route.screen === 'atlas' ? (
           <AtlasWorkshop />
+        ) : route.screen === 'audio' ? (
+          <AudioFoundry />
         ) : (
           <SpriteStudio />
         )}

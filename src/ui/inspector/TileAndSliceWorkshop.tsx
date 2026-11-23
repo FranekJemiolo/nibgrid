@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
-import { Download, Frame, Grid3X3, Layers, Sparkles, Wand2 } from 'lucide-react';
+import { Download, Frame, Grid3X3, Layers, Sparkles, Volume2, Wand2 } from 'lucide-react';
+import { AudioPlaybackEngine } from '../../audio/playbackEngine';
 import { repository } from '../../db/database';
 import type {
   ArtMode,
@@ -108,7 +109,7 @@ export function TileAndSliceWorkshop({
   onSeamlessNodeCommitted,
   exportSlot,
 }: TileAndSliceWorkshopProps) {
-  const { providers, selectedProviderId } = useAppStore();
+  const { providers, selectedProviderId, audioAssets, patchProjectAudioBindings } = useAppStore();
 
   const [mode, setMode] = useState<TileSliceWorkshopMode>('tile');
   const [showGridlines, setShowGridlines] = useState(true);
@@ -117,6 +118,34 @@ export function TileAndSliceWorkshop({
   const [statusMessage, setStatusMessage] = useState<string | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [customBoxSize, setCustomBoxSize] = useState({ width: 160, height: 96 });
+  const [uiClickCount, setUiClickCount] = useState<number>(0);
+  const [lastClickedSfxId, setLastClickedSfxId] = useState<string>('');
+  const uiSfxPlayerRef = useRef<AudioPlaybackEngine | null>(null);
+
+  useEffect(() => {
+    const player = new AudioPlaybackEngine();
+    uiSfxPlayerRef.current = player;
+    return () => {
+      void player.dispose();
+      uiSfxPlayerRef.current = null;
+    };
+  }, []);
+
+  const triggerUiClickSfx = () => {
+    const sfxId = project.audioBindings?.uiClickSfxId;
+    if (!sfxId) return;
+    const asset = audioAssets.find((a) => a.id === sfxId);
+    if (!asset) return;
+    const pool = asset.variationBlobIds.length > 0 ? asset.variationBlobIds : [asset.wavBlobId];
+    const picked = pool[Math.floor(Math.random() * pool.length)] ?? asset.wavBlobId;
+    setUiClickCount((c) => c + 1);
+    setLastClickedSfxId(asset.id);
+    void repository.getBlob(picked).then((rec) => {
+      if (rec && uiSfxPlayerRef.current) {
+        void uiSfxPlayerRef.current.playWavBlob(rec.bytes, { loop: false });
+      }
+    });
+  };
 
   const singleCanvasRef = useRef<HTMLCanvasElement | null>(null);
   const tiledCanvasRef = useRef<HTMLCanvasElement | null>(null);
@@ -736,11 +765,24 @@ export function TileAndSliceWorkshop({
 
             {/* Bottom: Live Stress-Test Matrix */}
             <div className="rounded-lg border border-slate-800 bg-slate-950/75 p-4">
-              <div className="mb-3 text-[11px] font-semibold tracking-wider text-slate-400 uppercase">
-                Live Stress-Test Matrix (Corners Stay Locked)
+              <div className="mb-3 flex flex-wrap items-center justify-between gap-2 text-[11px] font-semibold tracking-wider text-slate-400 uppercase">
+                <span>Live Stress-Test Matrix (Click Previews to Test UI Click SFX)</span>
+                <span
+                  data-testid="nineslice-click-feedback"
+                  data-click-count={uiClickCount}
+                  data-last-clicked-sfx={lastClickedSfxId}
+                  className="font-mono text-[10px] text-indigo-300"
+                >
+                  UI Clicks: {uiClickCount}
+                </span>
               </div>
               <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
-                <div className="flex flex-col items-center gap-1.5 rounded border border-slate-800 bg-slate-900/50 p-3">
+                <button
+                  type="button"
+                  data-testid="nineslice-matrix-wide-btn"
+                  onClick={triggerUiClickSfx}
+                  className="flex cursor-pointer flex-col items-center gap-1.5 rounded border border-slate-800 bg-slate-900/50 p-3 transition-transform hover:border-indigo-500/50 active:translate-y-0.5 active:scale-[0.98]"
+                >
                   <span className="font-mono text-[10px] text-slate-400">Wide Button (240×48)</span>
                   <canvas
                     ref={widePreviewCanvasRef}
@@ -748,8 +790,13 @@ export function TileAndSliceWorkshop({
                     className="max-w-full border border-slate-700"
                     style={{ imageRendering: isPixelArt ? 'pixelated' : 'auto' }}
                   />
-                </div>
-                <div className="flex flex-col items-center gap-1.5 rounded border border-slate-800 bg-slate-900/50 p-3">
+                </button>
+                <button
+                  type="button"
+                  data-testid="nineslice-matrix-tall-btn"
+                  onClick={triggerUiClickSfx}
+                  className="flex cursor-pointer flex-col items-center gap-1.5 rounded border border-slate-800 bg-slate-900/50 p-3 transition-transform hover:border-indigo-500/50 active:translate-y-0.5 active:scale-[0.98]"
+                >
                   <span className="font-mono text-[10px] text-slate-400">
                     Tall Sidebar (72×220)
                   </span>
@@ -759,8 +806,13 @@ export function TileAndSliceWorkshop({
                     className="max-h-[220px] max-w-full border border-slate-700"
                     style={{ imageRendering: isPixelArt ? 'pixelated' : 'auto' }}
                   />
-                </div>
-                <div className="flex flex-col items-center gap-1.5 rounded border border-slate-800 bg-slate-900/50 p-3">
+                </button>
+                <button
+                  type="button"
+                  data-testid="nineslice-matrix-square-btn"
+                  onClick={triggerUiClickSfx}
+                  className="flex cursor-pointer flex-col items-center gap-1.5 rounded border border-slate-800 bg-slate-900/50 p-3 transition-transform hover:border-indigo-500/50 active:translate-y-0.5 active:scale-[0.98]"
+                >
                   <span className="font-mono text-[10px] text-slate-400">
                     Square Dialog (180×180)
                   </span>
@@ -770,7 +822,7 @@ export function TileAndSliceWorkshop({
                     className="max-h-[180px] max-w-full border border-slate-700"
                     style={{ imageRendering: isPixelArt ? 'pixelated' : 'auto' }}
                   />
-                </div>
+                </button>
                 <div className="flex flex-col items-center gap-1.5 rounded border border-slate-800 bg-slate-900/50 p-3">
                   <span className="font-mono text-[10px] text-slate-400">
                     Resizable ({customBoxSize.width}×{customBoxSize.height})
@@ -1131,6 +1183,28 @@ export function TileAndSliceWorkshop({
                 </select>
               </label>
             </div>
+
+            <label className="block space-y-1">
+              <span className="flex items-center gap-1.5 text-slate-400">
+                <Volume2 className="h-3 w-3 text-indigo-400" />
+                UI Click SFX (Matrix Test)
+              </span>
+              <select
+                data-testid="nineslice-click-sfx-select"
+                value={project.audioBindings?.uiClickSfxId ?? ''}
+                onChange={(e) =>
+                  void patchProjectAudioBindings({ uiClickSfxId: e.target.value || undefined })
+                }
+                className="w-full rounded border border-slate-700 bg-slate-900 px-2 py-1.5 text-slate-100"
+              >
+                <option value="">None</option>
+                {audioAssets.map((a) => (
+                  <option key={a.id} value={a.id}>
+                    {a.name}
+                  </option>
+                ))}
+              </select>
+            </label>
 
             <button
               type="button"
