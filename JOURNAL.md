@@ -284,3 +284,20 @@
 - **Interactive Pitch Ribbon & Mic SketchPad UI (`src/ui/audio/PitchRibbonCanvas.tsx`, `src/ui/audio/MicSketchPanel.tsx`, `src/ui/audio/AudioFoundry.tsx`):** Integrated Screen 6 `Mic Sketch` tab featuring cyan `65–1100 Hz` logarithmic pitch ribbons, amber unvoiced foley markers, hold-to-record `R` shortcut (isolated from focused text fields), `.wav` sketch upload, 6 quick intent chips, live `$0.00` contour sliders, A/B `My Hum` vs. `Transformed Sound` auditioning, IndexedDB `audioSketch` persistence, `.zip` provenance export (`sketchSha256`), and Sandbox `H` hit-flash SFX binding.
 - **Verification:** Verified via `tests/e2e/m15c-hum-to-sound.spec.ts` alongside TypeScript, ESLint, Prettier, unit tests, Python loopback bridge unit tests, full Playwright E2E suite, and GitHub Pages production build.
 
+## Milestone 16A: Pure-TS Marching Squares, Closed-Loop RDP & Convex Hull Schemas
+
+- **Collision Geometry Extractor (`src/processing/collisionHull.ts`):** Implemented `(W+2)×(H+2)` zero-padded integer half-pixel Marching Squares (`traceMarchingSquaresContours`), antipodal-split closed RDP (`simplifyClosedPolygonRdp`), Andrew's Monotone Chain convex hull (`computeConvexHull`), shoelace area/convexity predicates (`polygonArea`, `isPolygonConvex`), capsule/AABB fitting, `maxVertices` budget relaxation, and `pivotPx` recentering (`extractCollisionHull`).
+- **Schema & Recipe Integration (`src/domain/schemas.ts`, `src/export/recipeBuilder.ts`):** Added `CollisionLayerShapeSchema` with `collider`/`hurtbox`/`hitbox` layer roles, sensor flags, capsule dimensions, and M9 `activeFrames` onto `SpriteNodeSchema` and `AssetRecipeSchema`.
+- **Verification:** Verified via `tests/unit/m16a-collision-hull.test.ts` (square/pivot centering, concave L-shape vs convex hull, 8-vertex budget cap, edge-touching/empty guards, vertical capsule fitting) alongside the full TypeScript, ESLint, Prettier, unit, E2E, and GitHub Pages production build gate.
+
+## Milestone 16B: Godot 4 & Matter.js / Phaser 3 Physics Exporters
+
+- **Pure-TS Physics Exporters (`src/export/colliderExporters.ts`):** Implemented Godot 4 `ConvexPolygonShape2D` / `CapsuleShape2D` `.tres` formatting (`exportGodotColliderTres`), PhysicsEditor-compatible Phaser 3 / Matter.js fixture export (`exportMatterPhysicsJson`), individual sprite extra files (`buildColliderExportFiles`), and multi-sprite atlas export (`exportCombinedAtlasPhysicsJson`).
+- **Screen 4 & Screen 5 Packaging (`src/ui/inspector/PostProcessInspector.tsx`, `src/ui/atlas/AtlasWorkshop.tsx`):** Wired `collisionShapes` persistence on `SpriteNode` and automatic bundling of `<slug>_collider.tres`, `<slug>_matter.json`, `collisionShapes` in `.recipe.json`, and `atlas_physics.json` in Screen 5 ZIP bundles.
+- **Verification:** Verified via `tests/unit/m16b-collider-exporters.test.ts` alongside the full TypeScript, ESLint, Prettier, unit, E2E, and GitHub Pages production build gate.
+
+## Milestone 16C: Screen 4G Interactive Collider, Hitbox & Hurtbox Editor
+
+- **Interactive Vector Overlay & Frame Sync UI (`src/ui/inspector/ColliderEditor.tsx`, `src/ui/inspector/PostProcessInspector.tsx`, `src/store/useAppStore.ts`):** Built Screen 4G (`Collider & Hitbox`) featuring semantic Collider/Hurtbox/Hitbox layers, Auto-Trace Silhouette & `8-Vertex Box2D Safe` preset, convexity guard badge, HiDPI-safe vertex drag/midpoint-insert/right-click-delete tools, M9 Puppet-Warp frame timeline scrubber with onion-skinning & per-frame active toggles, live Godot 4 `.tres` / Matter.js code previews, and IndexedDB persistence.
+- **Verification:** Verified via `tests/e2e/m16c-collider-editor.spec.ts` (including `deviceScaleFactor: 2` HiDPI drag accuracy, ZIP bundle unpacking, and reload persistence) alongside the full TypeScript, ESLint, Prettier, unit, Python bridge, Playwright E2E, and GitHub Pages production build gate.
+

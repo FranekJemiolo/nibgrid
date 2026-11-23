@@ -375,6 +375,44 @@ export function createDefaultPostProcessConfig(
   });
 }
 
+export const ColliderLayerSchema = z.enum(['collider', 'hurtbox', 'hitbox']);
+export type ColliderLayer = z.infer<typeof ColliderLayerSchema>;
+
+export const ColliderKindSchema = z.enum(['polygon', 'convex-hull', 'aabb', 'capsule']);
+export type ColliderKind = z.infer<typeof ColliderKindSchema>;
+
+export const ColliderVec2Schema = z.object({
+  x: z.number(),
+  y: z.number(),
+});
+
+export const CapsuleShapeSchema = z.object({
+  cx: z.number(),
+  cy: z.number(),
+  radius: z.number().min(0),
+  height: z.number().min(0),
+  orientation: z.enum(['vertical', 'horizontal']),
+});
+
+export const CollisionLayerShapeSchema = z.object({
+  id: z.string().min(1),
+  name: z.string().trim().min(1).max(80),
+  layer: ColliderLayerSchema,
+  kind: ColliderKindSchema,
+  isSensor: z.boolean(),
+  visible: z.boolean().default(true),
+  vertices: z.array(ColliderVec2Schema),
+  capsule: CapsuleShapeSchema.optional(),
+  activeFrames: z.array(z.number().int().min(0)).optional(),
+  autoTraceMeta: z
+    .object({
+      epsilonPx: z.number().min(0.1).max(32),
+      maxVertices: z.number().int().min(3).max(128).optional(),
+    })
+    .optional(),
+});
+export type CollisionLayerShape = z.infer<typeof CollisionLayerShapeSchema>;
+
 export const SpriteNodeSchema = z.object({
   id: z.string().min(1),
   projectId: z.string().min(1),
@@ -389,6 +427,7 @@ export const SpriteNodeSchema = z.object({
   nineSlice: NineSliceConfigSchema.optional(),
   paletteLut: PaletteLutConfigSchema.optional(),
   audioBindings: AudioBindingsSchema.optional(),
+  collisionShapes: z.array(CollisionLayerShapeSchema).optional(),
   sketchSha256: z.string().regex(/^[0-9a-f]{64}$/, 'sketchSha256 must be a 64-char hex SHA-256'),
   generationMeta: GenerationMetaSchema,
 });

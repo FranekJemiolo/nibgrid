@@ -1,9 +1,11 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Download, Eye, Film, Grid2X2, Layers, Sparkles } from 'lucide-react';
+import { strToU8 } from 'fflate';
 import { repository } from '../../db/database';
 import { createDefaultPuppetAnimConfig, type SpriteNode } from '../../domain/schemas';
 import { decodeBlobToNativeRgba } from '../../export/animationExporter';
 import { packageAtlasZip, type AtlasEngineTarget } from '../../export/atlasExporters';
+import { exportCombinedAtlasPhysicsJson } from '../../export/colliderExporters';
 import { buildNineSliceExportFiles } from '../../export/nineSliceExporters';
 import { toAssetSlug, triggerBlobDownload } from '../../export/zipPackager';
 import { ANIM_PRESETS } from '../../processing/animPresets';
@@ -343,12 +345,28 @@ export function AtlasWorkshop() {
   const handleDownloadAtlasZip = () => {
     if (!activeProject || !atlasResult) return;
     const extraFiles: Record<string, Uint8Array> = {};
+    const physicsEntries: Array<{
+      slug: string;
+      shapes: NonNullable<SpriteNode['collisionShapes']>;
+    }> = [];
     for (let idx = 0; idx < decodedAssets.length; idx++) {
       const asset = decodedAssets[idx]!;
+      const nodeSlug = `sprite_${idx}_${asset.node.generationMeta.seed}`;
       if (selectedStaticIds[asset.node.id] && asset.node.nineSlice?.enabled) {
-        const nodeSlug = `sprite_${idx}_${asset.node.generationMeta.seed}`;
         Object.assign(extraFiles, buildNineSliceExportFiles(nodeSlug, asset.node.nineSlice));
       }
+      if (
+        (selectedStaticIds[asset.node.id] || selectedLoopIds[asset.node.id]) &&
+        asset.node.collisionShapes &&
+        asset.node.collisionShapes.length > 0
+      ) {
+        physicsEntries.push({ slug: nodeSlug, shapes: asset.node.collisionShapes });
+      }
+    }
+    if (physicsEntries.length > 0) {
+      extraFiles['atlas_physics.json'] = strToU8(
+        `${JSON.stringify(exportCombinedAtlasPhysicsJson(physicsEntries), null, 2)}\n`,
+      );
     }
     const zipBytes = packageAtlasZip({
       atlas: atlasResult,

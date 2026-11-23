@@ -11,7 +11,7 @@ import type {
 } from '../domain/schemas';
 
 export type InspectorTab =
-  'postprocess' | 'normal' | 'puppet' | 'tile-slice' | 'palette-lut' | 'sandbox';
+  'postprocess' | 'normal' | 'puppet' | 'tile-slice' | 'palette-lut' | 'collider' | 'sandbox';
 
 export type ScreenRoute =
   | { screen: 'hub' }
@@ -27,6 +27,7 @@ const VALID_INSPECTOR_TABS = new Set<InspectorTab>([
   'puppet',
   'tile-slice',
   'palette-lut',
+  'collider',
   'sandbox',
 ]);
 

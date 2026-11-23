@@ -31,6 +31,7 @@ import {
   createDefaultPuppetAnimConfig,
   createDefaultSeamlessTileConfig,
   type BackgroundRemovalMode,
+  type CollisionLayerShape,
   type DemixelMode,
   type ErosionConnectivity,
   type Lighting,
@@ -44,6 +45,7 @@ import {
   type SelOutMode,
   type SpriteNode,
 } from '../../domain/schemas';
+import { buildColliderExportFiles } from '../../export/colliderExporters';
 import { exportBundleToDirectory, supportsFileSystemAccess } from '../../export/fsAccess';
 import { buildNineSliceExportFiles } from '../../export/nineSliceExporters';
 import { buildAssetRecipe, computePivotPx } from '../../export/recipeBuilder';
@@ -62,6 +64,7 @@ import {
   createMonotonicRequestGuard,
   runPostProcessInWorker,
 } from '../../workers/postprocessClient';
+import { ColliderEditor } from './ColliderEditor';
 import { GameSandbox } from './GameSandbox';
 import { NormalMapPreview } from './NormalMapPreview';
 import { PaletteLutWorkshop } from './PaletteLutWorkshop';
@@ -191,6 +194,9 @@ export function PostProcessInspector({
   const [lutVariants, setLutVariants] = useState<PaletteVariant[]>(() =>
     paletteVariantsFromNode(targetNode),
   );
+  const [collisionShapes, setCollisionShapes] = useState<CollisionLayerShape[]>(
+    () => targetNode?.collisionShapes ?? [],
+  );
   const [activeSpriteBuffer, setActiveSpriteBuffer] = useState<RgbaBuffer | null>(null);
   const bakedNormalRef = useRef<{ buffer: RgbaBuffer; key: string } | null>(null);
   const [foundryStats, setFoundryStats] = useState<{
@@ -242,6 +248,8 @@ export function PostProcessInspector({
   latestNineSliceRef.current = nineSliceConfig;
   const latestLutVariantsRef = useRef(lutVariants);
   latestLutVariantsRef.current = lutVariants;
+  const latestCollisionShapesRef = useRef(collisionShapes);
+  latestCollisionShapesRef.current = collisionShapes;
 
   useEffect(() => {
     if (initialTab) {
@@ -264,9 +272,10 @@ export function PostProcessInspector({
     setSeamlessConfig(node.seamlessTile ?? createDefaultSeamlessTileConfig());
     setNineSliceConfig(node.nineSlice ?? createDefaultNineSliceConfig());
     setLutVariants(paletteVariantsFromNode(node));
+    setCollisionShapes(node.collisionShapes ?? []);
   }, [targetNodeId, activeProject]);
 
-  // Persist puppet animation / 9-slice panel / LUT variant metadata onto SpriteNode in Dexie for reloads & Screen 4F
+  // Persist puppet animation / 9-slice panel / LUT / collision metadata onto SpriteNode in Dexie for reloads & Screen 4F
   useEffect(() => {
     const nodeSnapshot = latestNodeRef.current;
     if (!activeProject || !targetNodeId || !nodeSnapshot) return;
@@ -284,7 +293,9 @@ export function PostProcessInspector({
     const lutChanged =
       lutVariants.length > 0 &&
       JSON.stringify(nodeSnapshot.paletteLut ?? null) !== JSON.stringify(nextLutConfig);
-    if (!puppetChanged && !sliceChanged && !lutChanged) {
+    const collisionChanged =
+      JSON.stringify(nodeSnapshot.collisionShapes ?? []) !== JSON.stringify(collisionShapes);
+    if (!puppetChanged && !sliceChanged && !lutChanged && !collisionChanged) {
       return;
     }
     const timer = window.setTimeout(() => {
@@ -300,11 +311,22 @@ export function PostProcessInspector({
           puppetAnim: latestPuppetRef.current,
           ...(latestNineSliceRef.current.enabled ? { nineSlice: latestNineSliceRef.current } : {}),
           ...(persistedLut ? { paletteLut: persistedLut } : {}),
+          ...(latestCollisionShapesRef.current.length > 0
+            ? { collisionShapes: latestCollisionShapesRef.current }
+            : { collisionShapes: [] }),
         })
         .then(() => refreshSpriteNodes(activeProject.id));
     }, 120);
     return () => window.clearTimeout(timer);
-  }, [puppetConfig, nineSliceConfig, lutVariants, activeProject, targetNodeId, refreshSpriteNodes]);
+  }, [
+    puppetConfig,
+    nineSliceConfig,
+    lutVariants,
+    collisionShapes,
+    activeProject,
+    targetNodeId,
+    refreshSpriteNodes,
+  ]);
 
   const drawCanvasBuffer = useCallback(
     (canvas: HTMLCanvasElement | null, rgba: Uint8ClampedArray, width: number, height: number) => {
@@ -419,6 +441,9 @@ export function PostProcessInspector({
                     nodeSnapshot.paletteLut,
                   ),
                 }
+              : {}),
+            ...(latestCollisionShapesRef.current.length > 0
+              ? { collisionShapes: latestCollisionShapesRef.current }
               : {}),
           });
           await repository.cleanupOrphanedBlobs();
@@ -666,6 +691,10 @@ export function PostProcessInspector({
       Object.assign(extraFiles, buildNineSliceExportFiles(slug, nineSliceConfig));
     }
 
+    if (collisionShapes.length > 0) {
+      Object.assign(extraFiles, buildColliderExportFiles(slug, collisionShapes));
+    }
+
     const recipe = buildAssetRecipe({
       project: activeProject,
       node: targetNode,
@@ -685,6 +714,7 @@ export function PostProcessInspector({
       ...(nineSliceConfig.enabled || targetNode.nineSlice?.enabled
         ? { nineSlice: nineSliceConfig.enabled ? nineSliceConfig : targetNode.nineSlice }
         : {}),
+      ...(collisionShapes.length > 0 ? { collisionShapes } : {}),
     });
     return { artifact, slug, recipe, normalPngBytes, extraFiles };
   };
@@ -969,6 +999,18 @@ export function PostProcessInspector({
             </button>
             <button
               type="button"
+              data-testid="inspector-tab-collider"
+              onClick={() => setInspectorTab('collider')}
+              className={`rounded px-2.5 py-1 font-medium transition-colors ${
+                inspectorTab === 'collider'
+                  ? 'bg-emerald-600 text-white'
+                  : 'text-slate-300 hover:text-white'
+              }`}
+            >
+              Collider &amp; Hitbox
+            </button>
+            <button
+              type="button"
               data-testid="inspector-tab-sandbox"
               onClick={() => setInspectorTab('sandbox')}
               className={`inline-flex items-center gap-1 rounded px-2.5 py-1 font-medium transition-colors ${
@@ -1042,6 +1084,20 @@ export function PostProcessInspector({
           rawHeight={rawSize.height}
           variants={lutVariants}
           onChangeVariants={setLutVariants}
+          exportSlot={exportBarNode}
+        />
+      ) : inspectorTab === 'collider' && activeSpriteBuffer ? (
+        <ColliderEditor
+          sprite={activeSpriteBuffer}
+          spriteSlug={toAssetSlug(
+            `${activeProject.name}-${targetNode.kind}-${targetNode.generationMeta.seed}`,
+          )}
+          artMode={activeProject.artBible.artMode}
+          pivotNorm={config.pivotNorm}
+          paletteHex={activeProject.artBible.palette}
+          puppetConfig={puppetConfig}
+          shapes={collisionShapes}
+          onChangeShapes={setCollisionShapes}
           exportSlot={exportBarNode}
         />
       ) : inspectorTab === 'sandbox' && activeSpriteBuffer ? (

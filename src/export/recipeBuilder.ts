@@ -4,6 +4,7 @@ import {
   AnimPresetSchema,
   ArtModeSchema,
   BevelProfileSchema,
+  CollisionLayerShapeSchema,
   DimensionSchema,
   HexColorSchema,
   LightingSchema,
@@ -16,6 +17,7 @@ import {
   ProjectionSchema,
   PuppetPinSchema,
   SeamlessTileConfigSchema,
+  type CollisionLayerShape,
   type NineSliceConfig,
   type NormalMapConfig,
   type PaletteLutConfig,
@@ -104,6 +106,7 @@ export const AssetRecipeSchema = z.object({
   seamlessTile: SeamlessTileConfigSchema.optional(),
   nineSlice: NineSliceConfigSchema.optional(),
   paletteLut: PaletteLutConfigSchema.optional(),
+  collisionShapes: z.array(CollisionLayerShapeSchema).optional(),
 });
 
 export type AssetRecipe = z.infer<typeof AssetRecipeSchema>;
@@ -134,6 +137,7 @@ export interface BuildAssetRecipeInput {
   seamlessTile?: SeamlessTileConfig;
   nineSlice?: NineSliceConfig;
   paletteLut?: PaletteLutConfig;
+  collisionShapes?: readonly CollisionLayerShape[];
 }
 
 const SENSITIVE_KEY_PATTERNS: readonly RegExp[] = [
@@ -207,6 +211,10 @@ export function buildAssetRecipe(input: BuildAssetRecipeInput): AssetRecipe {
     ...(input.paletteLut || node.paletteLut
       ? { paletteLut: input.paletteLut ?? node.paletteLut }
       : {}),
+    ...(() => {
+      const shapes = input.collisionShapes ?? node.collisionShapes;
+      return shapes && shapes.length > 0 ? { collisionShapes: shapes } : {};
+    })(),
   });
 
   const serialized = JSON.stringify(recipe);
