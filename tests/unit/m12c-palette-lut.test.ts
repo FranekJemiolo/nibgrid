@@ -227,4 +227,3 @@ describe('M12C Indexed Palette-Swap & 1D/Stacked LUT Exporter', () => {
     expect(pixi).toContain('(paletteIdx + 0.5)');
   });
 });
-
