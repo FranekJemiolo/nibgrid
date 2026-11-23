@@ -20,10 +20,15 @@ test.describe('M0 Boot Smoke Test', () => {
     await expect(page.getByRole('heading', { name: 'Nibgrid' })).toBeVisible();
     await expect(page.getByTestId('nav-projects')).toBeVisible();
     await expect(page.getByTestId('nav-provider-vault')).toBeVisible();
-    await expect(page.getByTestId('projects-shell')).toBeVisible();
+    await expect(page.getByTestId('project-hub')).toBeVisible();
 
     await page.getByTestId('nav-provider-vault').click();
-    await expect(page.getByTestId('vault-shell')).toBeVisible();
+    await expect(page.getByTestId('provider-vault-modal')).toBeVisible();
+    await expect(page.getByTestId('vault-privacy-badge')).toBeVisible();
+    await expect(page.getByTestId('provider-card-offline-mock')).toBeVisible();
+
+    await page.getByTestId('close-vault-btn').click();
+    await expect(page.getByTestId('provider-vault-modal')).toBeHidden();
 
     expect(consoleErrors).toEqual([]);
     expect(pageErrors).toEqual([]);

@@ -1,10 +1,31 @@
-import { useState } from 'react';
-import { FolderKanban, KeyRound, Layers, ShieldCheck } from 'lucide-react';
-
-type ActiveSection = 'projects' | 'vault';
+import { useEffect } from 'react';
+import { BookOpen, FolderKanban, KeyRound, Layers, Paintbrush, ShieldCheck } from 'lucide-react';
+import { parseHashRoute, useAppStore } from './store/useAppStore';
+import { ArtBibleEditor } from './ui/bible/ArtBibleEditor';
+import { ProjectHub } from './ui/hub/ProjectHub';
+import { ProviderVaultModal } from './ui/hub/ProviderVaultModal';
 
 export function App() {
-  const [activeSection, setActiveSection] = useState<ActiveSection>('projects');
+  const {
+    route,
+    activeProject,
+    vaultOpen,
+    isLoading,
+    errorMessage,
+    initialize,
+    navigate,
+    setVaultOpen,
+    clearError,
+  } = useAppStore();
+
+  useEffect(() => {
+    void initialize();
+    const handleHashChange = () => {
+      void navigate(parseHashRoute(window.location.hash));
+    };
+    window.addEventListener('hashchange', handleHashChange);
+    return () => window.removeEventListener('hashchange', handleHashChange);
+  }, [initialize, navigate]);
 
   return (
     <div className="flex min-h-screen flex-col bg-slate-950 text-slate-100">
@@ -13,22 +34,30 @@ export function App() {
         className="flex h-14 items-center justify-between border-b border-slate-800 bg-slate-900/90 px-4 backdrop-blur"
       >
         <div className="flex items-center gap-3">
-          <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-indigo-500/20 text-indigo-400 ring-1 ring-indigo-500/40">
-            <Layers className="h-4 w-4" />
-          </div>
-          <div>
-            <h1 className="text-sm font-semibold tracking-wide text-slate-100">Nibgrid</h1>
-            <p className="text-[11px] text-slate-400">Local-First Style-Locked 2D Sprite Studio</p>
-          </div>
+          <button
+            type="button"
+            onClick={() => void navigate({ screen: 'hub' })}
+            className="flex items-center gap-3 text-left"
+          >
+            <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-indigo-500/20 text-indigo-400 ring-1 ring-indigo-500/40">
+              <Layers className="h-4 w-4" />
+            </div>
+            <div>
+              <h1 className="text-sm font-semibold tracking-wide text-slate-100">Nibgrid</h1>
+              <p className="text-[11px] text-slate-400">
+                Local-First Style-Locked 2D Sprite Studio
+              </p>
+            </div>
+          </button>
         </div>
 
         <nav className="flex items-center gap-2" aria-label="Primary navigation">
           <button
             type="button"
             data-testid="nav-projects"
-            onClick={() => setActiveSection('projects')}
+            onClick={() => void navigate({ screen: 'hub' })}
             className={`inline-flex items-center gap-2 rounded-md px-3 py-1.5 text-xs font-medium transition-colors ${
-              activeSection === 'projects'
+              route.screen === 'hub'
                 ? 'bg-indigo-600 text-white'
                 : 'text-slate-300 hover:bg-slate-800 hover:text-white'
             }`}
@@ -36,12 +65,44 @@ export function App() {
             <FolderKanban className="h-3.5 w-3.5" />
             Projects
           </button>
+
+          {activeProject && (
+            <>
+              <button
+                type="button"
+                data-testid="nav-art-bible"
+                onClick={() => void navigate({ screen: 'bible', projectId: activeProject.id })}
+                className={`inline-flex items-center gap-2 rounded-md px-3 py-1.5 text-xs font-medium transition-colors ${
+                  route.screen === 'bible'
+                    ? 'bg-indigo-600 text-white'
+                    : 'text-slate-300 hover:bg-slate-800 hover:text-white'
+                }`}
+              >
+                <BookOpen className="h-3.5 w-3.5" />
+                Art Bible
+              </button>
+              <button
+                type="button"
+                data-testid="nav-sprite-studio"
+                onClick={() => void navigate({ screen: 'studio', projectId: activeProject.id })}
+                className={`inline-flex items-center gap-2 rounded-md px-3 py-1.5 text-xs font-medium transition-colors ${
+                  route.screen === 'studio'
+                    ? 'bg-indigo-600 text-white'
+                    : 'text-slate-300 hover:bg-slate-800 hover:text-white'
+                }`}
+              >
+                <Paintbrush className="h-3.5 w-3.5" />
+                Sprite Studio
+              </button>
+            </>
+          )}
+
           <button
             type="button"
             data-testid="nav-provider-vault"
-            onClick={() => setActiveSection('vault')}
+            onClick={() => setVaultOpen(!vaultOpen)}
             className={`inline-flex items-center gap-2 rounded-md px-3 py-1.5 text-xs font-medium transition-colors ${
-              activeSection === 'vault'
+              vaultOpen
                 ? 'bg-indigo-600 text-white'
                 : 'text-slate-300 hover:bg-slate-800 hover:text-white'
             }`}
@@ -57,31 +118,40 @@ export function App() {
         </div>
       </header>
 
-      <main className="mx-auto flex w-full max-w-6xl flex-1 flex-col gap-6 p-6">
-        {activeSection === 'projects' ? (
-          <section
-            data-testid="projects-shell"
-            className="rounded-xl border border-slate-800 bg-slate-900/60 p-6"
-          >
-            <h2 className="text-base font-semibold text-slate-100">Project Hub</h2>
-            <p className="mt-1 text-sm text-slate-400">
-              Studio shell initialized. IndexedDB project persistence and Art Bible editor unlock in
-              Milestone 1.
-            </p>
-          </section>
+      {errorMessage && (
+        <div className="mx-auto mt-4 flex w-full max-w-6xl items-center justify-between rounded-lg border border-rose-500/30 bg-rose-500/10 px-4 py-2 text-xs text-rose-200">
+          <span>{errorMessage}</span>
+          <button type="button" onClick={clearError} className="underline hover:text-white">
+            Dismiss
+          </button>
+        </div>
+      )}
+
+      <main className="flex flex-1 flex-col">
+        {isLoading ? (
+          <div className="flex flex-1 items-center justify-center text-sm text-slate-400">
+            Loading local IndexedDB workspace...
+          </div>
+        ) : route.screen === 'hub' ? (
+          <ProjectHub />
+        ) : route.screen === 'bible' ? (
+          <ArtBibleEditor />
         ) : (
           <section
-            data-testid="vault-shell"
-            className="rounded-xl border border-slate-800 bg-slate-900/60 p-6"
+            data-testid="studio-placeholder"
+            className="mx-auto mt-6 w-full max-w-6xl rounded-xl border border-slate-800 bg-slate-900/60 p-6"
           >
-            <h2 className="text-base font-semibold text-slate-100">Provider Vault</h2>
+            <h2 className="text-base font-semibold text-slate-100">
+              Sprite Studio — {activeProject?.name}
+            </h2>
             <p className="mt-1 text-sm text-slate-400">
-              Local-only BYOK/BYOM configuration vault. IndexedDB storage and Offline Mock Provider
-              registration unlock in Milestone 1.
+              Sketch canvas, Web Worker normalization, and mask layers arrive in Milestone 2.
             </p>
           </section>
         )}
       </main>
+
+      <ProviderVaultModal />
     </div>
   );
 }

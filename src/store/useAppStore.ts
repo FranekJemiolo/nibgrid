@@ -1,0 +1,294 @@
+import { create } from 'zustand';
+import { OFFLINE_MOCK_PROVIDER_ID, repository, type ProjectSummary } from '../db/database';
+import type { ArtBible, Project, ProviderConfig, SpriteNode } from '../domain/schemas';
+
+export type ScreenRoute =
+  | { screen: 'hub' }
+  | { screen: 'bible'; projectId: string }
+  | { screen: 'studio'; projectId: string };
+
+export function parseHashRoute(hash: string): ScreenRoute {
+  const cleaned = hash.replace(/^#/, '');
+  const bibleMatch = /^\/project\/([^/]+)\/bible$/.exec(cleaned);
+  if (bibleMatch?.[1]) {
+    return { screen: 'bible', projectId: bibleMatch[1] };
+  }
+  const studioMatch = /^\/project\/([^/]+)\/studio$/.exec(cleaned);
+  if (studioMatch?.[1]) {
+    return { screen: 'studio', projectId: studioMatch[1] };
+  }
+  return { screen: 'hub' };
+}
+
+export function formatHashRoute(route: ScreenRoute): string {
+  if (route.screen === 'bible') {
+    return `#/project/${route.projectId}/bible`;
+  }
+  if (route.screen === 'studio') {
+    return `#/project/${route.projectId}/studio`;
+  }
+  return '#/';
+}
+
+interface AppState {
+  route: ScreenRoute;
+  projects: ProjectSummary[];
+  activeProject: Project | null;
+  spriteNodes: SpriteNode[];
+  providers: ProviderConfig[];
+  selectedProviderId: string;
+  vaultOpen: boolean;
+  isLoading: boolean;
+  errorMessage: string | null;
+
+  initialize: () => Promise<void>;
+  navigate: (route: ScreenRoute) => Promise<void>;
+  setVaultOpen: (open: boolean) => void;
+  clearError: () => void;
+
+  refreshProjects: () => Promise<void>;
+  createProject: (name: string) => Promise<Project>;
+  deleteProject: (projectId: string) => Promise<void>;
+  patchActiveArtBible: (patch: Partial<ArtBible>) => Promise<void>;
+  updateActiveArtBible: (artBible: ArtBible) => Promise<void>;
+  updateActiveProjectName: (name: string) => Promise<void>;
+  addGoldenReference: (file: File) => Promise<void>;
+  removeGoldenReference: (blobId: string) => Promise<void>;
+
+  refreshProviders: () => Promise<void>;
+  saveProvider: (config: ProviderConfig) => Promise<void>;
+  deleteProvider: (id: string) => Promise<void>;
+  setSelectedProviderId: (id: string) => void;
+
+  refreshSpriteNodes: (projectId: string) => Promise<void>;
+}
+
+let projectWriteQueue: Promise<void> = Promise.resolve();
+
+function enqueueProjectWrite<T>(fn: () => Promise<T>): Promise<T> {
+  const next = projectWriteQueue.then(fn, fn);
+  projectWriteQueue = next.then(
+    () => undefined,
+    () => undefined,
+  );
+  return next;
+}
+
+export const useAppStore = create<AppState>((set, get) => ({
+  route: typeof window !== 'undefined' ? parseHashRoute(window.location.hash) : { screen: 'hub' },
+  projects: [],
+  activeProject: null,
+  spriteNodes: [],
+  providers: [],
+  selectedProviderId: OFFLINE_MOCK_PROVIDER_ID,
+  vaultOpen: false,
+  isLoading: true,
+  errorMessage: null,
+
+  initialize: async () => {
+    set({ isLoading: true, errorMessage: null });
+    try {
+      const [projects, providers] = await Promise.all([
+        repository.listProjectsWithCounts(),
+        repository.listProviderConfigs(),
+      ]);
+
+      const initialRoute: ScreenRoute =
+        typeof window !== 'undefined' ? parseHashRoute(window.location.hash) : { screen: 'hub' };
+
+      if (initialRoute.screen !== 'hub') {
+        const project = await repository.getProject(initialRoute.projectId);
+        if (project) {
+          const spriteNodes = await repository.listSpriteNodes(project.id);
+          set({
+            route: initialRoute,
+            projects,
+            providers,
+            activeProject: project,
+            spriteNodes,
+            isLoading: false,
+          });
+          return;
+        }
+        if (typeof window !== 'undefined') {
+          window.location.hash = '#/';
+        }
+      }
+
+      set({
+        route: { screen: 'hub' },
+        projects,
+        providers,
+        activeProject: null,
+        spriteNodes: [],
+        isLoading: false,
+      });
+    } catch (error) {
+      set({
+        isLoading: false,
+        errorMessage: error instanceof Error ? error.message : 'Failed to initialize store',
+      });
+    }
+  },
+
+  navigate: async (route) => {
+    if (typeof window !== 'undefined') {
+      const targetHash = formatHashRoute(route);
+      if (window.location.hash !== targetHash) {
+        window.location.hash = targetHash;
+      }
+    }
+
+    if (route.screen === 'hub') {
+      const projects = await repository.listProjectsWithCounts();
+      set({ route, projects, activeProject: null, spriteNodes: [], errorMessage: null });
+      return;
+    }
+
+    const project = await repository.getProject(route.projectId);
+    if (!project) {
+      if (typeof window !== 'undefined') {
+        window.location.hash = '#/';
+      }
+      const projects = await repository.listProjectsWithCounts();
+      set({
+        route: { screen: 'hub' },
+        projects,
+        activeProject: null,
+        spriteNodes: [],
+        errorMessage: `Project "${route.projectId}" was not found.`,
+      });
+      return;
+    }
+
+    const spriteNodes = await repository.listSpriteNodes(project.id);
+    set({ route, activeProject: project, spriteNodes, errorMessage: null });
+  },
+
+  setVaultOpen: (open) => set({ vaultOpen: open }),
+  clearError: () => set({ errorMessage: null }),
+
+  refreshProjects: async () => {
+    const projects = await repository.listProjectsWithCounts();
+    set({ projects });
+  },
+
+  createProject: async (name) => {
+    const trimmed = name.trim();
+    const project = await repository.createProject(trimmed);
+    const projects = await repository.listProjectsWithCounts();
+    set({ projects, errorMessage: null });
+    return project;
+  },
+
+  deleteProject: async (projectId) => {
+    await repository.deleteProjectCascade(projectId);
+    const projects = await repository.listProjectsWithCounts();
+    const { activeProject } = get();
+    if (activeProject?.id === projectId) {
+      if (typeof window !== 'undefined') {
+        window.location.hash = '#/';
+      }
+      set({ route: { screen: 'hub' }, activeProject: null, spriteNodes: [], projects });
+    } else {
+      set({ projects });
+    }
+  },
+
+  patchActiveArtBible: async (patch) => {
+    const activeProject = get().activeProject;
+    if (!activeProject) return;
+    const merged: ArtBible = { ...activeProject.artBible, ...patch };
+    const optimistic: Project = {
+      ...activeProject,
+      artBible: merged,
+      updatedAt: new Date().toISOString(),
+    };
+    set({ activeProject: optimistic, errorMessage: null });
+
+    await enqueueProjectWrite(async () => {
+      const latest = get().activeProject;
+      if (!latest || latest.id !== activeProject.id) return;
+      const updated = await repository.updateProjectArtBible(latest.id, latest.artBible);
+      const projects = await repository.listProjectsWithCounts();
+      const postWriteLatest = get().activeProject;
+      if (postWriteLatest && postWriteLatest.id === updated.id) {
+        set({
+          activeProject: {
+            ...updated,
+            artBible: postWriteLatest.artBible,
+          },
+          projects,
+          errorMessage: null,
+        });
+      } else {
+        set({ projects, errorMessage: null });
+      }
+    });
+  },
+
+  updateActiveArtBible: async (artBible) => {
+    await get().patchActiveArtBible(artBible);
+  },
+
+  updateActiveProjectName: async (name) => {
+    const activeProject = get().activeProject;
+    if (!activeProject) return;
+    const trimmed = name.trim();
+    if (!trimmed) return;
+    await enqueueProjectWrite(async () => {
+      const updated = await repository.updateProjectMeta(activeProject.id, { name: trimmed });
+      const projects = await repository.listProjectsWithCounts();
+      set({ activeProject: updated, projects, errorMessage: null });
+    });
+  },
+
+  addGoldenReference: async (file) => {
+    const activeProject = get().activeProject;
+    if (!activeProject) return;
+    await enqueueProjectWrite(async () => {
+      const updated = await repository.addGoldenReference(activeProject.id, file);
+      const projects = await repository.listProjectsWithCounts();
+      set({ activeProject: updated, projects, errorMessage: null });
+    });
+  },
+
+  removeGoldenReference: async (blobId) => {
+    const activeProject = get().activeProject;
+    if (!activeProject) return;
+    await enqueueProjectWrite(async () => {
+      const updated = await repository.removeGoldenReference(activeProject.id, blobId);
+      const projects = await repository.listProjectsWithCounts();
+      set({ activeProject: updated, projects, errorMessage: null });
+    });
+  },
+
+  refreshProviders: async () => {
+    const providers = await repository.listProviderConfigs();
+    set({ providers });
+  },
+
+  saveProvider: async (config) => {
+    await repository.saveProviderConfig(config);
+    const providers = await repository.listProviderConfigs();
+    set({ providers });
+  },
+
+  deleteProvider: async (id) => {
+    await repository.deleteProviderConfig(id);
+    const providers = await repository.listProviderConfigs();
+    const nextSelected =
+      get().selectedProviderId === id ? OFFLINE_MOCK_PROVIDER_ID : get().selectedProviderId;
+    set({ providers, selectedProviderId: nextSelected });
+  },
+
+  setSelectedProviderId: (id) => set({ selectedProviderId: id }),
+
+  refreshSpriteNodes: async (projectId) => {
+    const [spriteNodes, projects] = await Promise.all([
+      repository.listSpriteNodes(projectId),
+      repository.listProjectsWithCounts(),
+    ]);
+    set({ spriteNodes, projects });
+  },
+}));
