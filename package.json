@@ -2,6 +2,8 @@
   "name": "nibgrid",
   "private": true,
   "version": "0.1.0",
+  "description": "Local-first, zero-server BYOK/BYOM PWA for turning hand-drawn sketches into style-locked 2D game sprites (https://franekjemiolo.github.io/nibgrid/).",
+  "homepage": "https://franekjemiolo.github.io/nibgrid/",
   "type": "module",
   "scripts": {
     "dev": "vite",

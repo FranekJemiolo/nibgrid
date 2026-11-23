@@ -2,6 +2,8 @@
 
 Local-first, zero-server Bring-Your-Own-Key / Bring-Your-Own-Model (BYOK/BYOM) Progressive Web App for turning hand-drawn sketches into style-locked 2D game sprites.
 
+**Live App (GitHub Pages):** https://franekjemiolo.github.io/nibgrid/
+
 ## Architecture Summary
 
 - **100% Client-Side & Zero-Cost Static PWA:** Runs entirely in the browser with no backend server, deployable cleanly to GitHub Pages under a configurable base path (`VITE_BASE_PATH=/nibgrid/`).
