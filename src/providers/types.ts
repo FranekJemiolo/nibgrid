@@ -57,4 +57,3 @@ export interface ProviderAdapter {
   generate(request: ProviderGenerateRequest, signal?: AbortSignal): Promise<ProviderOutput[]>;
   inpaint(request: ProviderInpaintRequest, signal?: AbortSignal): Promise<ProviderOutput[]>;
 }
-

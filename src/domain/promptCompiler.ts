@@ -96,4 +96,3 @@ export function compilePrompt(
     fullCompiledPrompt: `${positivePrompt} | Negative: ${negativePrompt}`,
   };
 }
-
