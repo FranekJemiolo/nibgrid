@@ -1,4 +1,6 @@
 import type { ProviderConfig } from '../domain/schemas';
+import { ComfyUiProvider } from './comfyuiProvider';
+import { GeminiProvider } from './geminiProvider';
 import { offlineMockProvider } from './mockProvider';
 import type {
   ProviderAdapter,
@@ -48,13 +50,13 @@ class UnconfiguredHttpAdapter implements ProviderAdapter {
     _signal?: AbortSignal,
   ): Promise<ProviderOutput[]> {
     throw new Error(
-      `Remote/local HTTP generation for "${request.config.displayName}" requires a live endpoint at ${request.config.endpointUrl}. Switch to Offline Mock Provider for zero-server synthesis.`,
+      `Remote/local HTTP generation for "${request.config.displayName}" requires a live endpoint at ${request.config.endpointUrl}. Switch to Offline Mock Provider, Gemini BYOK, or Local ComfyUI.`,
     );
   }
 
   async inpaint(request: ProviderInpaintRequest, _signal?: AbortSignal): Promise<ProviderOutput[]> {
     throw new Error(
-      `Remote/local HTTP inpainting for "${request.config.displayName}" requires a live endpoint at ${request.config.endpointUrl}. Switch to Offline Mock Provider for zero-server synthesis.`,
+      `Remote/local HTTP inpainting for "${request.config.displayName}" requires a live endpoint at ${request.config.endpointUrl}. Switch to Offline Mock Provider, Gemini BYOK, or Local ComfyUI.`,
     );
   }
 }
@@ -62,6 +64,12 @@ class UnconfiguredHttpAdapter implements ProviderAdapter {
 export function resolveProviderAdapter(config: ProviderConfig): ProviderAdapter {
   if (config.kind === 'mock') {
     return offlineMockProvider;
+  }
+  if (config.kind === 'gemini') {
+    return new GeminiProvider(config);
+  }
+  if (config.kind === 'comfyui') {
+    return new ComfyUiProvider(config);
   }
   return new UnconfiguredHttpAdapter(config);
 }

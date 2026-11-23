@@ -93,7 +93,13 @@ export const ProviderCapabilitiesSchema = z.object({
 });
 export type ProviderCapabilities = z.infer<typeof ProviderCapabilitiesSchema>;
 
-export const ProviderKindSchema = z.enum(['mock', 'openai-compatible', 'comfyui', 'custom-http']);
+export const ProviderKindSchema = z.enum([
+  'mock',
+  'gemini',
+  'comfyui',
+  'openai-compatible',
+  'custom-http',
+]);
 export type ProviderKind = z.infer<typeof ProviderKindSchema>;
 
 export const ProviderConfigSchema = z.object({
@@ -104,6 +110,7 @@ export const ProviderConfigSchema = z.object({
   endpointUrl: z.string(),
   apiKey: z.string(),
   enabled: z.boolean(),
+  customWorkflowJson: z.string().optional(),
   capabilities: ProviderCapabilitiesSchema,
   updatedAt: z.string().min(1),
 });

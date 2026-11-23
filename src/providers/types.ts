@@ -18,6 +18,11 @@ export interface ProviderCostEstimate {
   label: string;
 }
 
+export interface GoldenReferencePayload {
+  mimeType: string;
+  bytes: Uint8Array;
+}
+
 export interface ProviderGenerateRequest {
   config: ProviderConfig;
   artBible: ArtBible;
@@ -30,6 +35,7 @@ export interface ProviderGenerateRequest {
   promptDelta: string;
   compiledPrompt: string;
   variantCount: number;
+  goldenReferenceImages?: readonly GoldenReferencePayload[];
 }
 
 export interface ProviderInpaintRequest extends ProviderGenerateRequest {

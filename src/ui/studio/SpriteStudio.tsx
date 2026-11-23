@@ -7,6 +7,7 @@ import {
   type PointerEvent as ReactPointerEvent,
 } from 'react';
 import {
+  AlertTriangle,
   Eraser,
   Eye,
   EyeOff,
@@ -20,6 +21,7 @@ import {
   Trash2,
   Undo2,
   Upload,
+  X,
   ZoomIn,
   ZoomOut,
 } from 'lucide-react';
@@ -35,7 +37,9 @@ import type { AdherenceLevel, SpriteNode } from '../../domain/schemas';
 import { CanvasHistory } from '../../processing/history';
 import { sha256Bytes } from '../../processing/hash';
 import { encodeRgbaToPngBytes, rgbaToPngBlob } from '../../processing/png';
+import { ProviderError } from '../../providers/errors';
 import { resolveProviderAdapter } from '../../providers/registry';
+import type { GoldenReferencePayload } from '../../providers/types';
 import { useAppStore } from '../../store/useAppStore';
 import { normalizeSketchInWorker } from '../../workers/normalizeClient';
 import { CompareSplitModal } from './CompareSplitModal';
@@ -218,6 +222,12 @@ export function SpriteStudio() {
     null,
   );
   const [statusMessage, setStatusMessage] = useState<string | null>(null);
+  const [providerError, setProviderError] = useState<{
+    message: string;
+    remediation?: string;
+  } | null>(null);
+
+  const generationAbortRef = useRef<AbortController | null>(null);
 
   const sketchCanvasRef = useRef<HTMLCanvasElement | null>(null);
   const maskCanvasRef = useRef<HTMLCanvasElement | null>(null);
@@ -670,6 +680,19 @@ export function SpriteStudio() {
     }
   };
 
+  const loadGoldenReferencePayloads = useCallback(async (): Promise<GoldenReferencePayload[]> => {
+    if (!activeProject) return [];
+    const results: GoldenReferencePayload[] = [];
+    for (const blobId of activeProject.artBible.goldenReferenceBlobIds.slice(0, 3)) {
+      const record = await repository.getBlob(blobId);
+      if (record) {
+        const bytes = new Uint8Array(await record.bytes.arrayBuffer());
+        results.push({ mimeType: record.mimeType || 'image/png', bytes });
+      }
+    }
+    return results;
+  }, [activeProject]);
+
   const handleGenerate = async () => {
     if (!activeProject || isGenerating) return;
     const providerConfig = providers.find((p) => p.id === selectedProviderId) ?? providers[0];
@@ -678,7 +701,10 @@ export function SpriteStudio() {
       return;
     }
 
+    const abortController = new AbortController();
+    generationAbortRef.current = abortController;
     setIsGenerating(true);
+    setProviderError(null);
     setStatusMessage(`Generating ${variantCount} sprite variant(s)...`);
 
     try {
@@ -712,20 +738,25 @@ export function SpriteStudio() {
       const rootSketchSha = ancestry[0]?.sketchSha256 ?? parentNode.sketchSha256;
       const compiled = compilePrompt(activeProject.artBible, { adherence, promptDelta });
       const adapter = resolveProviderAdapter(providerConfig);
+      const goldenReferenceImages = await loadGoldenReferencePayloads();
 
-      const outputs = await adapter.generate({
-        config: providerConfig,
-        artBible: activeProject.artBible,
-        sketchRgba: sourceRgba,
-        sketchWidth: targetWidth,
-        sketchHeight: targetHeight,
-        sketchSha256: rootSketchSha,
-        seed,
-        adherence,
-        promptDelta,
-        compiledPrompt: compiled.fullCompiledPrompt,
-        variantCount,
-      });
+      const outputs = await adapter.generate(
+        {
+          config: providerConfig,
+          artBible: activeProject.artBible,
+          sketchRgba: sourceRgba,
+          sketchWidth: targetWidth,
+          sketchHeight: targetHeight,
+          sketchSha256: rootSketchSha,
+          seed,
+          adherence,
+          promptDelta,
+          compiledPrompt: compiled.fullCompiledPrompt,
+          variantCount,
+          goldenReferenceImages,
+        },
+        abortController.signal,
+      );
 
       const createdNodes: SpriteNode[] = [];
       for (const output of outputs) {
@@ -756,8 +787,20 @@ export function SpriteStudio() {
       const firstNode = createdNodes[0];
       if (firstOutput && firstNode) {
         lastLoadedNodeIdRef.current = firstNode.id;
-        sketchBufferRef.current = new Uint8ClampedArray(firstOutput.rgba);
-        historyRef.current.reset(firstOutput.rgba);
+        let displayRgba: Uint8ClampedArray;
+        if (firstOutput.width === targetWidth && firstOutput.height === targetHeight) {
+          displayRgba = new Uint8ClampedArray(firstOutput.rgba);
+        } else {
+          const resized = await decodeBlobToRgba(
+            firstOutput.blob,
+            targetWidth,
+            targetHeight,
+            'stretch',
+          );
+          displayRgba = resized.rgba;
+        }
+        sketchBufferRef.current = displayRgba;
+        historyRef.current.reset(displayRgba);
         syncHistoryFlags();
         renderSketchCanvas();
         setActiveNodeId(firstNode.id);
@@ -767,8 +810,16 @@ export function SpriteStudio() {
       await refreshSpriteNodes(activeProject.id);
       setStatusMessage(`Generated ${createdNodes.length} variant(s) under ${parentNode.kind}.`);
     } catch (error) {
-      setStatusMessage(error instanceof Error ? error.message : 'Generation failed.');
+      if (error instanceof ProviderError) {
+        setProviderError({ message: error.message, remediation: error.remediation });
+      } else {
+        setProviderError({
+          message: error instanceof Error ? error.message : 'Generation failed.',
+        });
+      }
+      setStatusMessage(null);
     } finally {
+      generationAbortRef.current = null;
       setIsGenerating(false);
     }
   };
@@ -778,7 +829,10 @@ export function SpriteStudio() {
     const providerConfig = providers.find((p) => p.id === selectedProviderId) ?? providers[0];
     if (!providerConfig) return;
 
+    const abortController = new AbortController();
+    generationAbortRef.current = abortController;
     setIsGenerating(true);
+    setProviderError(null);
     setStatusMessage('Inpainting masked region...');
 
     try {
@@ -801,22 +855,27 @@ export function SpriteStudio() {
 
       const compiled = compilePrompt(activeProject.artBible, { adherence, promptDelta });
       const adapter = resolveProviderAdapter(providerConfig);
+      const goldenReferenceImages = await loadGoldenReferencePayloads();
 
-      const outputs = await adapter.inpaint({
-        config: providerConfig,
-        artBible: activeProject.artBible,
-        sketchRgba: sketchBufferRef.current,
-        baseImageRgba: sketchBufferRef.current,
-        mask: maskBufferRef.current,
-        sketchWidth: targetWidth,
-        sketchHeight: targetHeight,
-        sketchSha256: activeViewportNode.sketchSha256,
-        seed,
-        adherence,
-        promptDelta,
-        compiledPrompt: compiled.fullCompiledPrompt,
-        variantCount: 1,
-      });
+      const outputs = await adapter.inpaint(
+        {
+          config: providerConfig,
+          artBible: activeProject.artBible,
+          sketchRgba: sketchBufferRef.current,
+          baseImageRgba: sketchBufferRef.current,
+          mask: maskBufferRef.current,
+          sketchWidth: targetWidth,
+          sketchHeight: targetHeight,
+          sketchSha256: activeViewportNode.sketchSha256,
+          seed,
+          adherence,
+          promptDelta,
+          compiledPrompt: compiled.fullCompiledPrompt,
+          variantCount: 1,
+          goldenReferenceImages,
+        },
+        abortController.signal,
+      );
 
       const inpaintOutput = outputs[0];
       if (!inpaintOutput) {
@@ -847,8 +906,20 @@ export function SpriteStudio() {
       await repository.saveSpriteNode(inpaintNode);
 
       lastLoadedNodeIdRef.current = inpaintNode.id;
-      sketchBufferRef.current = new Uint8ClampedArray(inpaintOutput.rgba);
-      historyRef.current.reset(inpaintOutput.rgba);
+      let displayRgba: Uint8ClampedArray;
+      if (inpaintOutput.width === targetWidth && inpaintOutput.height === targetHeight) {
+        displayRgba = new Uint8ClampedArray(inpaintOutput.rgba);
+      } else {
+        const resized = await decodeBlobToRgba(
+          inpaintOutput.blob,
+          targetWidth,
+          targetHeight,
+          'stretch',
+        );
+        displayRgba = resized.rgba;
+      }
+      sketchBufferRef.current = displayRgba;
+      historyRef.current.reset(displayRgba);
       maskBufferRef.current = new Uint8Array(targetWidth * targetHeight);
       syncHistoryFlags();
       renderSketchCanvas();
@@ -859,8 +930,16 @@ export function SpriteStudio() {
       await refreshSpriteNodes(activeProject.id);
       setStatusMessage(`Created inpaint child node (seed #${inpaintNode.generationMeta.seed}).`);
     } catch (error) {
-      setStatusMessage(error instanceof Error ? error.message : 'Inpainting failed.');
+      if (error instanceof ProviderError) {
+        setProviderError({ message: error.message, remediation: error.remediation });
+      } else {
+        setProviderError({
+          message: error instanceof Error ? error.message : 'Inpainting failed.',
+        });
+      }
+      setStatusMessage(null);
     } finally {
+      generationAbortRef.current = null;
       setIsGenerating(false);
     }
   };
@@ -908,6 +987,35 @@ export function SpriteStudio() {
           </button>
         </div>
       </div>
+
+      {providerError && (
+        <div
+          data-testid="studio-error-banner"
+          role="alert"
+          className="flex items-start justify-between gap-3 border-b border-rose-500/40 bg-rose-950/70 px-4 py-2.5 text-xs text-rose-100"
+        >
+          <div className="flex items-start gap-2">
+            <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-rose-400" />
+            <div>
+              <p className="font-semibold text-rose-200">{providerError.message}</p>
+              {providerError.remediation && (
+                <p className="mt-0.5 font-mono text-[11px] text-rose-300">
+                  {providerError.remediation}
+                </p>
+              )}
+            </div>
+          </div>
+          <button
+            type="button"
+            data-testid="dismiss-error-banner-btn"
+            onClick={() => setProviderError(null)}
+            className="rounded p-1 text-rose-300 hover:bg-rose-900/60 hover:text-white"
+            aria-label="Dismiss provider error"
+          >
+            <X className="h-3.5 w-3.5" />
+          </button>
+        </div>
+      )}
 
       <div className="grid flex-1 grid-cols-1 lg:grid-cols-[280px_1fr_300px]">
         {/* Left Pane: Sketch & Mask Tools */}
