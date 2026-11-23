@@ -4,6 +4,7 @@ import { parseHashRoute, useAppStore } from './store/useAppStore';
 import { ArtBibleEditor } from './ui/bible/ArtBibleEditor';
 import { ProjectHub } from './ui/hub/ProjectHub';
 import { ProviderVaultModal } from './ui/hub/ProviderVaultModal';
+import { SpriteStudio } from './ui/studio/SpriteStudio';
 
 export function App() {
   const {
@@ -137,17 +138,7 @@ export function App() {
         ) : route.screen === 'bible' ? (
           <ArtBibleEditor />
         ) : (
-          <section
-            data-testid="studio-placeholder"
-            className="mx-auto mt-6 w-full max-w-6xl rounded-xl border border-slate-800 bg-slate-900/60 p-6"
-          >
-            <h2 className="text-base font-semibold text-slate-100">
-              Sprite Studio — {activeProject?.name}
-            </h2>
-            <p className="mt-1 text-sm text-slate-400">
-              Sketch canvas, Web Worker normalization, and mask layers arrive in Milestone 2.
-            </p>
-          </section>
+          <SpriteStudio />
         )}
       </main>
 
