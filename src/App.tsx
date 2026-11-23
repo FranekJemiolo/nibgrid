@@ -4,6 +4,7 @@ import { parseHashRoute, useAppStore } from './store/useAppStore';
 import { ArtBibleEditor } from './ui/bible/ArtBibleEditor';
 import { ProjectHub } from './ui/hub/ProjectHub';
 import { ProviderVaultModal } from './ui/hub/ProviderVaultModal';
+import { PostProcessInspector } from './ui/inspector/PostProcessInspector';
 import { SpriteStudio } from './ui/studio/SpriteStudio';
 
 export function App() {
@@ -87,7 +88,7 @@ export function App() {
                 data-testid="nav-sprite-studio"
                 onClick={() => void navigate({ screen: 'studio', projectId: activeProject.id })}
                 className={`inline-flex items-center gap-2 rounded-md px-3 py-1.5 text-xs font-medium transition-colors ${
-                  route.screen === 'studio'
+                  route.screen === 'studio' || route.screen === 'inspector'
                     ? 'bg-indigo-600 text-white'
                     : 'text-slate-300 hover:bg-slate-800 hover:text-white'
                 }`}
@@ -137,6 +138,8 @@ export function App() {
           <ProjectHub />
         ) : route.screen === 'bible' ? (
           <ArtBibleEditor />
+        ) : route.screen === 'inspector' ? (
+          <PostProcessInspector nodeId={route.nodeId} />
         ) : (
           <SpriteStudio />
         )}

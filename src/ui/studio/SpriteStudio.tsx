@@ -978,6 +978,22 @@ export function SpriteStudio() {
               {statusMessage}
             </span>
           )}
+          {activeViewportNode && (
+            <button
+              type="button"
+              data-testid="open-postprocess-btn"
+              onClick={() =>
+                void navigate({
+                  screen: 'inspector',
+                  projectId: activeProject.id,
+                  nodeId: activeViewportNode.id,
+                })
+              }
+              className="rounded-md bg-indigo-600 px-3 py-1 text-xs font-medium text-white hover:bg-indigo-500"
+            >
+              Post-Process & Export
+            </button>
+          )}
           <button
             type="button"
             onClick={() => void navigate({ screen: 'bible', projectId: activeProject.id })}
@@ -1401,6 +1417,13 @@ export function SpriteStudio() {
         onSelectNode={handleSelectNode}
         onForkNode={handleForkNode}
         onCompareNode={handleCompareNode}
+        onOpenInspector={(targetNodeId) =>
+          void navigate({
+            screen: 'inspector',
+            projectId: activeProject.id,
+            nodeId: targetNodeId,
+          })
+        }
         onDeleteLeafNode={(id) => void handleDeleteLeafNode(id)}
       />
 

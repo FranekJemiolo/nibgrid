@@ -53,6 +53,70 @@ export const GenerationMetaSchema = z.object({
 });
 export type GenerationMeta = z.infer<typeof GenerationMetaSchema>;
 
+export const BackgroundRemovalModeSchema = z.enum(['none', 'color-key', 'ai-rembg']);
+export type BackgroundRemovalMode = z.infer<typeof BackgroundRemovalModeSchema>;
+
+export const ResampleModeSchema = z.enum(['nearest', 'area']);
+export type ResampleMode = z.infer<typeof ResampleModeSchema>;
+
+export const ErosionConnectivitySchema = z.enum(['4-connected', '8-connected']);
+export type ErosionConnectivity = z.infer<typeof ErosionConnectivitySchema>;
+
+export const PivotNormSchema = z.object({
+  x: z.number().min(0).max(1),
+  y: z.number().min(0).max(1),
+});
+export type PivotNorm = z.infer<typeof PivotNormSchema>;
+
+export const PostProcessConfigSchema = z.object({
+  bgRemoval: BackgroundRemovalModeSchema,
+  bgTolerance: z.number().min(0).max(100),
+  bgContiguous: z.boolean(),
+  bgKeyColor: HexColorSchema.optional(),
+  alphaThreshold: z.number().int().min(0).max(255),
+  erosionRadius: z.number().int().min(0).max(2),
+  erosionConnectivity: ErosionConnectivitySchema,
+  defringe: z.boolean(),
+  paletteSnap: z.boolean(),
+  bayerDither: z.boolean(),
+  ditherStrength: z.number().min(0).max(1),
+  resampleEnabled: z.boolean(),
+  resampleMode: ResampleModeSchema,
+  targetWidth: DimensionSchema,
+  targetHeight: DimensionSchema,
+  autoTrim: z.boolean(),
+  trimMargin: z.number().int().min(0).max(64),
+  padToPot: z.boolean(),
+  pivotNorm: PivotNormSchema,
+});
+export type PostProcessConfig = z.infer<typeof PostProcessConfigSchema>;
+
+export function createDefaultPostProcessConfig(
+  targetWidth = 64,
+  targetHeight = 64,
+): PostProcessConfig {
+  return PostProcessConfigSchema.parse({
+    bgRemoval: 'none',
+    bgTolerance: 24,
+    bgContiguous: true,
+    alphaThreshold: 16,
+    erosionRadius: 0,
+    erosionConnectivity: '4-connected',
+    defringe: false,
+    paletteSnap: false,
+    bayerDither: false,
+    ditherStrength: 0.35,
+    resampleEnabled: false,
+    resampleMode: 'nearest',
+    targetWidth,
+    targetHeight,
+    autoTrim: false,
+    trimMargin: 0,
+    padToPot: false,
+    pivotNorm: { x: 0.5, y: 0.5 },
+  });
+}
+
 export const SpriteNodeSchema = z.object({
   id: z.string().min(1),
   projectId: z.string().min(1),
@@ -60,6 +124,8 @@ export const SpriteNodeSchema = z.object({
   kind: SpriteNodeKindSchema,
   imageBlobId: z.string().min(1),
   maskBlobId: z.string().min(1).optional(),
+  processedBlobId: z.string().min(1).optional(),
+  postProcessConfig: PostProcessConfigSchema.optional(),
   sketchSha256: z.string().regex(/^[0-9a-f]{64}$/, 'sketchSha256 must be a 64-char hex SHA-256'),
   generationMeta: GenerationMetaSchema,
 });

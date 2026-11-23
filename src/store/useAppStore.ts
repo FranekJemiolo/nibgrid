@@ -5,7 +5,8 @@ import type { ArtBible, Project, ProviderConfig, SpriteNode } from '../domain/sc
 export type ScreenRoute =
   | { screen: 'hub' }
   | { screen: 'bible'; projectId: string }
-  | { screen: 'studio'; projectId: string };
+  | { screen: 'studio'; projectId: string }
+  | { screen: 'inspector'; projectId: string; nodeId: string };
 
 export function parseHashRoute(hash: string): ScreenRoute {
   const cleaned = hash.replace(/^#/, '');
@@ -17,6 +18,10 @@ export function parseHashRoute(hash: string): ScreenRoute {
   if (studioMatch?.[1]) {
     return { screen: 'studio', projectId: studioMatch[1] };
   }
+  const inspectorMatch = /^\/project\/([^/]+)\/inspector\/([^/]+)$/.exec(cleaned);
+  if (inspectorMatch?.[1] && inspectorMatch[2]) {
+    return { screen: 'inspector', projectId: inspectorMatch[1], nodeId: inspectorMatch[2] };
+  }
   return { screen: 'hub' };
 }
 
@@ -26,6 +31,9 @@ export function formatHashRoute(route: ScreenRoute): string {
   }
   if (route.screen === 'studio') {
     return `#/project/${route.projectId}/studio`;
+  }
+  if (route.screen === 'inspector') {
+    return `#/project/${route.projectId}/inspector/${route.nodeId}`;
   }
   return '#/';
 }

@@ -295,6 +295,9 @@ export class NibgridRepository {
       if (node.maskBlobId) {
         referencedBlobIds.add(node.maskBlobId);
       }
+      if (node.processedBlobId) {
+        referencedBlobIds.add(node.processedBlobId);
+      }
     }
 
     const allBlobIds = await this.database.blobs.toCollection().primaryKeys();

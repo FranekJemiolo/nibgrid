@@ -95,3 +95,22 @@
 - `npm run build`: passed (`dist/assets/index-CZSHvmbg.js` 519.65 kB)
 - `VITE_BASE_PATH=/nibgrid/ npm run build`: passed (`dist/index.html` 0.58 kB, `dist/assets/index-CgP5Yhbu.js` 519.66 kB)
 
+---
+
+## Milestone 5: Client-Side Deterministic Post-Processing Stack (Screen 4A)
+
+### Architectural Decisions & Trade-Offs
+- **Pure-TS Post-Processing Pipeline (`src/processing/`):** Separated every pixel transformation (`backgroundKey.ts`, `alphaCleanup.ts`, `paletteQuantize.ts`, `resampleAndTrim.ts`, `pipeline.ts`) from DOM APIs so Vitest asserts exact pixel invariants in Node. Placed OKLab palette quantization *after* resampling so Area-Average box downscaling never re-introduces off-palette intermediate RGB values.
+- **Premultiplied Area-Average & Inverse-Distance Defringing:** Area-average downscaling accumulates premultiplied RGB weighted by pixel alpha to prevent dark edge halos around transparent borders, while `defringeInteriorRgb()` replaces edge RGB channels (`0 < alpha < 255`) using inverse-distance weighted averages from opaque interior neighbors (`alpha === 255`) within 2px.
+- **Single-Threaded WASM / Lazy WebGPU Cutout (`postprocess.worker.ts`):** Dynamically imports `@huggingface/transformers` only when `Local AI Cutout` is selected and locks `env.backends.onnx.wasm.numThreads = 1` with `env.useBrowserCache = true`, avoiding `Cross-Origin-Embedder-Policy: require-corp` headers that would block live BYOK `fetch()` calls.
+- **Orphan Blob Tracking (`database.ts`):** Added `processedBlobId` tracking in `cleanupOrphanedBlobsInTx()` so iterative post-processing updates prune superseded processed blobs cleanly from IndexedDB.
+
+### Verification Results
+- `npm run typecheck`: passed (`tsc --noEmit`, 0 errors)
+- `npm run lint`: passed (`eslint .`, 0 errors, 0 warnings)
+- `npm run format:check`: passed (Prettier verified across all files)
+- `npm run test:unit`: passed (6 test files, 21/21 tests passed in 306ms; verified flood-fill cutout, `#102040` edge defringing, 100% OKLab palette snapping, and auto-trim / `64×64` resample / `50×70 -> 64×128` PoT padding)
+- `npm run test:e2e`: passed (6/6 Playwright Chromium tests passed in 9.4s; verified Mock generation -> Post-Process Inspector -> Fast Color-Key + Defringe + Palette Snap + `64×64` Nearest-Neighbor -> `alpha === 0` at corner `(0, 0)`)
+- `npm run build`: passed (`dist/assets/postprocess.worker-BI3peHzk.js` 10.91 kB, `dist/assets/index-9jg6mFo6.js` 551.78 kB)
+- `VITE_BASE_PATH=/nibgrid/ npm run build`: passed (`dist/index.html` 0.58 kB, `dist/assets/index-DN_lqCva.js` 551.80 kB)
+

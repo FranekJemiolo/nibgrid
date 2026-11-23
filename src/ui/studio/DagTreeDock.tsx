@@ -1,4 +1,4 @@
-import { Columns2, GitBranch, GitFork, Trash2 } from 'lucide-react';
+import { Columns2, GitBranch, GitFork, Sliders, Trash2 } from 'lucide-react';
 import { buildDagTreeRows } from '../../domain/dag';
 import type { SpriteNode, SpriteNodeKind } from '../../domain/schemas';
 import { BlobImage } from '../components/BlobImage';
@@ -10,6 +10,7 @@ interface DagTreeDockProps {
   onSelectNode: (nodeId: string) => void;
   onForkNode: (nodeId: string) => void;
   onCompareNode: (nodeId: string) => void;
+  onOpenInspector: (nodeId: string) => void;
   onDeleteLeafNode: (nodeId: string) => void;
 }
 
@@ -35,6 +36,7 @@ export function DagTreeDock({
   onSelectNode,
   onForkNode,
   onCompareNode,
+  onOpenInspector,
   onDeleteLeafNode,
 }: DagTreeDockProps) {
   const rows = buildDagTreeRows(nodes);
@@ -151,6 +153,16 @@ export function DagTreeDock({
                   >
                     <Columns2 className="h-3 w-3" />
                     Compare
+                  </button>
+                  <button
+                    type="button"
+                    data-testid={`postprocess-node-${node.id}`}
+                    onClick={() => onOpenInspector(node.id)}
+                    className="inline-flex items-center gap-1 rounded border border-indigo-500/40 bg-indigo-500/20 px-2 py-1 text-[11px] font-medium text-indigo-200 hover:bg-indigo-500/30"
+                    title="Open Post-Process & Export Inspector"
+                  >
+                    <Sliders className="h-3 w-3" />
+                    Post-Process & Export
                   </button>
                   {isLeaf && (
                     <button
