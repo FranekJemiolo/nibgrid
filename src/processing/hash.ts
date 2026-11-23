@@ -14,4 +14,3 @@ export async function sha256Bytes(bytes: Uint8Array): Promise<string> {
   }
   return hex;
 }
-

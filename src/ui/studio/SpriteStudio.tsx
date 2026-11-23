@@ -24,12 +24,23 @@ import {
   ZoomOut,
 } from 'lucide-react';
 import { OFFLINE_MOCK_PROVIDER_ID, repository } from '../../db/database';
-import type { SpriteNode } from '../../domain/schemas';
+import {
+  appendChildNode,
+  deleteLeafNode,
+  forkFromAncestor,
+  getAncestorPath,
+} from '../../domain/dag';
+import { compilePrompt } from '../../domain/promptCompiler';
+import type { AdherenceLevel, SpriteNode } from '../../domain/schemas';
 import { CanvasHistory } from '../../processing/history';
 import { sha256Bytes } from '../../processing/hash';
 import { encodeRgbaToPngBytes, rgbaToPngBlob } from '../../processing/png';
+import { resolveProviderAdapter } from '../../providers/registry';
 import { useAppStore } from '../../store/useAppStore';
 import { normalizeSketchInWorker } from '../../workers/normalizeClient';
+import { CompareSplitModal } from './CompareSplitModal';
+import { DagTreeDock } from './DagTreeDock';
+import { GenerationInspector } from './GenerationInspector';
 
 export type StudioTool = 'sketch-pen' | 'sketch-eraser' | 'mask-brush' | 'mask-eraser' | 'pan';
 export type ViewportBackdrop = 'checkerboard' | 'dark' | 'light';
@@ -171,7 +182,15 @@ function interpolateLine(
 }
 
 export function SpriteStudio() {
-  const { activeProject, spriteNodes, refreshSpriteNodes, navigate } = useAppStore();
+  const {
+    activeProject,
+    spriteNodes,
+    providers,
+    selectedProviderId,
+    setSelectedProviderId,
+    refreshSpriteNodes,
+    navigate,
+  } = useAppStore();
 
   const targetWidth = activeProject?.artBible.targetWidth ?? 128;
   const targetHeight = activeProject?.artBible.targetHeight ?? 128;
@@ -189,6 +208,15 @@ export function SpriteStudio() {
   const [canRedo, setCanRedo] = useState(false);
   const [maskPixelCount, setMaskPixelCount] = useState(0);
   const [activeNodeId, setActiveNodeId] = useState<string | null>(null);
+  const [forkParentId, setForkParentId] = useState<string | null>(null);
+  const [adherence, setAdherence] = useState<AdherenceLevel>('balanced');
+  const [promptDelta, setPromptDelta] = useState('');
+  const [seed, setSeed] = useState(1024);
+  const [variantCount, setVariantCount] = useState<1 | 2>(2);
+  const [isGenerating, setIsGenerating] = useState(false);
+  const [compareNodes, setCompareNodes] = useState<{ leftId: string; rightId: string } | null>(
+    null,
+  );
   const [statusMessage, setStatusMessage] = useState<string | null>(null);
 
   const sketchCanvasRef = useRef<HTMLCanvasElement | null>(null);
@@ -277,6 +305,8 @@ export function SpriteStudio() {
     preNormalizeCanvasRef.current = null;
     lastLoadedNodeIdRef.current = null;
     setActiveNodeId(null);
+    setForkParentId(null);
+    setCompareNodes(null);
     setIsNormalized(false);
     syncHistoryFlags();
     renderSketchCanvas();
@@ -312,6 +342,7 @@ export function SpriteStudio() {
       sketchBufferRef.current = decoded.rgba;
       historyRef.current.reset(decoded.rgba);
       setActiveNodeId(targetNode.id);
+      setForkParentId((prev) => prev ?? targetNode.id);
       syncHistoryFlags();
       renderSketchCanvas();
     });
@@ -366,7 +397,9 @@ export function SpriteStudio() {
       lastLoadedNodeIdRef.current = node.id;
       await repository.saveSpriteNode(node);
       setActiveNodeId(node.id);
+      setForkParentId(node.id);
       await refreshSpriteNodes(activeProject.id);
+      return node;
     },
     [activeProject, spriteNodes, targetWidth, targetHeight, refreshSpriteNodes],
   );
@@ -575,6 +608,260 @@ export function SpriteStudio() {
       setStatusMessage(error instanceof Error ? error.message : 'Normalization failed.');
     } finally {
       setIsNormalizing(false);
+    }
+  };
+
+  const activeViewportNode =
+    (activeNodeId ? spriteNodes.find((n) => n.id === activeNodeId) : undefined) ??
+    spriteNodes[spriteNodes.length - 1] ??
+    null;
+
+  const activeParentNode =
+    (forkParentId ? spriteNodes.find((n) => n.id === forkParentId) : undefined) ??
+    activeViewportNode;
+
+  const handleSelectNode = (nodeId: string) => {
+    setActiveNodeId(nodeId);
+    setForkParentId(nodeId);
+  };
+
+  const handleForkNode = (nodeId: string) => {
+    try {
+      const ancestor = forkFromAncestor(spriteNodes, nodeId);
+      setForkParentId(ancestor.id);
+      setStatusMessage(
+        `Fork parent set to ${ancestor.kind} (seed #${ancestor.generationMeta.seed}).`,
+      );
+    } catch (error) {
+      setStatusMessage(error instanceof Error ? error.message : 'Failed to fork node.');
+    }
+  };
+
+  const handleCompareNode = (nodeId: string) => {
+    if (spriteNodes.length < 2) return;
+    const clicked =
+      spriteNodes.find((n) => n.id === nodeId) ?? spriteNodes[spriteNodes.length - 1]!;
+    const fallbackLeft =
+      spriteNodes.find((n) => n.id === clicked.parentId) ??
+      spriteNodes.find((n) => n.id !== clicked.id) ??
+      clicked;
+    setCompareNodes({ leftId: fallbackLeft.id, rightId: clicked.id });
+  };
+
+  const handleDeleteLeafNode = async (nodeId: string) => {
+    if (!activeProject) return;
+    try {
+      const target = spriteNodes.find((n) => n.id === nodeId);
+      deleteLeafNode(spriteNodes, nodeId);
+      await repository.deleteSpriteNode(nodeId);
+      if (activeNodeId === nodeId) {
+        const nextActive = target?.parentId ?? null;
+        lastLoadedNodeIdRef.current = null;
+        setActiveNodeId(nextActive);
+        setForkParentId(nextActive);
+      }
+      if (forkParentId === nodeId) {
+        setForkParentId(target?.parentId ?? null);
+      }
+      await refreshSpriteNodes(activeProject.id);
+      setStatusMessage('Deleted leaf node and pruned orphaned blobs.');
+    } catch (error) {
+      setStatusMessage(error instanceof Error ? error.message : 'Cannot delete node.');
+    }
+  };
+
+  const handleGenerate = async () => {
+    if (!activeProject || isGenerating) return;
+    const providerConfig = providers.find((p) => p.id === selectedProviderId) ?? providers[0];
+    if (!providerConfig) {
+      setStatusMessage('No provider configured in Provider Vault.');
+      return;
+    }
+
+    setIsGenerating(true);
+    setStatusMessage(`Generating ${variantCount} sprite variant(s)...`);
+
+    try {
+      let workingNodes = [...spriteNodes];
+      let parentNode = activeParentNode;
+
+      if (!parentNode) {
+        const savedRoot = await persistRootSketchNode(sketchBufferRef.current, 'sketch root');
+        if (!savedRoot) {
+          throw new Error('Failed to persist root sketch node.');
+        }
+        workingNodes = [savedRoot];
+        parentNode = savedRoot;
+      }
+
+      let sourceRgba: Uint8ClampedArray = new Uint8ClampedArray(sketchBufferRef.current);
+      if (parentNode.id !== activeViewportNode?.id) {
+        const parentBlob = await repository.getBlob(parentNode.imageBlobId);
+        if (parentBlob) {
+          const decoded = await decodeBlobToRgba(
+            parentBlob.bytes,
+            targetWidth,
+            targetHeight,
+            'stretch',
+          );
+          sourceRgba = decoded.rgba;
+        }
+      }
+
+      const ancestry = getAncestorPath(workingNodes, parentNode.id);
+      const rootSketchSha = ancestry[0]?.sketchSha256 ?? parentNode.sketchSha256;
+      const compiled = compilePrompt(activeProject.artBible, { adherence, promptDelta });
+      const adapter = resolveProviderAdapter(providerConfig);
+
+      const outputs = await adapter.generate({
+        config: providerConfig,
+        artBible: activeProject.artBible,
+        sketchRgba: sourceRgba,
+        sketchWidth: targetWidth,
+        sketchHeight: targetHeight,
+        sketchSha256: rootSketchSha,
+        seed,
+        adherence,
+        promptDelta,
+        compiledPrompt: compiled.fullCompiledPrompt,
+        variantCount,
+      });
+
+      const createdNodes: SpriteNode[] = [];
+      for (const output of outputs) {
+        const blobRecord = await repository.storeBlob(output.blob, 'image/png');
+        const childNode: SpriteNode = {
+          id: globalThis.crypto.randomUUID(),
+          projectId: activeProject.id,
+          parentId: parentNode.id,
+          kind: 'generation',
+          imageBlobId: blobRecord.id,
+          sketchSha256: rootSketchSha,
+          generationMeta: {
+            providerId: providerConfig.id,
+            modelId: providerConfig.modelId,
+            seed: output.seed,
+            adherence,
+            promptDelta,
+            compiledPrompt: compiled.fullCompiledPrompt,
+            createdAt: new Date(Date.now() + output.variantIndex).toISOString(),
+          },
+        };
+        workingNodes = appendChildNode(workingNodes, childNode);
+        await repository.saveSpriteNode(childNode);
+        createdNodes.push(childNode);
+      }
+
+      const firstOutput = outputs[0];
+      const firstNode = createdNodes[0];
+      if (firstOutput && firstNode) {
+        lastLoadedNodeIdRef.current = firstNode.id;
+        sketchBufferRef.current = new Uint8ClampedArray(firstOutput.rgba);
+        historyRef.current.reset(firstOutput.rgba);
+        syncHistoryFlags();
+        renderSketchCanvas();
+        setActiveNodeId(firstNode.id);
+        setForkParentId(firstNode.id);
+      }
+
+      await refreshSpriteNodes(activeProject.id);
+      setStatusMessage(`Generated ${createdNodes.length} variant(s) under ${parentNode.kind}.`);
+    } catch (error) {
+      setStatusMessage(error instanceof Error ? error.message : 'Generation failed.');
+    } finally {
+      setIsGenerating(false);
+    }
+  };
+
+  const handleInpaint = async () => {
+    if (!activeProject || isGenerating || !activeViewportNode || maskPixelCount === 0) return;
+    const providerConfig = providers.find((p) => p.id === selectedProviderId) ?? providers[0];
+    if (!providerConfig) return;
+
+    setIsGenerating(true);
+    setStatusMessage('Inpainting masked region...');
+
+    try {
+      const maskRgba = new Uint8ClampedArray(targetWidth * targetHeight * 4);
+      for (let i = 0; i < maskBufferRef.current.length; i++) {
+        if (maskBufferRef.current[i] === 1) {
+          const px = i * 4;
+          maskRgba[px] = 255;
+          maskRgba[px + 1] = 255;
+          maskRgba[px + 2] = 255;
+          maskRgba[px + 3] = 255;
+        } else {
+          maskRgba[i * 4 + 3] = 255;
+        }
+      }
+      const maskBlobRecord = await repository.storeBlob(
+        rgbaToPngBlob(maskRgba, targetWidth, targetHeight),
+        'image/png',
+      );
+
+      const compiled = compilePrompt(activeProject.artBible, { adherence, promptDelta });
+      const adapter = resolveProviderAdapter(providerConfig);
+
+      const outputs = await adapter.inpaint({
+        config: providerConfig,
+        artBible: activeProject.artBible,
+        sketchRgba: sketchBufferRef.current,
+        baseImageRgba: sketchBufferRef.current,
+        mask: maskBufferRef.current,
+        sketchWidth: targetWidth,
+        sketchHeight: targetHeight,
+        sketchSha256: activeViewportNode.sketchSha256,
+        seed,
+        adherence,
+        promptDelta,
+        compiledPrompt: compiled.fullCompiledPrompt,
+        variantCount: 1,
+      });
+
+      const inpaintOutput = outputs[0];
+      if (!inpaintOutput) {
+        throw new Error('Provider returned zero inpaint outputs.');
+      }
+
+      const imageBlobRecord = await repository.storeBlob(inpaintOutput.blob, 'image/png');
+      const inpaintNode: SpriteNode = {
+        id: globalThis.crypto.randomUUID(),
+        projectId: activeProject.id,
+        parentId: activeViewportNode.id,
+        kind: 'inpaint',
+        imageBlobId: imageBlobRecord.id,
+        maskBlobId: maskBlobRecord.id,
+        sketchSha256: activeViewportNode.sketchSha256,
+        generationMeta: {
+          providerId: providerConfig.id,
+          modelId: providerConfig.modelId,
+          seed: inpaintOutput.seed,
+          adherence,
+          promptDelta: promptDelta || 'masked inpaint refinement',
+          compiledPrompt: compiled.fullCompiledPrompt,
+          createdAt: new Date().toISOString(),
+        },
+      };
+
+      appendChildNode(spriteNodes, inpaintNode);
+      await repository.saveSpriteNode(inpaintNode);
+
+      lastLoadedNodeIdRef.current = inpaintNode.id;
+      sketchBufferRef.current = new Uint8ClampedArray(inpaintOutput.rgba);
+      historyRef.current.reset(inpaintOutput.rgba);
+      maskBufferRef.current = new Uint8Array(targetWidth * targetHeight);
+      syncHistoryFlags();
+      renderSketchCanvas();
+      renderMaskCanvas();
+      setActiveNodeId(inpaintNode.id);
+      setForkParentId(inpaintNode.id);
+
+      await refreshSpriteNodes(activeProject.id);
+      setStatusMessage(`Created inpaint child node (seed #${inpaintNode.generationMeta.seed}).`);
+    } catch (error) {
+      setStatusMessage(error instanceof Error ? error.message : 'Inpainting failed.');
+    } finally {
+      setIsGenerating(false);
     }
   };
 
@@ -976,21 +1263,47 @@ export function SpriteStudio() {
           </div>
         </section>
 
-        {/* Right Pane: Generation Inspector (unlocked in M3) */}
-        <aside
-          data-testid="studio-right-pane"
-          className="border-t border-slate-800 bg-slate-900/50 p-4 lg:border-t-0 lg:border-l"
-        >
-          <h3 className="text-xs font-semibold tracking-wider text-slate-400 uppercase">
-            Generation Inspector
-          </h3>
-          <p className="mt-2 text-xs text-slate-400">
-            Prompt Compiler, Offline Mock Provider, and branching DAG synthesis unlock in Milestone
-            3. Root sketch nodes saved here persist in IndexedDB ({spriteNodes.length} saved{' '}
-            {spriteNodes.length === 1 ? 'node' : 'nodes'}).
-          </p>
-        </aside>
+        {/* Right Pane: Generation Inspector */}
+        <GenerationInspector
+          artBible={activeProject.artBible}
+          providers={providers}
+          selectedProviderId={selectedProviderId}
+          onSelectProvider={setSelectedProviderId}
+          adherence={adherence}
+          onChangeAdherence={setAdherence}
+          promptDelta={promptDelta}
+          onChangePromptDelta={setPromptDelta}
+          seed={seed}
+          onChangeSeed={setSeed}
+          variantCount={variantCount}
+          onChangeVariantCount={setVariantCount}
+          activeParentNode={activeParentNode}
+          activeViewportNode={activeViewportNode}
+          maskPixelCount={maskPixelCount}
+          isGenerating={isGenerating}
+          onGenerate={() => void handleGenerate()}
+          onInpaint={() => void handleInpaint()}
+        />
       </div>
+
+      <DagTreeDock
+        nodes={spriteNodes}
+        activeNodeId={activeViewportNode?.id ?? null}
+        forkParentId={activeParentNode?.id ?? null}
+        onSelectNode={handleSelectNode}
+        onForkNode={handleForkNode}
+        onCompareNode={handleCompareNode}
+        onDeleteLeafNode={(id) => void handleDeleteLeafNode(id)}
+      />
+
+      {compareNodes && (
+        <CompareSplitModal
+          nodes={spriteNodes}
+          initialLeftId={compareNodes.leftId}
+          initialRightId={compareNodes.rightId}
+          onClose={() => setCompareNodes(null)}
+        />
+      )}
     </div>
   );
 }

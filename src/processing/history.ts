@@ -64,4 +64,3 @@ export class CanvasHistory {
     this.cursor = 0;
   }
 }
-

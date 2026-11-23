@@ -67,4 +67,3 @@ export function BlobImage({ blobId, alt, className = '', testId }: BlobImageProp
     />
   );
 }
-

@@ -307,4 +307,3 @@ export class NibgridRepository {
 }
 
 export const repository = new NibgridRepository(db);
-

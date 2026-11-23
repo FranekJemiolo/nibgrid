@@ -77,4 +77,3 @@ test.describe('M1 Art Bible & IndexedDB Persistence', () => {
     expect(pageErrors).toEqual([]);
   });
 });
-

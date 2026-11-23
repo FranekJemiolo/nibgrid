@@ -81,4 +81,3 @@ export async function normalizeSketchInWorker(
     worker.postMessage(request, [copy.buffer]);
   });
 }
-

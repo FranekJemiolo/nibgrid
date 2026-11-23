@@ -145,4 +145,3 @@ export function rgbaToPngBlob(rgba: Uint8ClampedArray, width: number, height: nu
   copy.set(bytes);
   return new Blob([copy.buffer], { type: 'image/png' });
 }
-
