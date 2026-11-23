@@ -5,7 +5,11 @@ import { encodeWav16 } from '../../src/audio/pcmPostProcess';
 const RAW_SKETCH_FIXTURE = resolve(process.cwd(), 'tests/e2e/fixtures/raw-sketch.png');
 const PALETTE_FIXTURE = resolve(process.cwd(), 'tests/e2e/fixtures/test-palette.gpl');
 
-function createQuietWavBuffer(amplitude = 0.04, durationSec = 0.45, sampleRate = 22050): Uint8Array {
+function createQuietWavBuffer(
+  amplitude = 0.04,
+  durationSec = 0.45,
+  sampleRate = 22050,
+): Uint8Array {
   const frames = Math.round(durationSec * sampleRate);
   const samples = new Float32Array(frames);
   for (let i = 0; i < frames; i++) {
