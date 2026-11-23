@@ -158,9 +158,10 @@ export function PostProcessInspector({ nodeId }: { nodeId: string }) {
       canvas.height = height;
       const ctx = canvas.getContext('2d');
       if (!ctx) return;
+      ctx.imageSmoothingEnabled = activeProject?.artBible.artMode === 'hd-2d';
       ctx.putImageData(new ImageData(new Uint8ClampedArray(rgba), width, height), 0, 0);
     },
-    [],
+    [activeProject?.artBible.artMode],
   );
 
   // Load raw source image from Dexie when targetNode changes
@@ -463,8 +464,10 @@ export function PostProcessInspector({ nodeId }: { nodeId: string }) {
     );
   }
 
-  const stageW = Math.round(Math.max(rawSize.width, processedSize.width) * (zoomPercent / 100));
-  const stageH = Math.round(Math.max(rawSize.height, processedSize.height) * (zoomPercent / 100));
+  const stageW = Math.max(1, Math.round(processedSize.width * (zoomPercent / 100)));
+  const stageH = Math.max(1, Math.round(processedSize.height * (zoomPercent / 100)));
+  const inspectorImageRendering =
+    activeProject.artBible.artMode === 'pixel-art' ? 'pixelated' : 'auto';
   const pivotPx = computePivotPx(config.pivotNorm, processedSize.width, processedSize.height);
   const fsaSupported = supportsFileSystemAccess();
 
@@ -518,9 +521,9 @@ export function PostProcessInspector({ nodeId }: { nodeId: string }) {
         </div>
       )}
 
-      <div className="grid flex-1 grid-cols-1 lg:grid-cols-[1fr_360px]">
+      <div className="grid min-w-0 flex-1 grid-cols-1 lg:grid-cols-[minmax(0,1fr)_360px]">
         {/* Left: Split-Screen Comparator */}
-        <section className="flex flex-col overflow-hidden bg-slate-950">
+        <section className="flex min-w-0 flex-col overflow-hidden bg-slate-950">
           <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-800 bg-slate-900/40 px-4 py-2">
             <div className="flex items-center gap-2">
               <button
@@ -624,7 +627,7 @@ export function PostProcessInspector({ nodeId }: { nodeId: string }) {
                 data-testid="raw-preview-canvas"
                 className="absolute inset-0 h-full w-full"
                 style={{
-                  imageRendering: 'pixelated',
+                  imageRendering: inspectorImageRendering,
                   clipPath: `inset(0 ${100 - splitPercent}% 0 0)`,
                 }}
               />
@@ -635,7 +638,7 @@ export function PostProcessInspector({ nodeId }: { nodeId: string }) {
                 data-testid="processed-preview-canvas"
                 className="absolute inset-0 h-full w-full"
                 style={{
-                  imageRendering: 'pixelated',
+                  imageRendering: inspectorImageRendering,
                   clipPath: `inset(0 0 0 ${splitPercent}%)`,
                 }}
               />

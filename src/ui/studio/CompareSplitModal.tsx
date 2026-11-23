@@ -1,10 +1,11 @@
 import { useState } from 'react';
 import { Columns2, X } from 'lucide-react';
-import type { SpriteNode } from '../../domain/schemas';
+import type { ArtMode, SpriteNode } from '../../domain/schemas';
 import { BlobImage } from '../components/BlobImage';
 
 interface CompareSplitModalProps {
   nodes: SpriteNode[];
+  artMode?: ArtMode;
   initialLeftId: string;
   initialRightId: string;
   onClose: () => void;
@@ -12,6 +13,7 @@ interface CompareSplitModalProps {
 
 export function CompareSplitModal({
   nodes,
+  artMode = 'pixel-art',
   initialLeftId,
   initialRightId,
   onClose,
@@ -80,6 +82,7 @@ export function CompareSplitModal({
                 <BlobImage
                   blobId={leftNode.imageBlobId}
                   alt="Comparison Left"
+                  artMode={artMode}
                   testId="compare-image-left"
                   className="h-full w-full object-contain"
                 />
@@ -123,6 +126,7 @@ export function CompareSplitModal({
                 <BlobImage
                   blobId={rightNode.imageBlobId}
                   alt="Comparison Right"
+                  artMode={artMode}
                   testId="compare-image-right"
                   className="h-full w-full object-contain"
                 />

@@ -286,17 +286,19 @@ export function SpriteStudio() {
     if (!canvas) return;
     const ctx = canvas.getContext('2d');
     if (!ctx) return;
+    ctx.imageSmoothingEnabled = activeProject?.artBible.artMode === 'hd-2d';
     const buf = sketchBufferRef.current;
     if (buf.length !== targetWidth * targetHeight * 4) return;
     const imageData = new ImageData(new Uint8ClampedArray(buf), targetWidth, targetHeight);
     ctx.putImageData(imageData, 0, 0);
-  }, [targetWidth, targetHeight]);
+  }, [targetWidth, targetHeight, activeProject?.artBible.artMode]);
 
   const renderMaskCanvas = useCallback(() => {
     const canvas = maskCanvasRef.current;
     if (!canvas) return;
     const ctx = canvas.getContext('2d');
     if (!ctx) return;
+    ctx.imageSmoothingEnabled = activeProject?.artBible.artMode === 'hd-2d';
     const mask = maskBufferRef.current;
     if (mask.length !== targetWidth * targetHeight) return;
 
@@ -315,7 +317,7 @@ export function SpriteStudio() {
     setMaskPixelCount(count);
     const imageData = new ImageData(rgba, targetWidth, targetHeight);
     ctx.putImageData(imageData, 0, 0);
-  }, [targetWidth, targetHeight]);
+  }, [targetWidth, targetHeight, activeProject?.artBible.artMode]);
 
   // Initialize buffers when project or target dimensions change
   useEffect(() => {
@@ -1084,6 +1086,8 @@ export function SpriteStudio() {
     return null;
   }
 
+  const isPixelArt = activeProject.artBible.artMode === 'pixel-art';
+  const canvasImageRendering = isPixelArt ? 'pixelated' : 'auto';
   const scale = zoomPercent / 100;
   const displayWidth = Math.round(targetWidth * scale);
   const displayHeight = Math.round(targetHeight * scale);
@@ -1169,7 +1173,7 @@ export function SpriteStudio() {
         </div>
       )}
 
-      <div className="grid flex-1 grid-cols-1 lg:grid-cols-[280px_1fr_300px]">
+      <div className="grid min-w-0 flex-1 grid-cols-1 lg:grid-cols-[280px_minmax(0,1fr)_300px]">
         {/* Left Pane: Sketch & Mask Tools */}
         <aside
           data-testid="studio-left-pane"
@@ -1221,6 +1225,7 @@ export function SpriteStudio() {
               <button
                 type="button"
                 data-testid="tool-sketch-pen"
+                aria-pressed={tool === 'sketch-pen'}
                 onClick={() => setTool('sketch-pen')}
                 className={`inline-flex items-center gap-1.5 rounded-md px-2.5 py-2 text-xs font-medium ${
                   tool === 'sketch-pen'
@@ -1234,6 +1239,7 @@ export function SpriteStudio() {
               <button
                 type="button"
                 data-testid="tool-sketch-eraser"
+                aria-pressed={tool === 'sketch-eraser'}
                 onClick={() => setTool('sketch-eraser')}
                 className={`inline-flex items-center gap-1.5 rounded-md px-2.5 py-2 text-xs font-medium ${
                   tool === 'sketch-eraser'
@@ -1247,6 +1253,7 @@ export function SpriteStudio() {
               <button
                 type="button"
                 data-testid="mode-inpaint-mask"
+                aria-pressed={tool === 'mask-brush'}
                 onClick={() => setTool('mask-brush')}
                 className={`inline-flex items-center gap-1.5 rounded-md px-2.5 py-2 text-xs font-medium ${
                   tool === 'mask-brush'
@@ -1260,6 +1267,7 @@ export function SpriteStudio() {
               <button
                 type="button"
                 data-testid="tool-mask-eraser"
+                aria-pressed={tool === 'mask-eraser'}
                 onClick={() => setTool('mask-eraser')}
                 className={`inline-flex items-center gap-1.5 rounded-md px-2.5 py-2 text-xs font-medium ${
                   tool === 'mask-eraser'
@@ -1275,6 +1283,7 @@ export function SpriteStudio() {
             <button
               type="button"
               data-testid="tool-pan"
+              aria-pressed={tool === 'pan'}
               onClick={() => setTool('pan')}
               className={`flex w-full items-center justify-center gap-1.5 rounded-md px-2.5 py-1.5 text-xs font-medium ${
                 tool === 'pan'
@@ -1380,7 +1389,7 @@ export function SpriteStudio() {
         {/* Center Pane: Viewport */}
         <section
           data-testid="studio-viewport-pane"
-          className="flex flex-col overflow-hidden bg-slate-950"
+          className="flex min-w-0 flex-col overflow-hidden bg-slate-950"
         >
           <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-800 bg-slate-900/40 px-4 py-2">
             <div className="flex items-center gap-1.5">
@@ -1506,7 +1515,7 @@ export function SpriteStudio() {
                 width={targetWidth}
                 height={targetHeight}
                 className="absolute inset-0 h-full w-full"
-                style={{ imageRendering: 'pixelated' }}
+                style={{ imageRendering: canvasImageRendering }}
               />
               <canvas
                 ref={maskCanvasRef}
@@ -1516,7 +1525,7 @@ export function SpriteStudio() {
                 className={`pointer-events-none absolute inset-0 h-full w-full transition-opacity ${
                   showMask ? 'opacity-100' : 'opacity-0'
                 }`}
-                style={{ imageRendering: 'pixelated' }}
+                style={{ imageRendering: canvasImageRendering }}
               />
               {showPixelGrid && zoomPercent >= 150 && (
                 <div
@@ -1559,6 +1568,7 @@ export function SpriteStudio() {
 
       <DagTreeDock
         nodes={spriteNodes}
+        artMode={activeProject.artBible.artMode}
         activeNodeId={activeViewportNode?.id ?? null}
         forkParentId={activeParentNode?.id ?? null}
         onSelectNode={handleSelectNode}
@@ -1577,6 +1587,7 @@ export function SpriteStudio() {
       {compareNodes && (
         <CompareSplitModal
           nodes={spriteNodes}
+          artMode={activeProject.artBible.artMode}
           initialLeftId={compareNodes.leftId}
           initialRightId={compareNodes.rightId}
           onClose={() => setCompareNodes(null)}

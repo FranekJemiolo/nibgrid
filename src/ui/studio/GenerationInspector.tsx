@@ -73,7 +73,7 @@ export function GenerationInspector({
   return (
     <aside
       data-testid="studio-right-pane"
-      className="flex flex-col gap-4 overflow-y-auto border-t border-slate-800 bg-slate-900/50 p-4 lg:border-t-0 lg:border-l"
+      className="flex min-w-0 flex-col gap-4 overflow-y-auto border-t border-slate-800 bg-slate-900/50 p-4 lg:border-t-0 lg:border-l"
     >
       <div className="flex items-center justify-between">
         <h3 className="text-xs font-semibold tracking-wider text-slate-400 uppercase">

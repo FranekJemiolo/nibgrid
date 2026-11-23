@@ -30,7 +30,7 @@ export function App() {
   }, [initialize, navigate]);
 
   return (
-    <div className="flex min-h-screen flex-col bg-slate-950 text-slate-100">
+    <div className="flex min-h-screen flex-col overflow-x-hidden bg-slate-950 text-slate-100">
       <header
         data-testid="app-header"
         className="flex h-14 items-center justify-between border-b border-slate-800 bg-slate-900/90 px-4 backdrop-blur"
@@ -129,7 +129,7 @@ export function App() {
         </div>
       )}
 
-      <main className="flex flex-1 flex-col">
+      <main className="flex min-w-0 flex-1 flex-col">
         {isLoading ? (
           <div className="flex flex-1 items-center justify-center text-sm text-slate-400">
             Loading local IndexedDB workspace...

@@ -1,10 +1,11 @@
 import { Columns2, GitBranch, GitFork, Sliders, Trash2 } from 'lucide-react';
 import { buildDagTreeRows } from '../../domain/dag';
-import type { SpriteNode, SpriteNodeKind } from '../../domain/schemas';
+import type { ArtMode, SpriteNode, SpriteNodeKind } from '../../domain/schemas';
 import { BlobImage } from '../components/BlobImage';
 
 interface DagTreeDockProps {
   nodes: SpriteNode[];
+  artMode?: ArtMode;
   activeNodeId: string | null;
   forkParentId: string | null;
   onSelectNode: (nodeId: string) => void;
@@ -31,6 +32,7 @@ const KIND_LABELS: Record<SpriteNodeKind, { label: string; className: string }> 
 
 export function DagTreeDock({
   nodes,
+  artMode = 'pixel-art',
   activeNodeId,
   forkParentId,
   onSelectNode,
@@ -105,6 +107,7 @@ export function DagTreeDock({
                   <BlobImage
                     blobId={node.imageBlobId}
                     alt={`${kindStyle.label} node`}
+                    artMode={artMode}
                     className="h-10 w-10 shrink-0 rounded border border-slate-700 bg-checkerboard object-contain"
                   />
                   <div className="min-w-0 flex-1">
