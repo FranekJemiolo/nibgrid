@@ -11,6 +11,39 @@ Local-first, zero-server Bring-Your-Own-Key / Bring-Your-Own-Model (BYOK/BYOM) P
 - **Google Antigravity IDE / Agent Integration:** Select **Google Antigravity IDE / Agent Handoff** (`antigravity-agent`) in Sprite Studio to copy style-locked Markdown briefs, export sketch PNGs, or import agent-generated PNG sprites into the DAG via the UI or `window.__NIBGRID_AGENT_BRIDGE__`. Includes [AGENTS.md](AGENTS.md), [GEMINI.md](GEMINI.md), and the workspace skill in [.agents/skills/nibgrid-agent-workflow/SKILL.md](.agents/skills/nibgrid-agent-workflow/SKILL.md).
 - **Worker-Isolated Image Processing & Export:** Sketch normalization, Chroma-Key cutout, interior-RGB defringing, OKLab palette quantization + 4×4 Bayer dithering, Nearest-Neighbor / Area-Average resampling, auto-trim, PoT padding, and `asset.recipe.json` + `.zip` packaging execute purely on-device.
 
+## Demo Walkthrough: 2D Platformer Red Cat Warrior with Lightsaber
+
+The walkthrough below was executed end-to-end inside Nibgrid on [https://franekjemiolo.github.io/nibgrid/](https://franekjemiolo.github.io/nibgrid/) using the **Google Antigravity IDE / Agent Handoff** adapter (`antigravity-agent`) and `window.__NIBGRID_AGENT_BRIDGE__`:
+
+### 1. Art Bible Style Lock (`Side-Scroller` · `Pixel Art`)
+Lock camera projection (`Side-Scroller`), key lighting (`Top-Left`), `128×128` target resolution, a 9-color crimson cat & cyan plasma lightsaber palette, cutout-safe negative prompts, and a Golden Style Reference image in IndexedDB.
+
+![Art Bible Style Lock — Red Cat Warrior](docs/demo/01-art-bible-cat-warrior.png)
+
+### 2. Sketch Ingestion & Web Worker Normalization
+Upload a rough hand-drawn sketch (`Upload Sketch PNG/JPG`) and toggle **Extract Lines & Center** to run adaptive local/global thresholding and safe-margin bounding-box centering inside a Dedicated Web Worker.
+
+![Normalized Sketch in Sprite Studio](docs/demo/02-sketch-normalized.png)
+
+### 3. Antigravity IDE Generation & Branching Sprite DAG
+Select **Google Antigravity IDE / Agent Handoff** in the Generation Inspector to copy the compiled Markdown brief, generate style-locked sprite poses using Antigravity's image tooling (`image-generator`), and import them directly into the branching **Sprite Lineage DAG** (creating both an idle combat stance root generation and a masked forward-lunge lightsaber slash child node).
+
+![Sprite Studio with Antigravity IDE Handoff and Branching DAG](docs/demo/03-antigravity-dag-studio.png)
+
+### 4. Side-by-Side Variant & Inpaint Comparison
+Compare sibling or ancestor/child iterations in **Side-by-Side Sprite Comparison** (Idle Stance vs. Overcharged Lightsaber Slash Arc).
+
+![Side-by-Side Comparison of Cat Warrior Stances](docs/demo/04-compare-variants.png)
+
+### 5. Deterministic Cutout, OKLab Palette Snap, Platformer Pivot & Export
+Inspect and finalize the sprite in **Post-Process & Export Inspector** with **Fast Color-Key (Flood Fill)** (`Tolerance: 12`), **Interior-RGB Defringe**, **OKLab Palette Snap** (9 Art Bible colors), **`64×64` Nearest-Neighbor** resampling, and **`Bottom-Center`** pivot (`0.50, 1.00` → `(32, 64) px`) before exporting the reproducible PNG + `asset.recipe.json` ZIP bundle.
+
+![Post-Process Split Comparator, Pivot Anchor, and Export](docs/demo/05-postprocess-and-export.png)
+
+**Exported `64×64` Game-Ready Platformer Sprite (`crimson-whisker-lightsaber-cat-generation-1024.png`):**
+
+![Exported 64x64 Red Cat Warrior Sprite](docs/demo/red-cat-warrior-final-64x64.png)
+
 ## Development
 
 ```bash
