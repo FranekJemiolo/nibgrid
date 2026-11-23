@@ -12,7 +12,8 @@ export type ScreenRoute =
   | { screen: 'hub' }
   | { screen: 'bible'; projectId: string }
   | { screen: 'studio'; projectId: string }
-  | { screen: 'inspector'; projectId: string; nodeId: string };
+  | { screen: 'inspector'; projectId: string; nodeId: string }
+  | { screen: 'atlas'; projectId: string };
 
 export function parseHashRoute(hash: string): ScreenRoute {
   const cleaned = hash.replace(/^#/, '');
@@ -28,6 +29,10 @@ export function parseHashRoute(hash: string): ScreenRoute {
   if (inspectorMatch?.[1] && inspectorMatch[2]) {
     return { screen: 'inspector', projectId: inspectorMatch[1], nodeId: inspectorMatch[2] };
   }
+  const atlasMatch = /^\/project\/([^/]+)\/atlas$/.exec(cleaned);
+  if (atlasMatch?.[1]) {
+    return { screen: 'atlas', projectId: atlasMatch[1] };
+  }
   return { screen: 'hub' };
 }
 
@@ -40,6 +45,9 @@ export function formatHashRoute(route: ScreenRoute): string {
   }
   if (route.screen === 'inspector') {
     return `#/project/${route.projectId}/inspector/${route.nodeId}`;
+  }
+  if (route.screen === 'atlas') {
+    return `#/project/${route.projectId}/atlas`;
   }
   return '#/';
 }

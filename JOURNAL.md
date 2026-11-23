@@ -173,3 +173,28 @@
 - **Animation & GIF Studio UI (`src/export/animationExporter.ts`, `src/ui/studio/AnimationStudioModal.tsx`, `DagTreeDock.tsx`, `SpriteStudio.tsx`):** Added timeline frame ordering/adding/removing, `1–24 FPS` preview playback, Ping-Pong toggle, Onion Skin canvas overlay, auto color-key cutout + OKLab Art Bible palette snap, downloadable looping `.gif` + spritesheet `.png` export, and `exportAnimatedGifBase64()` on `window.__NIBGRID_AGENT_BRIDGE__`.
 - **2D Platformer Red Cat Warrior Animation Demo (`docs/demo/` & `README.md`):** Generated a 3-frame `64×64` Idle → Mid-Charge Ignited Flare → Overcharged Cyan Slash Arc sequence (`4` ping-pong steps at `6 FPS`), verified GIF89a (`3.2 KB`) and `192×64` horizontal spritesheet export via isolated Playwright headless Chromium, and documented the full walkthrough in `README.md`.
 
+## Milestone 7: Pixel-Art Foundry (De-Mixel, Orphan Cleaner & OKLab Sel-Out)
+
+- **Pure-TS Foundry Passes (`src/processing/types.ts`, `demixel.ts`, `orphanCleaner.ts`, `selOut.ts`):** Implemented L1 gradient autocorrelation De-Mixel grid detection + phase alignment, 4-connected BFS alpha island purging + interior 1px pepper despeckling, and OKLab 3×3 Sobel-normal directional `outer`/`inner` Sel-Out outlining with palette swatch locking.
+- **Pipeline, Worker & Screen 4 UI (`src/domain/schemas.ts`, `pipeline.ts`, `postprocess.worker.ts`, `PostProcessInspector.tsx`):** Extended `PostProcessConfigSchema` with backward-compatible defaults, wired De-Mixel / Orphan / Sel-Out into `postprocess.worker.ts` and Screen 4 (`pp-demixel-badge`, `pp-orphan-badge`), and verified pixel invariants and recipe persistence via `tests/unit/m7-pixel-foundry.test.ts` and `tests/e2e/m7-pixel-foundry.spec.ts`.
+
+## Milestone 8: WebGL2 2D Normal Map Generator & Live Point-Light Preview
+
+- **Exact Alpha EDT & CPU Fallback Baker (`src/processing/distanceField.ts`):** Implemented `O(W·H)` Felzenszwalb–Huttenlocher EDT (`computeExactAlphaEdt`, `computeBevelHeightmap`) and `bakeNormalMapCpu` supporting `spherical-dome`, `smoothstep`, and `linear` bevel profiles plus OpenGL (`+Y`) and DirectX (`-Y`) normal Y-axis conventions.
+- **2-Pass WebGL2 Controller & Screen 4B (`src/webgl/shaders/*.glsl`, `normalMapRenderer.ts`, `NormalMapPreview.tsx`):** Built zero-VBO FBO Sobel normal baking and interactive cursor-tracked Blinn-Phong point-light preview (`Lit`, `Normal`, `Height`, `Split`) with explicit `.dispose()`, `<slug>_n.png` ZIP/FS export (`zipPackager.ts`, `recipeBuilder.ts`, `fsAccess.ts`), and regression tests (`tests/unit/m8-normal-edt.test.ts`, `tests/e2e/m8-normal-webgl.spec.ts`).
+
+## Milestone 9: MLS Puppet-Warp 2D Micro-Animator (Screen 4C)
+
+- **Pure-TS MLS Solver, Mesh Builder & Cyclic Presets (`src/processing/mlsWarp.ts`, `spriteMesh.ts`, `animPresets.ts`):** Implemented Rigid/Similarity 2D MLS deformation (`positions` + per-vertex `rotations`), `4px`/`8px` alpha-clipped quad mesh construction with 1-cell silhouette halo + barycentric CPU fallback, and 4 closed-loop motion presets (`idle-breathe`, `wind-sway`, `hit-recoil`, `squash-stretch`).
+- **WebGL2 Animator & Strip Export (`src/webgl/shaders/puppet.{vert,frag}.glsl`, `puppetRenderer.ts`, `PuppetWarpEditor.tsx`, `PostProcessInspector.tsx`):** Built interactive pin rigging/drag-preview, onion skinning, `Re-Lock Pixel Polish`, persistent `SpriteNode.puppetAnim`, `<slug>_<anim>_strip.png` + `.json` ZIP packaging, and full Vitest + Playwright verification (`tests/unit/m9-mls-warp.test.ts`, `tests/e2e/m9-puppet-warp.spec.ts`).
+
+## Milestone 10: Google Antigravity Loopback Bridge & `.agents/skills/nibgrid`
+
+- **Stateful Bridge Provider (`src/providers/bridgeContract.ts`, `antigravityBridgeProvider.ts`, `errors.ts`, `schemas.ts`):** Added `'antigravity-bridge'` provider kind, `GenerationMeta` `interactionId` / `interactionExpiresAt` / `usedStatefulChain` fields, `sessionStorage` ephemeral token storage with `nbg_...` redaction, 60s-TTL stateful vs. stateless chain fallback, and Provider Vault + Studio UI (`ProviderVaultModal.tsx`, `GenerationInspector.tsx`, `SpriteStudio.tsx`).
+- **Critique Loop & Workspace Skill (`.agents/skills/nibgrid/SKILL.md`, `scripts/nibgrid_bridge.py`):** Authored the Art Director skill and zero-dep `127.0.0.1:4188` loopback daemon (strict Origin allowlist + `Access-Control-Allow-Private-Network: true` + `--mock` mode) and verified stateful chaining, critique delta UI, and `401` token redaction (`tests/unit/m10-antigravity-bridge.test.ts`, `tests/e2e/m10-bridge-e2e.spec.ts`).
+
+## Milestone 11: MaxRects Atlas Packer & Godot 4 / Phaser 3 / PixiJS v8 Exporter
+
+- **Pure-TS Packer, Deduplicator & Exporters (`src/processing/maxRects.ts`, `atlasCompositor.ts`, `src/export/atlasExporters.ts`):** Implemented BSSF MaxRects bin packing across 1..N pages, FNV-1a trimmed frame deduplication, clamped 1–2px edge extrusion, lockstep `_n.png` normal atlas compositing over `(128, 128, 255, 0)` gutters, rotation locking, and PixiJS v8 JSON, Phaser 3 Multiatlas JSON, and Godot 4 `.tres` exporters.
+- **Screen 5 Atlas Workshop (`src/ui/atlas/AtlasWorkshop.tsx`, `useAppStore.ts`, `App.tsx`):** Added `#/project/:id/atlas` routing, sprite & Puppet-Warp loop selection, live packed canvas + UV bounds overlay + Albedo/Normal switcher, multi-engine ZIP bundling, and full Vitest + Playwright verification (`tests/unit/m11-atlas-packer.test.ts`, `tests/e2e/m11-atlas-e2e.spec.ts`).
+

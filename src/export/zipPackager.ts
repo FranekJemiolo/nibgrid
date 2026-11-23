@@ -14,23 +14,29 @@ export interface PackageSpriteZipInput {
   slug: string;
   pngBytes: Uint8Array;
   recipe: AssetRecipe;
+  normalPngBytes?: Uint8Array;
+  extraFiles?: Record<string, Uint8Array>;
 }
 
 /**
- * Bundles `<slug>.png` and `<slug>.recipe.json` into a standard ZIP archive using `fflate`.
+ * Bundles `<slug>.png`, optional `<slug>_n.png`, extra strip/JSON artifacts,
+ * and `<slug>.recipe.json` into a ZIP archive via `fflate`.
  */
 export function packageSpriteZip(input: PackageSpriteZipInput): Uint8Array {
-  const pngFilename = `${input.slug}.png`;
-  const recipeFilename = `${input.slug}.recipe.json`;
-  const recipeJson = `${JSON.stringify(input.recipe, null, 2)}\n`;
+  const files: Record<string, Uint8Array> = {
+    [`${input.slug}.png`]: input.pngBytes,
+    [`${input.slug}.recipe.json`]: strToU8(`${JSON.stringify(input.recipe, null, 2)}\n`),
+  };
+  if (input.normalPngBytes) {
+    files[`${input.slug}_n.png`] = input.normalPngBytes;
+  }
+  if (input.extraFiles) {
+    for (const [name, bytes] of Object.entries(input.extraFiles)) {
+      files[name] = bytes;
+    }
+  }
 
-  return zipSync(
-    {
-      [pngFilename]: input.pngBytes,
-      [recipeFilename]: strToU8(recipeJson),
-    },
-    { level: 6 },
-  );
+  return zipSync(files, { level: 6 });
 }
 
 export function triggerBlobDownload(blob: Blob, filename: string): void {

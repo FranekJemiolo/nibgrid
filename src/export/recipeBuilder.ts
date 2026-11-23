@@ -1,15 +1,22 @@
 import { z } from 'zod';
 import {
   AdherenceSchema,
+  AnimPresetSchema,
   ArtModeSchema,
+  BevelProfileSchema,
   DimensionSchema,
   HexColorSchema,
   LightingSchema,
+  MlsModeSchema,
+  NormalConventionSchema,
   PivotNormSchema,
   PostProcessConfigSchema,
   ProjectionSchema,
+  PuppetPinSchema,
+  type NormalMapConfig,
   type PostProcessConfig,
   type Project,
+  type PuppetAnimConfig,
   type SpriteNode,
 } from '../domain/schemas';
 
@@ -61,6 +68,33 @@ export const AssetRecipeSchema = z.object({
     pivotPx: PivotPxSchema,
     pivotNorm: PivotNormSchema,
   }),
+  normalMap: z
+    .object({
+      enabled: z.boolean(),
+      filename: z.string().min(1),
+      bevelRadiusPx: z.number().int().min(1).max(64),
+      bevelProfile: BevelProfileSchema,
+      bevelStrength: z.number().min(0).max(10),
+      detailStrength: z.number().min(0).max(10),
+      convention: NormalConventionSchema,
+    })
+    .optional(),
+  puppetAnim: z
+    .object({
+      preset: AnimPresetSchema,
+      mode: MlsModeSchema,
+      frameCount: z.number().int().min(2).max(24),
+      amplitudePx: z.number().min(0.5).max(24),
+      fps: z.number().int().min(1).max(30),
+      loop: z.boolean(),
+      pingPong: z.boolean(),
+      paddingPx: z.number().int().min(0).max(32),
+      reLockPolish: z.boolean(),
+      stripFilename: z.string().min(1),
+      atlasJsonFilename: z.string().min(1),
+      pins: z.array(PuppetPinSchema),
+    })
+    .optional(),
 });
 
 export type AssetRecipe = z.infer<typeof AssetRecipeSchema>;
@@ -86,11 +120,14 @@ export interface BuildAssetRecipeInput {
   normalizedWidth?: number;
   normalizedHeight?: number;
   exportedAt?: string;
+  normalMap?: NormalMapConfig & { filename: string };
+  puppetAnim?: PuppetAnimConfig & { stripFilename: string; atlasJsonFilename: string };
 }
 
 const SENSITIVE_KEY_PATTERNS: readonly RegExp[] = [
   /AIza[0-9A-Za-z_-]{8,}/,
   /sk-[0-9A-Za-z_-]{12,}/,
+  /nbg_[0-9A-Za-z_-]{6,}/,
   /"apiKey"\s*:/i,
 ];
 
@@ -145,6 +182,10 @@ export function buildAssetRecipe(input: BuildAssetRecipeInput): AssetRecipe {
         y: postProcess.pivotNorm.y,
       },
     },
+    ...(input.normalMap?.enabled ? { normalMap: input.normalMap } : {}),
+    ...(input.puppetAnim && input.puppetAnim.pins.length > 0
+      ? { puppetAnim: input.puppetAnim }
+      : {}),
   });
 
   const serialized = JSON.stringify(recipe);

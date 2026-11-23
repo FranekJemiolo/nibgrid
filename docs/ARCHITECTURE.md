@@ -76,3 +76,34 @@ All image-manipulation stages operate on raw `Uint8ClampedArray` buffers in `src
 - **Animation Exporter & Interactive Studio (`src/export/animationExporter.ts`, `src/ui/studio/AnimationStudioModal.tsx`):** Reuses `runPostProcessPipeline()` and `encodeRgbaToPngBytes()` across user-ordered DAG frames with optional auto color-key cutout, OKLab palette snapping, target frame resolution (`64`/`128`/`256`), live `<canvas>` onion-skin playback, `1–24 FPS` rate slider, and one-click `.gif` / spritesheet `.png` download.
 - **Agent Bridge Export (`src/providers/antigravityProvider.ts`):** Exposes `window.__NIBGRID_AGENT_BRIDGE__.exportAnimatedGifBase64()` for programmatic `.gif` and horizontal spritesheet generation from the current project DAG.
 
+## 9. Pixel-Art Foundry (Milestone 7)
+
+- **Shared Buffer Contracts (`src/processing/types.ts`):** Defines `RgbaBuffer`, `Rgb`, `Oklab`, and `LightDirection` for zero-DOM pure-TS graphics passes.
+- **De-Mixel Grid Snap (`src/processing/demixel.ts`):** Computes 1D L1 RGBA gradient energy profiles `(ex, ey)`, detects logical cell period via normalized autocorrelation with a `0.85` harmonic guard, sweeps integer phase offsets, and core-samples each cell into crisp integer pixels.
+- **Orphan-Pixel Cleaner (`src/processing/orphanCleaner.ts`):** Runs 4-connected BFS island purging (`area <= maxIslandPixels`) plus interior 1px pepper despeckling.
+- **OKLab Sel-Out Engine (`src/processing/selOut.ts`):** Computes 3×3 Sobel alpha normals aligned against the Art Bible's `lighting` vector to generate light-aware 1px `outer` / `inner` colored outlines, optionally snapping strictly to darker locked Art Bible palette swatches.
+
+## 10. WebGL2 2D Normal Map Generator & Live Lighting (Milestone 8)
+
+- **Exact Alpha EDT & CPU Normal Baker (`src/processing/distanceField.ts`):** Implements linear-time `O(W·H)` Felzenszwalb & Huttenlocher squared Euclidean Distance Transform (`computeExactAlphaEdt`, `computeBevelHeightmap`) with 1px transparent boundary padding (`spherical-dome`, `smoothstep`, `linear`) plus deterministic `bakeNormalMapCpu` fallback encoding neutral `(128, 128, 255, 0)` outside silhouettes.
+- **2-Pass WebGL2 Shaders & Controller (`src/webgl/shaders/`, `src/webgl/normalMapRenderer.ts`):** Zero-VBO fullscreen triangle pass baking `bevel + Rec.709 luma` heightmaps via 3×3 Sobel into an offscreen RGBA8 FBO (`opengl` `+Y` vs `directx` `-Y`), paired with interactive 60 FPS Blinn-Phong point-light preview (`Lit`, `Normal Map`, `Bevel Height`, `Split`) and explicit GPU `.dispose()` cleanup.
+- **Screen 4B & Bundle Integration (`NormalMapPreview.tsx`, `recipeBuilder.ts`, `zipPackager.ts`):** Adds interactive pointer-tracked lighting (`requestAnimationFrame`, pin/unpin click, `Alt+Wheel` Z-height) and bundles `<slug>_n.png` + `normalMap` metadata inside ZIP and File System Access directory exports.
+
+## 11. MLS Puppet-Warp 2D Micro-Animator (Milestone 9)
+
+- **Rigid & Similarity MLS Solver (`src/processing/mlsWarp.ts`):** Implements Schaefer–McPhail–Warren Moving Least Squares 2D deformation with exact pin-singularity handling (`distSq <= 1e-6`), single-pin translation fallback, zero inner-loop heap allocations, and per-vertex local rotation angle computation (`atan2(S, C)`).
+- **Alpha-Clipped Mesh & Periodic Presets (`src/processing/spriteMesh.ts`, `animPresets.ts`):** Subdivides tight opaque bounds into `4px`/`8px` quads with a 1-cell halo, exposes `rasterizeDeformedMeshCpu` fallback, and evaluates 4 periodic cyclic presets (`idle-breathe`, `wind-sway`, `hit-recoil`, `squash-stretch`) with exact `t = 0 === t = 1` closure.
+- **WebGL2 Mesh Animator & Screen 4C (`src/webgl/shaders/puppet.{vert,frag}.glsl`, `puppetRenderer.ts`, `PuppetWarpEditor.tsx`):** Deforms textured meshes at native resolution (`gl.NEAREST` pixel-art vs `gl.LINEAR` HD-2D), rotates optional `_n.png` normal tangents per vertex, supports optional per-frame `Re-Lock Pixel Polish`, renders red/blue onion-skin ghosts, persists `SpriteNode.puppetAnim`, and exports horizontal `<slug>_<anim>_strip.png` + `<slug>_<anim>.json` + `recipe.puppetAnim`.
+
+## 12. Antigravity Loopback Bridge & Workspace Skill (Milestone 10)
+
+- **Stateful Bridge Contract (`src/providers/bridgeContract.ts`, `antigravityBridgeProvider.ts`):** Implements `AntigravityBridgeProvider` (`http://127.0.0.1:4188`) with Zod-validated `/v1/health`, `/v1/generate`, `/v1/inpaint`, `/v1/critique`, and `/v1/cancel/:requestId` endpoints. Ephemeral `nbg_...` bearer tokens default to `sessionStorage` and are redacted in both `errors.ts` and `recipeBuilder.ts`.
+- **Stateful `interaction_id` Chaining (`selectStatefulInteractionChain`):** Automatically passes `previousInteractionId` when branching from a same-provider `SpriteNode` with `>= 60s` remaining TTL, falling back to stateless full-context re-anchoring when expired or cross-provider.
+- **Art Director Critique & `.agents/skills/nibgrid/`:** Surfacing `/v1/critique` scores, drift flags, and 1-click **"Apply Suggested Delta"** inside Screen 3, backed by the zero-dependency Python 3.11+ loopback daemon (`scripts/nibgrid_bridge.py` with strict Origin allowlist + PNA headers) and workspace Art Director skill (`SKILL.md`).
+
+## 13. MaxRects Atlas Packer & Engine Exporters (Milestone 11)
+
+- **BSSF MaxRects Bin Packer (`src/processing/maxRects.ts`):** Deterministically sorts sprites by longest side descending, reserves `extrude * 2 + padding` margins, splits & prunes free rects with Best Short Side Fit, spills cleanly across multi-page atlases, and shrinks to PoT bounds.
+- **Deduplicating Lockstep Compositor (`src/processing/atlasCompositor.ts`):** Trims transparent outer bounds, hashes content with dual FNV-1a keys so duplicate frames pack once and alias UVs, blits 1–2px clamped edge extrusion to kill mipmap/camera seams, locks rotation OFF for Godot/normal maps, and composites lockstep `_n.png` atlases over `(128, 128, 255, 0)` gutters.
+- **Multi-Engine Exporters & Screen 5 (`src/export/atlasExporters.ts`, `src/ui/atlas/AtlasWorkshop.tsx`, `useAppStore.ts`, `App.tsx`):** Generates PixiJS v8 JSON Hash, Phaser 3 Multiatlas JSON, and Godot 4 `format=3` `.tres` (`SpriteFrames`, `AtlasTexture`, `CanvasTexture` with `texture_filter = 1` pixel-art / `2` HD-2D), rendered live in Screen 5 (`#/project/:id/atlas`) with UV overlay, channel switcher, and multi-engine ZIP export.
+

@@ -48,10 +48,15 @@ import {
   uint8ToBase64,
 } from '../../processing/png';
 import {
+  AntigravityBridgeProvider,
+  selectStatefulInteractionChain,
+} from '../../providers/antigravityBridgeProvider';
+import {
   buildAntigravityPromptBrief,
   type ExportAnimatedGifBridgeOptions,
   type NibgridAgentBridge,
 } from '../../providers/antigravityProvider';
+import type { BridgeCritiqueResponse } from '../../providers/bridgeContract';
 import { ProviderError } from '../../providers/errors';
 import { resolveProviderAdapter } from '../../providers/registry';
 import type { GoldenReferencePayload } from '../../providers/types';
@@ -244,6 +249,8 @@ export function SpriteStudio() {
     null,
   );
   const [animationStudioOpen, setAnimationStudioOpen] = useState(false);
+  const [bridgeCritique, setBridgeCritique] = useState<BridgeCritiqueResponse | null>(null);
+  const [chainNotice, setChainNotice] = useState<string | null>(null);
   const [statusMessage, setStatusMessage] = useState<string | null>(null);
   const [providerError, setProviderError] = useState<{
     message: string;
@@ -840,6 +847,16 @@ export function SpriteStudio() {
       const compiled = compilePrompt(activeProject.artBible, { adherence, promptDelta });
       const adapter = resolveProviderAdapter(providerConfig);
       const goldenReferenceImages = await loadGoldenReferencePayloads();
+      if (providerConfig.kind === 'antigravity-bridge') {
+        const decision = selectStatefulInteractionChain(parentNode, providerConfig.id);
+        setChainNotice(
+          decision.reAnchoredReason ??
+            (decision.usedStatefulChain ? 'Stateful chain linked' : null),
+        );
+      } else {
+        setChainNotice(null);
+      }
+      setBridgeCritique(null);
 
       if (isStaleOrAborted()) return;
 
@@ -857,6 +874,7 @@ export function SpriteStudio() {
           compiledPrompt: compiled.fullCompiledPrompt,
           variantCount,
           goldenReferenceImages,
+          parentNode,
         },
         abortController.signal,
       );
@@ -885,6 +903,16 @@ export function SpriteStudio() {
             promptDelta,
             compiledPrompt: compiled.fullCompiledPrompt,
             createdAt: new Date(Date.now() + output.variantIndex).toISOString(),
+            ...(output.interactionId ? { interactionId: output.interactionId } : {}),
+            ...(output.parentInteractionId
+              ? { parentInteractionId: output.parentInteractionId }
+              : {}),
+            ...(output.interactionExpiresAt
+              ? { interactionExpiresAt: output.interactionExpiresAt }
+              : {}),
+            ...(output.usedStatefulChain !== undefined
+              ? { usedStatefulChain: output.usedStatefulChain }
+              : {}),
           },
         };
         if (isStaleOrAborted()) {
@@ -921,6 +949,23 @@ export function SpriteStudio() {
         renderSketchCanvas();
         setActiveNodeId(firstNode.id);
         setForkParentId(firstNode.id);
+
+        if (adapter instanceof AntigravityBridgeProvider) {
+          try {
+            const critique = await adapter.critiqueSprite(
+              providerConfig,
+              firstOutput.pngBytes,
+              activeProject.artBible,
+              promptDelta,
+              abortController.signal,
+            );
+            if (!isStaleOrAborted()) {
+              setBridgeCritique(critique);
+            }
+          } catch {
+            // Optional critique check failures never fail an already succeeded generation
+          }
+        }
       }
 
       await refreshSpriteNodes(startedProjectId);
@@ -1006,6 +1051,7 @@ export function SpriteStudio() {
           compiledPrompt: compiled.fullCompiledPrompt,
           variantCount: 1,
           goldenReferenceImages,
+          parentNode: activeViewportNode,
         },
         abortController.signal,
       );
@@ -1040,6 +1086,16 @@ export function SpriteStudio() {
           promptDelta: promptDelta || 'masked inpaint refinement',
           compiledPrompt: compiled.fullCompiledPrompt,
           createdAt: new Date().toISOString(),
+          ...(inpaintOutput.interactionId ? { interactionId: inpaintOutput.interactionId } : {}),
+          ...(inpaintOutput.parentInteractionId
+            ? { parentInteractionId: inpaintOutput.parentInteractionId }
+            : {}),
+          ...(inpaintOutput.interactionExpiresAt
+            ? { interactionExpiresAt: inpaintOutput.interactionExpiresAt }
+            : {}),
+          ...(inpaintOutput.usedStatefulChain !== undefined
+            ? { usedStatefulChain: inpaintOutput.usedStatefulChain }
+            : {}),
         },
       };
 
@@ -1816,6 +1872,9 @@ export function SpriteStudio() {
           onCopyAgentBrief={() => void handleCopyAgentBrief()}
           onDownloadSketchForAgent={handleDownloadSketchForAgent}
           onImportAgentSpriteFile={(file) => void handleImportAgentSprite(file)}
+          bridgeCritique={bridgeCritique}
+          chainNotice={chainNotice}
+          onApplySuggestedDelta={(delta) => setPromptDelta(delta)}
         />
       </div>
 

@@ -34,6 +34,8 @@ export interface ExportToDirectoryInput {
   slug: string;
   pngBytes: Uint8Array;
   recipe: AssetRecipe;
+  normalPngBytes?: Uint8Array;
+  extraFiles?: Record<string, Uint8Array>;
 }
 
 /**
@@ -65,6 +67,26 @@ export async function exportBundleToDirectory(
   const recipeWritable = await recipeHandle.createWritable();
   await recipeWritable.write(`${JSON.stringify(input.recipe, null, 2)}\n`);
   await recipeWritable.close();
+
+  if (input.normalPngBytes) {
+    const normHandle = await dirHandle.getFileHandle(`${input.slug}_n.png`, { create: true });
+    const normWritable = await normHandle.createWritable();
+    const normCopy = new Uint8Array(input.normalPngBytes.byteLength);
+    normCopy.set(input.normalPngBytes);
+    await normWritable.write(normCopy.buffer);
+    await normWritable.close();
+  }
+
+  if (input.extraFiles) {
+    for (const [name, bytes] of Object.entries(input.extraFiles)) {
+      const handle = await dirHandle.getFileHandle(name, { create: true });
+      const writable = await handle.createWritable();
+      const copy = new Uint8Array(bytes.byteLength);
+      copy.set(bytes);
+      await writable.write(copy.buffer);
+      await writable.close();
+    }
+  }
 
   return { directoryName: dirHandle.name };
 }

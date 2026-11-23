@@ -1,4 +1,4 @@
-import type { AdherenceLevel, ArtBible, ProviderConfig } from '../domain/schemas';
+import type { AdherenceLevel, ArtBible, ProviderConfig, SpriteNode } from '../domain/schemas';
 
 export interface ProviderCapabilities {
   supportsInpaint: boolean;
@@ -36,6 +36,7 @@ export interface ProviderGenerateRequest {
   compiledPrompt: string;
   variantCount: number;
   goldenReferenceImages?: readonly GoldenReferencePayload[];
+  parentNode?: SpriteNode | null;
 }
 
 export interface ProviderInpaintRequest extends ProviderGenerateRequest {
@@ -52,6 +53,10 @@ export interface ProviderOutput {
   pngBytes: Uint8Array;
   blob: Blob;
   sha256: string;
+  interactionId?: string;
+  parentInteractionId?: string;
+  interactionExpiresAt?: string;
+  usedStatefulChain?: boolean;
 }
 
 export interface ProviderAdapter {

@@ -11,6 +11,11 @@ import {
 } from 'lucide-react';
 import { ANTIGRAVITY_AGENT_PROVIDER_ID, OFFLINE_MOCK_PROVIDER_ID } from '../../db/database';
 import type { ProviderConfig, ProviderKind } from '../../domain/schemas';
+import {
+  clearBridgeSessionToken,
+  setBridgeSessionToken,
+} from '../../providers/antigravityBridgeProvider';
+import { DEFAULT_ANTIGRAVITY_BRIDGE_URL } from '../../providers/bridgeContract';
 import { DEFAULT_COMFYUI_BASE_URL } from '../../providers/comfyuiProvider';
 import {
   COMFYUI_PLACEHOLDER_TOKENS,
@@ -43,6 +48,15 @@ const KIND_DEFAULTS: Record<
     supportsMultiRef: true,
     supportsSeed: false,
     isLocal: false,
+  },
+  'antigravity-bridge': {
+    displayName: 'Google Antigravity Loopback Bridge',
+    endpointUrl: DEFAULT_ANTIGRAVITY_BRIDGE_URL,
+    modelId: 'gemini-2.5-flash-image',
+    supportsInpaint: true,
+    supportsMultiRef: true,
+    supportsSeed: true,
+    isLocal: true,
   },
   comfyui: {
     displayName: 'Local ComfyUI',
@@ -85,6 +99,7 @@ export function ProviderVaultModal() {
   const [modelId, setModelId] = useState(KIND_DEFAULTS.gemini.modelId);
   const [endpointUrl, setEndpointUrl] = useState(KIND_DEFAULTS.gemini.endpointUrl);
   const [apiKey, setApiKey] = useState('');
+  const [sessionOnlyToken, setSessionOnlyToken] = useState(true);
   const [customWorkflowJson, setCustomWorkflowJson] = useState(() =>
     JSON.stringify(DEFAULT_COMFYUI_WORKFLOW_TEMPLATE, null, 2),
   );
@@ -126,14 +141,21 @@ export function ProviderVaultModal() {
     const defaults = KIND_DEFAULTS[kind];
     const isLocal =
       defaults.isLocal || endpointUrl.includes('localhost') || endpointUrl.includes('127.0.0.1');
+    const id = globalThis.crypto.randomUUID();
+    const trimmedKey = apiKey.trim();
+    const persistKeyInDb = kind === 'antigravity-bridge' ? !sessionOnlyToken : true;
+
+    if (kind === 'antigravity-bridge') {
+      setBridgeSessionToken(id, trimmedKey);
+    }
 
     const newConfig: ProviderConfig = {
-      id: globalThis.crypto.randomUUID(),
+      id,
       kind,
       displayName: trimmedName,
       modelId: modelId.trim() || defaults.modelId,
       endpointUrl: endpointUrl.trim(),
-      apiKey: apiKey.trim(),
+      apiKey: persistKeyInDb ? trimmedKey : '',
       enabled: true,
       customWorkflowJson: kind === 'comfyui' ? customWorkflowJson.trim() : undefined,
       capabilities: {
@@ -263,7 +285,10 @@ export function ProviderVaultModal() {
                       {!isBuiltIn && (
                         <button
                           type="button"
-                          onClick={() => void deleteProvider(provider.id)}
+                          onClick={() => {
+                            clearBridgeSessionToken(provider.id);
+                            void deleteProvider(provider.id);
+                          }}
                           className="rounded-md border border-rose-500/30 bg-rose-500/10 p-1.5 text-rose-300 hover:bg-rose-500/20"
                           aria-label={`Delete ${provider.displayName}`}
                         >
@@ -333,6 +358,9 @@ export function ProviderVaultModal() {
                   className="w-full rounded-md border border-slate-700 bg-slate-900 px-3 py-1.5 text-sm text-slate-100 focus:border-indigo-500 focus:outline-none"
                 >
                   <option value="gemini">Gemini Multimodal BYOK</option>
+                  <option value="antigravity-bridge">
+                    Antigravity Loopback Bridge (127.0.0.1:4188)
+                  </option>
                   <option value="comfyui">Local ComfyUI (HTTP + WebSocket)</option>
                   <option value="openai-compatible">OpenAI-Compatible Image API</option>
                   <option value="custom-http">Custom HTTP Endpoint</option>
@@ -377,17 +405,45 @@ export function ProviderVaultModal() {
             </div>
 
             {kind !== 'comfyui' && (
-              <label className="block space-y-1 text-xs">
-                <span className="text-slate-300">API Key (Stored in Local IndexedDB Only)</span>
-                <input
-                  type="password"
-                  data-testid="vault-api-key-input"
-                  value={apiKey}
-                  onChange={(e) => setApiKey(e.target.value)}
-                  placeholder="Enter your provider API key"
-                  className="w-full rounded-md border border-slate-700 bg-slate-900 px-3 py-1.5 text-sm text-slate-100 focus:border-indigo-500 focus:outline-none"
-                />
-              </label>
+              <div className="space-y-2">
+                <label className="block space-y-1 text-xs">
+                  <span className="text-slate-300">
+                    {kind === 'antigravity-bridge'
+                      ? 'Ephemeral Session Token (nbg_... from nibgrid_bridge.py)'
+                      : 'API Key (Stored in Local IndexedDB Only)'}
+                  </span>
+                  <input
+                    type="password"
+                    data-testid="vault-api-key-input"
+                    value={apiKey}
+                    onChange={(e) => setApiKey(e.target.value)}
+                    placeholder={
+                      kind === 'antigravity-bridge'
+                        ? 'Paste nbg_... token printed in terminal'
+                        : 'Enter your provider API key'
+                    }
+                    className="w-full rounded-md border border-slate-700 bg-slate-900 px-3 py-1.5 text-sm text-slate-100 focus:border-indigo-500 focus:outline-none"
+                  />
+                </label>
+
+                {kind === 'antigravity-bridge' && (
+                  <div className="space-y-1.5 rounded border border-indigo-500/30 bg-indigo-950/20 p-2.5 text-[11px] text-slate-300">
+                    <label className="flex items-center gap-2 text-indigo-200">
+                      <input
+                        type="checkbox"
+                        data-testid="vault-session-only-toggle"
+                        checked={sessionOnlyToken}
+                        onChange={(e) => setSessionOnlyToken(e.target.checked)}
+                        className="accent-indigo-500"
+                      />
+                      Hold token in sessionStorage only (do not write to IndexedDB)
+                    </label>
+                    <p className="font-mono text-[10px] text-slate-400">
+                      Run locally: uv run .agents/skills/nibgrid/scripts/nibgrid_bridge.py
+                    </p>
+                  </div>
+                )}
+              </div>
             )}
 
             {kind === 'comfyui' && (

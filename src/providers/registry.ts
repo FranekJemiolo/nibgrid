@@ -1,4 +1,5 @@
 import type { ProviderConfig } from '../domain/schemas';
+import { AntigravityBridgeProvider } from './antigravityBridgeProvider';
 import { antigravityAgentProvider } from './antigravityProvider';
 import { ComfyUiProvider } from './comfyuiProvider';
 import { GeminiProvider } from './geminiProvider';
@@ -68,6 +69,9 @@ export function resolveProviderAdapter(config: ProviderConfig): ProviderAdapter 
   }
   if (config.kind === 'antigravity-agent') {
     return antigravityAgentProvider;
+  }
+  if (config.kind === 'antigravity-bridge') {
+    return new AntigravityBridgeProvider(config);
   }
   if (config.kind === 'gemini') {
     return new GeminiProvider(config);

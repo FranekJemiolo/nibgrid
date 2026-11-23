@@ -1,6 +1,15 @@
 import { useEffect } from 'react';
-import { BookOpen, FolderKanban, KeyRound, Layers, Paintbrush, ShieldCheck } from 'lucide-react';
+import {
+  BookOpen,
+  FolderKanban,
+  Grid2X2,
+  KeyRound,
+  Layers,
+  Paintbrush,
+  ShieldCheck,
+} from 'lucide-react';
 import { parseHashRoute, useAppStore } from './store/useAppStore';
+import { AtlasWorkshop } from './ui/atlas/AtlasWorkshop';
 import { ArtBibleEditor } from './ui/bible/ArtBibleEditor';
 import { ProjectHub } from './ui/hub/ProjectHub';
 import { ProviderVaultModal } from './ui/hub/ProviderVaultModal';
@@ -96,6 +105,19 @@ export function App() {
                 <Paintbrush className="h-3.5 w-3.5" />
                 Sprite Studio
               </button>
+              <button
+                type="button"
+                data-testid="nav-atlas-workshop"
+                onClick={() => void navigate({ screen: 'atlas', projectId: activeProject.id })}
+                className={`inline-flex items-center gap-2 rounded-md px-3 py-1.5 text-xs font-medium transition-colors ${
+                  route.screen === 'atlas'
+                    ? 'bg-indigo-600 text-white'
+                    : 'text-slate-300 hover:bg-slate-800 hover:text-white'
+                }`}
+              >
+                <Grid2X2 className="h-3.5 w-3.5" />
+                Atlas Packer
+              </button>
             </>
           )}
 
@@ -140,6 +162,8 @@ export function App() {
           <ArtBibleEditor />
         ) : route.screen === 'inspector' ? (
           <PostProcessInspector nodeId={route.nodeId} />
+        ) : route.screen === 'atlas' ? (
+          <AtlasWorkshop />
         ) : (
           <SpriteStudio />
         )}

@@ -1,6 +1,18 @@
-import { Copy, Dices, Download, Paintbrush, Sparkles, Upload, Wand2, X } from 'lucide-react';
+import {
+  Copy,
+  Dices,
+  Download,
+  Paintbrush,
+  ShieldAlert,
+  Sparkles,
+  Upload,
+  Wand2,
+  X,
+} from 'lucide-react';
 import { compilePrompt } from '../../domain/promptCompiler';
 import type { AdherenceLevel, ArtBible, ProviderConfig, SpriteNode } from '../../domain/schemas';
+import { selectStatefulInteractionChain } from '../../providers/antigravityBridgeProvider';
+import type { BridgeCritiqueResponse } from '../../providers/bridgeContract';
 import { resolveProviderAdapter } from '../../providers/registry';
 
 interface GenerationInspectorProps {
@@ -26,6 +38,9 @@ interface GenerationInspectorProps {
   onCopyAgentBrief?: () => void;
   onDownloadSketchForAgent?: () => void;
   onImportAgentSpriteFile?: (file: File) => void;
+  bridgeCritique?: BridgeCritiqueResponse | null;
+  onApplySuggestedDelta?: (delta: string) => void;
+  chainNotice?: string | null;
 }
 
 export function GenerationInspector({
@@ -51,10 +66,17 @@ export function GenerationInspector({
   onCopyAgentBrief,
   onDownloadSketchForAgent,
   onImportAgentSpriteFile,
+  bridgeCritique,
+  onApplySuggestedDelta,
+  chainNotice,
 }: GenerationInspectorProps) {
   const activeConfig = providers.find((p) => p.id === selectedProviderId) ?? providers[0];
   const adapter = activeConfig ? resolveProviderAdapter(activeConfig) : null;
   const compiled = compilePrompt(artBible, { adherence, promptDelta });
+  const bridgeDecision =
+    activeConfig?.kind === 'antigravity-bridge'
+      ? selectStatefulInteractionChain(activeParentNode, activeConfig.id)
+      : null;
 
   const costLabel = adapter
     ? adapter.estimateCost({
@@ -195,6 +217,23 @@ export function GenerationInspector({
               : 'No active node'}
           </span>
         </div>
+        {bridgeDecision &&
+          (bridgeDecision.usedStatefulChain || bridgeDecision.reAnchoredReason || chainNotice) && (
+            <div className="mt-1.5 border-t border-slate-800 pt-1.5">
+              <span
+                data-testid="bridge-chain-badge"
+                className={`inline-block rounded px-1.5 py-0.5 font-mono text-[10px] ${
+                  bridgeDecision.usedStatefulChain
+                    ? 'bg-emerald-500/15 text-emerald-300'
+                    : 'bg-amber-500/15 text-amber-300'
+                }`}
+              >
+                {bridgeDecision.usedStatefulChain
+                  ? `Stateful chain: ${bridgeDecision.previousInteractionId}`
+                  : (bridgeDecision.reAnchoredReason ?? chainNotice)}
+              </span>
+            </div>
+          )}
       </div>
 
       <div className="flex flex-col gap-2">
@@ -234,6 +273,56 @@ export function GenerationInspector({
           </button>
         )}
       </div>
+
+      {bridgeCritique && (
+        <div
+          data-testid="bridge-critique-card"
+          className="space-y-2 rounded-lg border border-amber-500/35 bg-amber-950/20 p-3 text-xs"
+        >
+          <div className="flex items-center justify-between">
+            <span className="inline-flex items-center gap-1.5 font-semibold text-amber-200">
+              <ShieldAlert className="h-3.5 w-3.5" />
+              Art Bible Critique
+            </span>
+            <span
+              data-testid="bridge-critique-score"
+              className={`rounded px-2 py-0.5 font-mono text-[11px] font-semibold ${
+                bridgeCritique.passed
+                  ? 'bg-emerald-500/20 text-emerald-300'
+                  : 'bg-rose-500/20 text-rose-300'
+              }`}
+            >
+              {bridgeCritique.score}/100
+            </span>
+          </div>
+
+          {bridgeCritique.driftFlags.length > 0 && (
+            <div data-testid="bridge-drift-flags" className="flex flex-wrap gap-1">
+              {bridgeCritique.driftFlags.map((flag) => (
+                <span
+                  key={flag}
+                  className="rounded border border-rose-500/30 bg-rose-500/15 px-1.5 py-0.5 font-mono text-[10px] text-rose-200"
+                >
+                  {flag}
+                </span>
+              ))}
+            </div>
+          )}
+
+          <p className="text-[11px] leading-relaxed text-slate-300">{bridgeCritique.rationale}</p>
+
+          {bridgeCritique.suggestedPromptDelta && onApplySuggestedDelta && (
+            <button
+              type="button"
+              data-testid="apply-suggested-delta-btn"
+              onClick={() => onApplySuggestedDelta(bridgeCritique.suggestedPromptDelta)}
+              className="w-full rounded border border-indigo-500/40 bg-indigo-600/25 px-2.5 py-1.5 text-[11px] font-semibold text-indigo-200 hover:bg-indigo-600/40"
+            >
+              Apply Suggested Delta
+            </button>
+          )}
+        </div>
+      )}
 
       {activeConfig?.kind === 'antigravity-agent' && (
         <div

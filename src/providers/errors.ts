@@ -77,6 +77,7 @@ export function redactSecrets(
   sanitized = sanitized
     .replace(/AIza[0-9A-Za-z_-]{6,}/g, '[REDACTED_KEY]')
     .replace(/sk-[0-9A-Za-z_-]{10,}/g, '[REDACTED_KEY]')
+    .replace(/nbg_[0-9A-Za-z_-]{4,}/g, '[REDACTED_KEY]')
     .replace(/([?&](?:key|api_key|token)=)[^&\s"']+/gi, '$1[REDACTED_KEY]');
 
   return sanitized;
@@ -195,16 +196,21 @@ export function classifyProviderError(
     /failed to fetch|networkerror|load failed|cors|err_connection/i.test(cleanMessage)
   ) {
     const isComfy = providerKind === 'comfyui';
+    const isBridge = providerKind === 'antigravity-bridge';
     const remediation = isComfy
       ? 'Start ComfyUI with CORS enabled: python main.py --enable-cors-header "*"'
-      : `Verify network connectivity and CORS headers for ${endpointUrl || 'the provider endpoint'}.`;
+      : isBridge
+        ? 'Start bridge: uv run .agents/skills/nibgrid/scripts/nibgrid_bridge.py (ensure Access-Control-Allow-Private-Network: true and allow loopback access for this origin).'
+        : `Verify network connectivity and CORS headers for ${endpointUrl || 'the provider endpoint'}.`;
     return new ProviderError({
       code: 'CORS_OR_OFFLINE',
       providerId,
       retryable: true,
       message: isComfy
         ? `Cannot reach ComfyUI (${cleanMessage}). ${remediation}`
-        : `Network or CORS error: ${cleanMessage}`,
+        : isBridge
+          ? `Cannot reach Antigravity Loopback Bridge (${cleanMessage}). ${remediation}`
+          : `Network or CORS error: ${cleanMessage}`,
       remediation,
     });
   }

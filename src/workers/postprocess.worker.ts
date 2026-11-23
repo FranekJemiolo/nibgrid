@@ -1,4 +1,5 @@
 import type { PostProcessConfig } from '../domain/schemas';
+import type { DetectedGrid } from '../processing/demixel';
 import { sha256Bytes } from '../processing/hash';
 import { runPostProcessPipeline } from '../processing/pipeline';
 import { encodeRgbaToPngBytes } from '../processing/png';
@@ -28,6 +29,11 @@ export interface PostProcessWorkerSuccess {
   height: number;
   pngBytes: Uint8Array;
   sha256: string;
+  detectedGrid?: DetectedGrid;
+  orphanStats?: {
+    removedIslands: number;
+    cleanedSpecks: number;
+  };
 }
 
 export interface PostProcessWorkerFailure {
@@ -168,6 +174,8 @@ export async function executePostProcessJob(
     height: processed.height,
     pngBytes,
     sha256,
+    detectedGrid: processed.detectedGrid,
+    orphanStats: processed.orphanStats,
   };
 }
 

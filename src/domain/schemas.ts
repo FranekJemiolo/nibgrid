@@ -50,6 +50,10 @@ export const GenerationMetaSchema = z.object({
   promptDelta: z.string(),
   compiledPrompt: z.string(),
   createdAt: z.string().min(1),
+  interactionId: z.string().min(1).optional(),
+  parentInteractionId: z.string().min(1).optional(),
+  interactionExpiresAt: z.string().min(1).optional(),
+  usedStatefulChain: z.boolean().optional(),
 });
 export type GenerationMeta = z.infer<typeof GenerationMetaSchema>;
 
@@ -67,6 +71,73 @@ export const PivotNormSchema = z.object({
   y: z.number().min(0).max(1),
 });
 export type PivotNorm = z.infer<typeof PivotNormSchema>;
+
+export const BevelProfileSchema = z.enum(['spherical-dome', 'smoothstep', 'linear']);
+export type BevelProfileOption = z.infer<typeof BevelProfileSchema>;
+
+export const NormalConventionSchema = z.enum(['opengl', 'directx']);
+export type NormalConventionOption = z.infer<typeof NormalConventionSchema>;
+
+export const NormalMapConfigSchema = z.object({
+  enabled: z.boolean().default(false),
+  bevelRadiusPx: z.number().int().min(1).max(64).default(16),
+  bevelProfile: BevelProfileSchema.default('spherical-dome'),
+  bevelStrength: z.number().min(0).max(10).default(2.5),
+  detailStrength: z.number().min(0).max(10).default(1.2),
+  convention: NormalConventionSchema.default('opengl'),
+});
+export type NormalMapConfig = z.infer<typeof NormalMapConfigSchema>;
+
+export function createDefaultNormalMapConfig(): NormalMapConfig {
+  return NormalMapConfigSchema.parse({});
+}
+
+export const PinRoleSchema = z.enum(['anchor', 'driver', 'tip']);
+export type PinRoleOption = z.infer<typeof PinRoleSchema>;
+
+export const MlsModeSchema = z.enum(['rigid', 'similarity']);
+export type MlsModeOption = z.infer<typeof MlsModeSchema>;
+
+export const AnimPresetSchema = z.enum([
+  'idle-breathe',
+  'wind-sway',
+  'hit-recoil',
+  'squash-stretch',
+]);
+export type AnimPresetOption = z.infer<typeof AnimPresetSchema>;
+
+export const PuppetPinSchema = z.object({
+  id: z.string().min(1),
+  x: z.number(),
+  y: z.number(),
+  role: PinRoleSchema,
+  label: z.string().optional(),
+});
+export type PuppetPinConfig = z.infer<typeof PuppetPinSchema>;
+
+export const PuppetAnimConfigSchema = z.object({
+  preset: AnimPresetSchema.default('idle-breathe'),
+  mode: MlsModeSchema.default('rigid'),
+  frameCount: z.number().int().min(2).max(24).default(6),
+  amplitudePx: z.number().min(0.5).max(24).default(3),
+  fps: z.number().int().min(1).max(30).default(8),
+  loop: z.boolean().default(true),
+  pingPong: z.boolean().default(false),
+  paddingPx: z.number().int().min(0).max(32).default(8),
+  reLockPolish: z.boolean().default(false),
+  pins: z.array(PuppetPinSchema).default([]),
+});
+export type PuppetAnimConfig = z.infer<typeof PuppetAnimConfigSchema>;
+
+export function createDefaultPuppetAnimConfig(): PuppetAnimConfig {
+  return PuppetAnimConfigSchema.parse({});
+}
+
+export const DemixelModeSchema = z.enum(['auto', 'manual']);
+export type DemixelMode = z.infer<typeof DemixelModeSchema>;
+
+export const SelOutModeSchema = z.enum(['off', 'outer', 'inner']);
+export type SelOutMode = z.infer<typeof SelOutModeSchema>;
 
 export const PostProcessConfigSchema = z.object({
   bgRemoval: BackgroundRemovalModeSchema,
@@ -88,6 +159,18 @@ export const PostProcessConfigSchema = z.object({
   trimMargin: z.number().int().min(0).max(64),
   padToPot: z.boolean(),
   pivotNorm: PivotNormSchema,
+  // M7: Pixel-Art Foundry (defaults keep M0-M6 behavior 100% preserved)
+  demixelEnabled: z.boolean().default(false),
+  demixelMode: DemixelModeSchema.default('auto'),
+  demixelCellSize: z.number().int().min(1).max(32).default(4),
+  orphanCleanEnabled: z.boolean().default(false),
+  maxIslandPixels: z.number().int().min(1).max(16).default(2),
+  removeInteriorSpecks: z.boolean().default(true),
+  selOutMode: SelOutModeSchema.default('off'),
+  selOutLighting: LightingSchema.default('top-left'),
+  selOutLitDarken: z.number().min(0).max(0.8).default(0.16),
+  selOutShadowDarken: z.number().min(0).max(0.8).default(0.36),
+  selOutSnapToPalette: z.boolean().default(true),
 });
 export type PostProcessConfig = z.infer<typeof PostProcessConfigSchema>;
 
@@ -114,6 +197,17 @@ export function createDefaultPostProcessConfig(
     trimMargin: 0,
     padToPot: false,
     pivotNorm: { x: 0.5, y: 0.5 },
+    demixelEnabled: false,
+    demixelMode: 'auto',
+    demixelCellSize: 4,
+    orphanCleanEnabled: false,
+    maxIslandPixels: 2,
+    removeInteriorSpecks: true,
+    selOutMode: 'off',
+    selOutLighting: 'top-left',
+    selOutLitDarken: 0.16,
+    selOutShadowDarken: 0.36,
+    selOutSnapToPalette: true,
   });
 }
 
@@ -126,6 +220,7 @@ export const SpriteNodeSchema = z.object({
   maskBlobId: z.string().min(1).optional(),
   processedBlobId: z.string().min(1).optional(),
   postProcessConfig: PostProcessConfigSchema.optional(),
+  puppetAnim: PuppetAnimConfigSchema.optional(),
   sketchSha256: z.string().regex(/^[0-9a-f]{64}$/, 'sketchSha256 must be a 64-char hex SHA-256'),
   generationMeta: GenerationMetaSchema,
 });
@@ -162,6 +257,7 @@ export type ProviderCapabilities = z.infer<typeof ProviderCapabilitiesSchema>;
 export const ProviderKindSchema = z.enum([
   'mock',
   'antigravity-agent',
+  'antigravity-bridge',
   'gemini',
   'comfyui',
   'openai-compatible',
