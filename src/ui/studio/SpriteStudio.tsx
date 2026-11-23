@@ -34,9 +34,14 @@ import {
 } from '../../domain/dag';
 import { compilePrompt } from '../../domain/promptCompiler';
 import type { SpriteNode } from '../../domain/schemas';
+import { toAssetSlug, triggerBlobDownload } from '../../export/zipPackager';
 import { CanvasHistory } from '../../processing/history';
 import { sha256Bytes } from '../../processing/hash';
-import { encodeRgbaToPngBytes, rgbaToPngBlob } from '../../processing/png';
+import { base64ToUint8, encodeRgbaToPngBytes, rgbaToPngBlob } from '../../processing/png';
+import {
+  buildAntigravityPromptBrief,
+  type NibgridAgentBridge,
+} from '../../providers/antigravityProvider';
 import { ProviderError } from '../../providers/errors';
 import { resolveProviderAdapter } from '../../providers/registry';
 import type { GoldenReferencePayload } from '../../providers/types';
@@ -1082,6 +1087,211 @@ export function SpriteStudio() {
     }
   };
 
+  const getAgentBriefText = useCallback((): string => {
+    if (!activeProject) return '';
+    const mode = maskPixelCount > 0 && activeViewportNode ? 'inpaint' : 'generate';
+    const compiled = compilePrompt(activeProject.artBible, { adherence, promptDelta });
+    return buildAntigravityPromptBrief({
+      projectName: activeProject.name,
+      artBible: activeProject.artBible,
+      adherence,
+      seed,
+      promptDelta,
+      compiledPrompt: compiled.fullCompiledPrompt,
+      negativePrompt: compiled.negativePrompt,
+      mode,
+    });
+  }, [activeProject, maskPixelCount, activeViewportNode, adherence, promptDelta, seed]);
+
+  const handleCopyAgentBrief = async () => {
+    if (!activeProject) return;
+    const brief = getAgentBriefText();
+    if (typeof navigator !== 'undefined' && navigator.clipboard?.writeText) {
+      await navigator.clipboard.writeText(brief);
+    }
+    setStatusMessage('Copied Antigravity IDE sprite brief to clipboard.');
+  };
+
+  const handleDownloadSketchForAgent = () => {
+    if (!activeProject) return;
+    const pngBlob = rgbaToPngBlob(sketchBufferRef.current, targetWidth, targetHeight);
+    const filename = `${toAssetSlug(activeProject.name)}-sketch.png`;
+    triggerBlobDownload(pngBlob, filename);
+    setStatusMessage(`Exported "${filename}" for Antigravity IDE agent handoff.`);
+  };
+
+  const handleImportAgentSprite = useCallback(
+    async (file: Blob, customPromptDelta?: string): Promise<string> => {
+      if (!activeProject) {
+        throw new Error('No active project open in Sprite Studio.');
+      }
+      const providerConfig = providers.find((p) => p.id === selectedProviderId) ?? providers[0];
+      if (!providerConfig) {
+        throw new Error('No provider configured in Provider Vault.');
+      }
+
+      const startedProjectId = activeProject.id;
+      let workingNodes = [...spriteNodes];
+      let parentNode = activeParentNode;
+
+      if (!parentNode) {
+        const savedRoot = await persistRootSketchNode(sketchBufferRef.current, 'sketch root');
+        if (!savedRoot) {
+          throw new Error('Failed to persist root sketch node.');
+        }
+        workingNodes = [savedRoot];
+        parentNode = savedRoot;
+      }
+
+      const decoded = await decodeBlobToRgba(file, targetWidth, targetHeight, 'stretch');
+      if (useAppStore.getState().activeProject?.id !== startedProjectId) {
+        return '';
+      }
+
+      const normalizedBlob = rgbaToPngBlob(decoded.rgba, targetWidth, targetHeight);
+      const imageBlobRecord = await repository.storeBlob(normalizedBlob, 'image/png');
+
+      const isInpaintImport = maskPixelCount > 0 && Boolean(activeViewportNode);
+      let maskBlobId: string | undefined;
+      if (isInpaintImport) {
+        const maskRgba = new Uint8ClampedArray(targetWidth * targetHeight * 4);
+        for (let i = 0; i < maskBufferRef.current.length; i++) {
+          if (maskBufferRef.current[i] === 1) {
+            const px = i * 4;
+            maskRgba[px] = 255;
+            maskRgba[px + 1] = 255;
+            maskRgba[px + 2] = 255;
+            maskRgba[px + 3] = 255;
+          } else {
+            maskRgba[i * 4 + 3] = 255;
+          }
+        }
+        const maskBlobRecord = await repository.storeBlob(
+          rgbaToPngBlob(maskRgba, targetWidth, targetHeight),
+          'image/png',
+        );
+        maskBlobId = maskBlobRecord.id;
+      }
+
+      const ancestry = getAncestorPath(workingNodes, parentNode.id);
+      const rootSketchSha = ancestry[0]?.sketchSha256 ?? parentNode.sketchSha256;
+      const effectiveDelta =
+        customPromptDelta?.trim() || promptDelta.trim() || 'antigravity-ide import';
+      const compiled = compilePrompt(activeProject.artBible, {
+        adherence,
+        promptDelta: effectiveDelta,
+      });
+
+      const importedNode: SpriteNode = {
+        id: globalThis.crypto.randomUUID(),
+        projectId: startedProjectId,
+        parentId: parentNode.id,
+        kind: isInpaintImport ? 'inpaint' : 'generation',
+        imageBlobId: imageBlobRecord.id,
+        maskBlobId,
+        sketchSha256: rootSketchSha,
+        generationMeta: {
+          providerId: providerConfig.id,
+          modelId: providerConfig.modelId,
+          seed,
+          adherence,
+          promptDelta: effectiveDelta,
+          compiledPrompt: compiled.fullCompiledPrompt,
+          createdAt: new Date().toISOString(),
+        },
+      };
+
+      appendChildNode(workingNodes, importedNode);
+      await repository.saveSpriteNode(importedNode);
+      if (useAppStore.getState().activeProject?.id !== startedProjectId) {
+        return '';
+      }
+
+      lastLoadedNodeIdRef.current = importedNode.id;
+      sketchBufferRef.current = decoded.rgba;
+      historyRef.current.reset(decoded.rgba);
+      if (isInpaintImport) {
+        maskBufferRef.current = new Uint8Array(targetWidth * targetHeight);
+        renderMaskCanvas();
+      }
+      syncHistoryFlags();
+      renderSketchCanvas();
+      setActiveNodeId(importedNode.id);
+      setForkParentId(importedNode.id);
+
+      await refreshSpriteNodes(startedProjectId);
+      setStatusMessage(`Imported Antigravity IDE sprite node (seed #${seed}).`);
+      return importedNode.id;
+    },
+    [
+      activeProject,
+      providers,
+      selectedProviderId,
+      spriteNodes,
+      activeParentNode,
+      activeViewportNode,
+      maskPixelCount,
+      persistRootSketchNode,
+      targetWidth,
+      targetHeight,
+      promptDelta,
+      adherence,
+      seed,
+      renderMaskCanvas,
+      syncHistoryFlags,
+      renderSketchCanvas,
+      refreshSpriteNodes,
+    ],
+  );
+
+  const agentBridgeRef = useRef<NibgridAgentBridge | null>(null);
+  agentBridgeRef.current = activeProject
+    ? {
+        getBrief: getAgentBriefText,
+        getState: () => ({
+          projectId: activeProject.id,
+          projectName: activeProject.name,
+          targetWidth,
+          targetHeight,
+          nodeCount: spriteNodes.length,
+          activeNodeId: activeViewportNode?.id ?? null,
+          selectedProviderId,
+        }),
+        importPngBase64: async (base64Png: string, promptDeltaOverride?: string) => {
+          const cleanBase64 = base64Png.replace(/^data:image\/[^;]+;base64,/, '');
+          const bytes = base64ToUint8(cleanBase64);
+          const copy = new Uint8Array(bytes.byteLength);
+          copy.set(bytes);
+          return handleImportAgentSprite(
+            new Blob([copy.buffer], { type: 'image/png' }),
+            promptDeltaOverride,
+          );
+        },
+      }
+    : null;
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    window.__NIBGRID_AGENT_BRIDGE__ = {
+      getBrief: () => agentBridgeRef.current?.getBrief() ?? '',
+      getState: () => {
+        if (!agentBridgeRef.current) {
+          throw new Error('No active Sprite Studio project mounted.');
+        }
+        return agentBridgeRef.current.getState();
+      },
+      importPngBase64: async (base64Png: string, promptDeltaOverride?: string) => {
+        if (!agentBridgeRef.current) {
+          throw new Error('No active Sprite Studio project mounted.');
+        }
+        return agentBridgeRef.current.importPngBase64(base64Png, promptDeltaOverride);
+      },
+    };
+    return () => {
+      delete window.__NIBGRID_AGENT_BRIDGE__;
+    };
+  }, []);
+
   if (!activeProject) {
     return null;
   }
@@ -1563,6 +1773,9 @@ export function SpriteStudio() {
           onGenerate={() => void handleGenerate()}
           onInpaint={() => void handleInpaint()}
           onCancel={() => generationAbortRef.current?.abort()}
+          onCopyAgentBrief={() => void handleCopyAgentBrief()}
+          onDownloadSketchForAgent={handleDownloadSketchForAgent}
+          onImportAgentSpriteFile={(file) => void handleImportAgentSprite(file)}
         />
       </div>
 

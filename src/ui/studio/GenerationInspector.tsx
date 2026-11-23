@@ -1,4 +1,4 @@
-import { Dices, Paintbrush, Sparkles, Wand2, X } from 'lucide-react';
+import { Copy, Dices, Download, Paintbrush, Sparkles, Upload, Wand2, X } from 'lucide-react';
 import { compilePrompt } from '../../domain/promptCompiler';
 import type { AdherenceLevel, ArtBible, ProviderConfig, SpriteNode } from '../../domain/schemas';
 import { resolveProviderAdapter } from '../../providers/registry';
@@ -23,6 +23,9 @@ interface GenerationInspectorProps {
   onGenerate: () => void;
   onInpaint: () => void;
   onCancel?: () => void;
+  onCopyAgentBrief?: () => void;
+  onDownloadSketchForAgent?: () => void;
+  onImportAgentSpriteFile?: (file: File) => void;
 }
 
 export function GenerationInspector({
@@ -45,6 +48,9 @@ export function GenerationInspector({
   onGenerate,
   onInpaint,
   onCancel,
+  onCopyAgentBrief,
+  onDownloadSketchForAgent,
+  onImportAgentSpriteFile,
 }: GenerationInspectorProps) {
   const activeConfig = providers.find((p) => p.id === selectedProviderId) ?? providers[0];
   const adapter = activeConfig ? resolveProviderAdapter(activeConfig) : null;
@@ -228,6 +234,58 @@ export function GenerationInspector({
           </button>
         )}
       </div>
+
+      {activeConfig?.kind === 'antigravity-agent' && (
+        <div
+          data-testid="antigravity-handoff-panel"
+          className="space-y-2 rounded-lg border border-indigo-500/35 bg-indigo-950/25 p-3"
+        >
+          <p className="text-[11px] font-semibold tracking-wider text-indigo-300 uppercase">
+            Antigravity IDE Handoff
+          </p>
+          <p className="text-[11px] leading-relaxed text-slate-300">
+            Copy the compiled brief for Antigravity IDE&apos;s image tool or import any
+            agent-rendered PNG directly into the sprite DAG.
+          </p>
+          <div className="flex flex-col gap-1.5">
+            <button
+              type="button"
+              data-testid="copy-agent-brief-btn"
+              onClick={onCopyAgentBrief}
+              className="inline-flex items-center justify-center gap-1.5 rounded border border-slate-700 bg-slate-900 px-2.5 py-1.5 text-xs font-medium text-slate-200 hover:bg-slate-800"
+            >
+              <Copy className="h-3.5 w-3.5 text-indigo-400" />
+              Copy Prompt Brief
+            </button>
+            <button
+              type="button"
+              data-testid="download-agent-sketch-btn"
+              onClick={onDownloadSketchForAgent}
+              className="inline-flex items-center justify-center gap-1.5 rounded border border-slate-700 bg-slate-900 px-2.5 py-1.5 text-xs font-medium text-slate-200 hover:bg-slate-800"
+            >
+              <Download className="h-3.5 w-3.5 text-indigo-400" />
+              Export Sketch PNG
+            </button>
+            <label className="inline-flex cursor-pointer items-center justify-center gap-1.5 rounded border border-emerald-500/40 bg-emerald-500/15 px-2.5 py-1.5 text-xs font-semibold text-emerald-200 hover:bg-emerald-500/25">
+              <Upload className="h-3.5 w-3.5" />
+              Import Agent PNG into DAG
+              <input
+                type="file"
+                data-testid="import-agent-sprite-input"
+                accept="image/png,image/jpeg,image/webp"
+                className="hidden"
+                onChange={(event) => {
+                  const file = event.target.files?.[0];
+                  event.target.value = '';
+                  if (file && onImportAgentSpriteFile) {
+                    onImportAgentSpriteFile(file);
+                  }
+                }}
+              />
+            </label>
+          </div>
+        </div>
+      )}
 
       <div className="space-y-1 border-t border-slate-800 pt-3">
         <div className="flex items-center gap-1.5 text-[11px] font-medium text-slate-400">

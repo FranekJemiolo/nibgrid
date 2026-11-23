@@ -207,4 +207,51 @@ test.describe('M4 Live BYOK (Gemini) & Local ComfyUI Adapters', () => {
     expect(consoleErrors).toEqual([]);
     expect(pageErrors).toEqual([]);
   });
+
+  test('supports Google Antigravity IDE Agent Handoff file import & programmatic bridge', async ({
+    page,
+  }) => {
+    const consoleErrors: string[] = [];
+    const pageErrors: string[] = [];
+    page.on('console', (msg) => {
+      if (msg.type() === 'error') consoleErrors.push(msg.text());
+    });
+    page.on('pageerror', (err) => pageErrors.push(err.message));
+
+    await page.goto('/');
+    await page.getByTestId('new-project-name').fill('Antigravity IDE Project');
+    await page.getByTestId('create-project-btn').click();
+    await page.getByTestId('go-to-studio-btn').click();
+    await expect(page.getByTestId('sprite-studio')).toBeVisible();
+
+    await page.getByTestId('sketch-upload-input').setInputFiles(RAW_SKETCH_FIXTURE);
+    await expect(page.getByTestId('studio-status')).toContainText('Loaded sketch');
+
+    await page.getByTestId('provider-select').selectOption('antigravity-agent');
+    await expect(page.getByTestId('cost-estimate-badge')).toContainText('$0.00 — Antigravity IDE');
+    await expect(page.getByTestId('antigravity-handoff-panel')).toBeVisible();
+    await expect(page.getByTestId('copy-agent-brief-btn')).toBeVisible();
+    await expect(page.getByTestId('download-agent-sketch-btn')).toBeVisible();
+
+    await page.getByTestId('import-agent-sprite-input').setInputFiles(GOLDEN_REF_FIXTURE);
+    await expect(page.locator('[data-node-kind="generation"]')).toHaveCount(1);
+
+    const pngBase64 = readFileSync(GOLDEN_REF_FIXTURE).toString('base64');
+    const bridgeResult = await page.evaluate(async (b64) => {
+      const bridge = window.__NIBGRID_AGENT_BRIDGE__;
+      if (!bridge) throw new Error('Bridge not exposed');
+      const brief = bridge.getBrief();
+      const newId = await bridge.importPngBase64(b64, 'agent bridge refinement');
+      const state = bridge.getState();
+      return { brief, newId, state };
+    }, pngBase64);
+
+    expect(bridgeResult.brief).toContain('Antigravity IDE Project');
+    expect(bridgeResult.newId.length).toBeGreaterThan(0);
+    expect(bridgeResult.state.nodeCount).toBe(3);
+    await expect(page.locator('[data-node-kind="generation"]')).toHaveCount(2);
+
+    expect(consoleErrors).toEqual([]);
+    expect(pageErrors).toEqual([]);
+  });
 });

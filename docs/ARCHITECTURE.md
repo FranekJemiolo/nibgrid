@@ -6,7 +6,7 @@
 - `src/processing/`: Pure TypeScript pixel-buffer (`Uint8ClampedArray`) image transforms, adaptive thresholding, ink bounding-box alignment, SHA-256 hashing (`crypto.subtle`), deterministic PNG encoding/decoding, canvas undo/redo history, and procedural sprite synthesis.
 - `src/workers/`: Thin Dedicated Web Worker wrappers (`normalize.worker.ts`, `postprocess.worker.ts`) executing `src/processing/` math off the main UI thread (plus lazy WebGPU / single-threaded WASM segmentation without COEP headers).
 - `src/db/`: Typed Dexie.js IndexedDB persistence layer with runtime Zod validation and explicit cascade deletion for orphaned binary blobs.
-- `src/providers/`: `ProviderAdapter` contract, built-in `OfflineMockProvider`, `GeminiProvider` (direct browser BYOK multimodal REST client), `ComfyUiProvider` (local HTTP + WebSocket workflow runner with versioned JSON templates), and `ProviderError` classifier with secret redaction.
+- `src/providers/`: `ProviderAdapter` contract, built-in `OfflineMockProvider`, `AntigravityAgentProvider` (Google Antigravity IDE / Agent Handoff + `window.__NIBGRID_AGENT_BRIDGE__`), `GeminiProvider` (direct browser BYOK multimodal REST client), `ComfyUiProvider` (local HTTP + WebSocket workflow runner with versioned JSON templates), and `ProviderError` classifier with secret redaction.
 - `src/export/`: Reproducible `asset.recipe.json` (v1.0.0) Zod builder, `fflate` ZIP bundler, and File System Access API local folder writer.
 - `src/store/`: Zustand store coordinating active project state, studio viewport controls, and persistence synchronization.
 - `src/ui/`: React 19 UI organized into four screens:

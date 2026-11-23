@@ -1,4 +1,5 @@
 import type { ProviderConfig } from '../domain/schemas';
+import { antigravityAgentProvider } from './antigravityProvider';
 import { ComfyUiProvider } from './comfyuiProvider';
 import { GeminiProvider } from './geminiProvider';
 import { offlineMockProvider } from './mockProvider';
@@ -64,6 +65,9 @@ class UnconfiguredHttpAdapter implements ProviderAdapter {
 export function resolveProviderAdapter(config: ProviderConfig): ProviderAdapter {
   if (config.kind === 'mock') {
     return offlineMockProvider;
+  }
+  if (config.kind === 'antigravity-agent') {
+    return antigravityAgentProvider;
   }
   if (config.kind === 'gemini') {
     return new GeminiProvider(config);

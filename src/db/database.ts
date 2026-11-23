@@ -15,6 +15,7 @@ import {
 import { sha256Bytes } from '../processing/hash';
 
 export const OFFLINE_MOCK_PROVIDER_ID = 'offline-mock';
+export const ANTIGRAVITY_AGENT_PROVIDER_ID = 'antigravity-agent';
 
 export interface ProjectSummary {
   project: Project;
@@ -67,6 +68,25 @@ export function createDefaultMockProviderConfig(): ProviderConfig {
   });
 }
 
+export function createDefaultAntigravityProviderConfig(): ProviderConfig {
+  return ProviderConfigSchema.parse({
+    id: ANTIGRAVITY_AGENT_PROVIDER_ID,
+    kind: 'antigravity-agent',
+    displayName: 'Google Antigravity IDE / Agent Handoff',
+    modelId: 'antigravity-ide-bridge-v1',
+    endpointUrl: 'ide://antigravity-agent-bridge',
+    apiKey: '',
+    enabled: true,
+    capabilities: {
+      supportsInpaint: true,
+      supportsMultiRef: true,
+      supportsSeed: true,
+      isLocal: true,
+    },
+    updatedAt: nowIso(),
+  });
+}
+
 export class NibgridRepository {
   private readonly database: NibgridDatabase;
 
@@ -76,13 +96,21 @@ export class NibgridRepository {
 
   async ensureDefaultProviderConfigs(): Promise<ProviderConfig[]> {
     const existing = await this.database.providerConfigs.toArray();
-    const hasMock = existing.some((cfg) => cfg.id === OFFLINE_MOCK_PROVIDER_ID);
-    if (!hasMock) {
-      const mockConfig = createDefaultMockProviderConfig();
-      await this.database.providerConfigs.put(mockConfig);
+    if (!existing.some((cfg) => cfg.id === OFFLINE_MOCK_PROVIDER_ID)) {
+      await this.database.providerConfigs.put(createDefaultMockProviderConfig());
+    }
+    if (!existing.some((cfg) => cfg.id === ANTIGRAVITY_AGENT_PROVIDER_ID)) {
+      await this.database.providerConfigs.put(createDefaultAntigravityProviderConfig());
     }
     const all = await this.database.providerConfigs.toArray();
-    return all.map((item) => ProviderConfigSchema.parse(item));
+    const priority = (id: string): number => {
+      if (id === OFFLINE_MOCK_PROVIDER_ID) return 0;
+      if (id === ANTIGRAVITY_AGENT_PROVIDER_ID) return 1;
+      return 2;
+    };
+    return all
+      .map((item) => ProviderConfigSchema.parse(item))
+      .sort((a, b) => priority(a.id) - priority(b.id));
   }
 
   async listProviderConfigs(): Promise<ProviderConfig[]> {
@@ -99,8 +127,8 @@ export class NibgridRepository {
   }
 
   async deleteProviderConfig(id: string): Promise<void> {
-    if (id === OFFLINE_MOCK_PROVIDER_ID) {
-      throw new Error('The built-in Offline Mock Provider cannot be deleted.');
+    if (id === OFFLINE_MOCK_PROVIDER_ID || id === ANTIGRAVITY_AGENT_PROVIDER_ID) {
+      throw new Error('Built-in local providers cannot be deleted.');
     }
     await this.database.providerConfigs.delete(id);
   }

@@ -1,6 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
+import { createDefaultAntigravityProviderConfig } from '../../src/db/database';
 import { compilePrompt } from '../../src/domain/promptCompiler';
 import { createDefaultArtBible, type ProviderConfig } from '../../src/domain/schemas';
 import {
@@ -8,6 +9,11 @@ import {
   decodePngBytesToRgba,
   encodeRgbaToPngBytes,
 } from '../../src/processing/png';
+import {
+  ANTIGRAVITY_AGENT_PROVIDER_ID,
+  antigravityAgentProvider,
+  buildAntigravityPromptBrief,
+} from '../../src/providers/antigravityProvider';
 import {
   ADHERENCE_DENOISE_WEIGHTS,
   DEFAULT_COMFYUI_WORKFLOW_TEMPLATE,
@@ -203,5 +209,32 @@ describe('M4 PNG Round-Trip & Live Provider Payload Builders', () => {
     expect(errCors.code).toBe('CORS_OR_OFFLINE');
     expect(errCors.remediation).toContain('--enable-cors-header');
     expect(errCors.message).toContain('--enable-cors-header');
+  });
+
+  it('builds structured Antigravity IDE prompt briefs and validates bridge adapter readiness', async () => {
+    const bible = createDefaultArtBible();
+    const compiled = compilePrompt(bible, { adherence: 'strict', promptDelta: 'golden helm' });
+    const cfg = createDefaultAntigravityProviderConfig();
+
+    expect(cfg.id).toBe(ANTIGRAVITY_AGENT_PROVIDER_ID);
+    const brief = buildAntigravityPromptBrief({
+      projectName: 'Antigravity Knight',
+      artBible: bible,
+      adherence: 'strict',
+      seed: 1024,
+      promptDelta: 'golden helm',
+      compiledPrompt: compiled.fullCompiledPrompt,
+      negativePrompt: compiled.negativePrompt,
+      mode: 'generate',
+    });
+
+    expect(brief).toContain('Nibgrid -> Google Antigravity IDE Sprite Brief');
+    expect(brief).toContain('Antigravity Knight');
+    expect(brief).toContain(bible.projection);
+    expect(brief).toContain('golden helm');
+
+    const conn = await antigravityAgentProvider.testConnection(cfg);
+    expect(conn.ok).toBe(true);
+    expect(conn.message).toContain('Antigravity IDE');
   });
 });

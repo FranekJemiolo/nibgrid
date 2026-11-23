@@ -8,6 +8,7 @@ Local-first, zero-server Bring-Your-Own-Key / Bring-Your-Own-Model (BYOK/BYOM) P
 
 - **100% Client-Side & Zero-Cost Static PWA:** Runs entirely in the browser with no backend server, deployable cleanly to GitHub Pages under a configurable base path (`VITE_BASE_PATH=/nibgrid/`).
 - **Art Bible Style Lock & Branching DAG Studio:** Persists projects, color palettes (`.gpl` / `.hex`), Golden Style References, sketch/inpaint masks, and non-destructive sprite lineage DAG nodes in local IndexedDB (`Dexie.js`) validated by `Zod`.
+- **Google Antigravity IDE / Agent Integration:** Select **Google Antigravity IDE / Agent Handoff** (`antigravity-agent`) in Sprite Studio to copy style-locked Markdown briefs, export sketch PNGs, or import agent-generated PNG sprites into the DAG via the UI or `window.__NIBGRID_AGENT_BRIDGE__`. Includes [AGENTS.md](AGENTS.md), [GEMINI.md](GEMINI.md), and the workspace skill in [.agents/skills/nibgrid-agent-workflow/SKILL.md](.agents/skills/nibgrid-agent-workflow/SKILL.md).
 - **Worker-Isolated Image Processing & Export:** Sketch normalization, Chroma-Key cutout, interior-RGB defringing, OKLab palette quantization + 4×4 Bayer dithering, Nearest-Neighbor / Area-Average resampling, auto-trim, PoT padding, and `asset.recipe.json` + `.zip` packaging execute purely on-device.
 
 ## Development

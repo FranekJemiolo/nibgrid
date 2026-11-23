@@ -161,6 +161,7 @@ export type ProviderCapabilities = z.infer<typeof ProviderCapabilitiesSchema>;
 
 export const ProviderKindSchema = z.enum([
   'mock',
+  'antigravity-agent',
   'gemini',
   'comfyui',
   'openai-compatible',

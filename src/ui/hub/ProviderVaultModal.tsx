@@ -9,7 +9,7 @@ import {
   Trash2,
   X,
 } from 'lucide-react';
-import { OFFLINE_MOCK_PROVIDER_ID } from '../../db/database';
+import { ANTIGRAVITY_AGENT_PROVIDER_ID, OFFLINE_MOCK_PROVIDER_ID } from '../../db/database';
 import type { ProviderConfig, ProviderKind } from '../../domain/schemas';
 import { DEFAULT_COMFYUI_BASE_URL } from '../../providers/comfyuiProvider';
 import {
@@ -21,7 +21,7 @@ import { DEFAULT_GEMINI_BASE_URL } from '../../providers/geminiProvider';
 import { resolveProviderAdapter } from '../../providers/registry';
 import { useAppStore } from '../../store/useAppStore';
 
-type ConfigurableKind = Exclude<ProviderKind, 'mock'>;
+type ConfigurableKind = Exclude<ProviderKind, 'mock' | 'antigravity-agent'>;
 
 const KIND_DEFAULTS: Record<
   ConfigurableKind,
@@ -226,7 +226,9 @@ export function ProviderVaultModal() {
               Registered Providers ({providers.length})
             </h3>
             {providers.map((provider) => {
-              const isMock = provider.id === OFFLINE_MOCK_PROVIDER_ID;
+              const isBuiltIn =
+                provider.id === OFFLINE_MOCK_PROVIDER_ID ||
+                provider.id === ANTIGRAVITY_AGENT_PROVIDER_ID;
               const status = testResult[provider.id];
               return (
                 <div
@@ -258,7 +260,7 @@ export function ProviderVaultModal() {
                       >
                         {testingId === provider.id ? 'Testing...' : 'Test Connection'}
                       </button>
-                      {!isMock && (
+                      {!isBuiltIn && (
                         <button
                           type="button"
                           onClick={() => void deleteProvider(provider.id)}
