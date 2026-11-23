@@ -1,0 +1,18 @@
+{
+  "name": "Nibgrid — Local-First 2D Sprite Studio",
+  "short_name": "Nibgrid",
+  "description": "Local-first, zero-server BYOK/BYOM PWA for turning sketches into style-locked 2D game sprites.",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#020617",
+  "theme_color": "#020617",
+  "icons": [
+    {
+      "src": "./icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}

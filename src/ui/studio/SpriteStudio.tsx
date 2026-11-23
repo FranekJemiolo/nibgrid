@@ -505,21 +505,81 @@ export function SpriteStudio() {
     }
   };
 
-  const handleUndo = () => {
+  const handleUndo = useCallback(() => {
     const prev = historyRef.current.undo();
     if (!prev) return;
     sketchBufferRef.current = prev;
     syncHistoryFlags();
     renderSketchCanvas();
-  };
+  }, [renderSketchCanvas, syncHistoryFlags]);
 
-  const handleRedo = () => {
+  const handleRedo = useCallback(() => {
     const next = historyRef.current.redo();
     if (!next) return;
     sketchBufferRef.current = next;
     syncHistoryFlags();
     renderSketchCanvas();
-  };
+  }, [renderSketchCanvas, syncHistoryFlags]);
+
+  const toolBeforeSpaceRef = useRef<StudioTool | null>(null);
+  const currentToolRef = useRef(tool);
+  currentToolRef.current = tool;
+
+  useEffect(() => {
+    const isEditableElement = (target: EventTarget | null): boolean => {
+      if (!(target instanceof HTMLElement)) return false;
+      const tag = target.tagName;
+      return tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT' || target.isContentEditable;
+    };
+
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (isEditableElement(event.target)) return;
+
+      if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === 'z') {
+        event.preventDefault();
+        if (event.shiftKey) {
+          handleRedo();
+        } else {
+          handleUndo();
+        }
+        return;
+      }
+
+      if (event.code === 'Space' && !event.repeat) {
+        event.preventDefault();
+        if (currentToolRef.current !== 'pan') {
+          toolBeforeSpaceRef.current = currentToolRef.current;
+          setTool('pan');
+        }
+        return;
+      }
+
+      const lower = event.key.toLowerCase();
+      if (lower === 'b') {
+        setTool('sketch-pen');
+      } else if (lower === 'e') {
+        setTool('sketch-eraser');
+      } else if (lower === 'm') {
+        setTool((prev) => (prev === 'mask-brush' ? 'sketch-pen' : 'mask-brush'));
+      } else if (lower === 'g') {
+        setShowPixelGrid((prev) => !prev);
+      }
+    };
+
+    const onKeyUp = (event: KeyboardEvent) => {
+      if (event.code === 'Space' && toolBeforeSpaceRef.current) {
+        setTool(toolBeforeSpaceRef.current);
+        toolBeforeSpaceRef.current = null;
+      }
+    };
+
+    window.addEventListener('keydown', onKeyDown);
+    window.addEventListener('keyup', onKeyUp);
+    return () => {
+      window.removeEventListener('keydown', onKeyDown);
+      window.removeEventListener('keyup', onKeyUp);
+    };
+  }, [handleUndo, handleRedo]);
 
   const handleClearSketch = async () => {
     const blank = createBlankWhiteRgba(targetWidth, targetHeight);
@@ -1228,6 +1288,16 @@ export function SpriteStudio() {
                 Clear Mask
               </button>
             </div>
+          </div>
+
+          <div
+            data-testid="shortcuts-hint"
+            className="space-y-1 border-t border-slate-800 pt-3 text-[11px] text-slate-500"
+          >
+            <p className="font-semibold tracking-wider text-slate-400 uppercase">Shortcuts</p>
+            <p className="font-mono leading-relaxed">
+              B Brush · E Eraser · M Mask · G Grid · Space Pan · Cmd/Ctrl+Z Undo
+            </p>
           </div>
         </aside>
 

@@ -1,15 +1,19 @@
 import {
   useCallback,
   useEffect,
+  useMemo,
   useRef,
   useState,
   type PointerEvent as ReactPointerEvent,
 } from 'react';
 import {
   ArrowLeft,
+  Crosshair,
+  Download,
   Eraser,
+  FileArchive,
+  FolderOutput,
   Grid3X3,
-  Layers,
   Palette,
   Sliders,
   Sparkles,
@@ -25,7 +29,11 @@ import {
   type ResampleMode,
   type SpriteNode,
 } from '../../domain/schemas';
-import { decodePngBytesToRgba, rgbaToPngBlob } from '../../processing/png';
+import { exportBundleToDirectory, supportsFileSystemAccess } from '../../export/fsAccess';
+import { buildAssetRecipe, computePivotPx } from '../../export/recipeBuilder';
+import { packageSpriteZip, toAssetSlug, triggerBlobDownload } from '../../export/zipPackager';
+import { runPostProcessPipeline } from '../../processing/pipeline';
+import { decodePngBytesToRgba, encodeRgbaToPngBytes, rgbaToPngBlob } from '../../processing/png';
 import { useAppStore } from '../../store/useAppStore';
 import { runPostProcessInWorker } from '../../workers/postprocessClient';
 
@@ -85,6 +93,8 @@ export function PostProcessInspector({ nodeId }: { nodeId: string }) {
   const [isProcessing, setIsProcessing] = useState(false);
   const [aiProgress, setAiProgress] = useState<{ phase: string; progress: number } | null>(null);
   const [workerError, setWorkerError] = useState<string | null>(null);
+  const [pivotPlaceMode, setPivotPlaceMode] = useState(false);
+  const [exportNotice, setExportNotice] = useState<string | null>(null);
 
   const rawCanvasRef = useRef<HTMLCanvasElement | null>(null);
   const processedCanvasRef = useRef<HTMLCanvasElement | null>(null);
@@ -92,10 +102,28 @@ export function PostProcessInspector({ nodeId }: { nodeId: string }) {
   const draggingSplitRef = useRef(false);
 
   const rawImageRef = useRef<DecodedImage | null>(null);
+  const processedArtifactRef = useRef<{
+    rgba: Uint8ClampedArray;
+    width: number;
+    height: number;
+    pngBytes: Uint8Array;
+    pipelineKey: string;
+  } | null>(null);
   const latestNodeRef = useRef<SpriteNode | undefined>(targetNode);
   latestNodeRef.current = targetNode;
   const targetNodeId = targetNode?.id;
   const targetImageBlobId = targetNode?.imageBlobId;
+
+  const pipelineKey = useMemo(
+    () =>
+      JSON.stringify({
+        ...config,
+        pivotNorm: undefined,
+      }),
+    [config],
+  );
+  const latestConfigRef = useRef(config);
+  latestConfigRef.current = config;
 
   // Sync initial config when node changes
   useEffect(() => {
@@ -141,7 +169,7 @@ export function PostProcessInspector({ nodeId }: { nodeId: string }) {
     };
   }, [targetNodeId, targetImageBlobId, drawCanvasBuffer]);
 
-  // Execute post-processing pipeline in Dedicated Worker whenever config or raw image changes
+  // Execute post-processing pipeline in Dedicated Worker whenever pixel pipeline params change
   useEffect(() => {
     if (!activeProject || !targetNodeId) return;
     let cancelled = false;
@@ -150,9 +178,10 @@ export function PostProcessInspector({ nodeId }: { nodeId: string }) {
       const raw = rawImageRef.current;
       if (!raw) return;
 
+      const activeConfig = latestConfigRef.current;
       setIsProcessing(true);
       setWorkerError(null);
-      if (config.bgRemoval !== 'ai-rembg') {
+      if (activeConfig.bgRemoval !== 'ai-rembg') {
         setAiProgress(null);
       }
 
@@ -160,7 +189,7 @@ export function PostProcessInspector({ nodeId }: { nodeId: string }) {
         rgba: raw.rgba,
         width: raw.width,
         height: raw.height,
-        config,
+        config: activeConfig,
         paletteHex: activeProject.artBible.palette,
         onProgress: (phase, progress) => {
           if (!cancelled) {
@@ -170,6 +199,13 @@ export function PostProcessInspector({ nodeId }: { nodeId: string }) {
       })
         .then(async (result) => {
           if (cancelled) return;
+          processedArtifactRef.current = {
+            rgba: result.rgba,
+            width: result.width,
+            height: result.height,
+            pngBytes: result.pngBytes,
+            pipelineKey,
+          };
           setProcessedSize({ width: result.width, height: result.height });
           drawCanvasBuffer(processedCanvasRef.current, result.rgba, result.width, result.height);
           setAiProgress(null);
@@ -182,7 +218,7 @@ export function PostProcessInspector({ nodeId }: { nodeId: string }) {
           await repository.saveSpriteNode({
             ...nodeSnapshot,
             processedBlobId: stored.id,
-            postProcessConfig: config,
+            postProcessConfig: latestConfigRef.current,
           });
           await repository.cleanupOrphanedBlobs();
           if (!cancelled) {
@@ -204,7 +240,7 @@ export function PostProcessInspector({ nodeId }: { nodeId: string }) {
       window.clearTimeout(timer);
     };
   }, [
-    config,
+    pipelineKey,
     rawSize.width,
     rawSize.height,
     activeProject,
@@ -212,6 +248,28 @@ export function PostProcessInspector({ nodeId }: { nodeId: string }) {
     drawCanvasBuffer,
     refreshSpriteNodes,
   ]);
+
+  // Persist pivot changes immediately without re-running pixel post-processing
+  useEffect(() => {
+    const nodeSnapshot = latestNodeRef.current;
+    if (!activeProject || !targetNodeId || !nodeSnapshot) return;
+    if (
+      nodeSnapshot.postProcessConfig &&
+      nodeSnapshot.postProcessConfig.pivotNorm.x === config.pivotNorm.x &&
+      nodeSnapshot.postProcessConfig.pivotNorm.y === config.pivotNorm.y
+    ) {
+      return;
+    }
+    const timer = window.setTimeout(() => {
+      const currentNode = latestNodeRef.current;
+      if (!currentNode) return;
+      void repository.saveSpriteNode({
+        ...currentNode,
+        postProcessConfig: latestConfigRef.current,
+      });
+    }, 80);
+    return () => window.clearTimeout(timer);
+  }, [config.pivotNorm.x, config.pivotNorm.y, activeProject, targetNodeId]);
 
   const updateSplitFromClientX = (clientX: number) => {
     const el = comparatorRef.current;
@@ -221,20 +279,142 @@ export function PostProcessInspector({ nodeId }: { nodeId: string }) {
     setSplitPercent(Math.max(0, Math.min(100, Math.round(pct))));
   };
 
+  const updatePivotFromClient = (clientX: number, clientY: number) => {
+    const el = comparatorRef.current;
+    if (!el) return;
+    const rect = el.getBoundingClientRect();
+    const normX = Math.max(0, Math.min(1, (clientX - rect.left) / Math.max(1, rect.width)));
+    const normY = Math.max(0, Math.min(1, (clientY - rect.top) / Math.max(1, rect.height)));
+    const pxX = Math.round(normX * processedSize.width);
+    const pxY = Math.round(normY * processedSize.height);
+    setConfig((prev) => ({
+      ...prev,
+      pivotNorm: {
+        x: Number((pxX / Math.max(1, processedSize.width)).toFixed(4)),
+        y: Number((pxY / Math.max(1, processedSize.height)).toFixed(4)),
+      },
+    }));
+  };
+
   const handleSplitPointerDown = (e: ReactPointerEvent<HTMLDivElement>) => {
     e.preventDefault();
     draggingSplitRef.current = true;
     e.currentTarget.setPointerCapture(e.pointerId);
-    updateSplitFromClientX(e.clientX);
+    if (pivotPlaceMode) {
+      updatePivotFromClient(e.clientX, e.clientY);
+    } else {
+      updateSplitFromClientX(e.clientX);
+    }
   };
 
   const handleSplitPointerMove = (e: ReactPointerEvent<HTMLDivElement>) => {
     if (!draggingSplitRef.current) return;
-    updateSplitFromClientX(e.clientX);
+    if (pivotPlaceMode) {
+      updatePivotFromClient(e.clientX, e.clientY);
+    } else {
+      updateSplitFromClientX(e.clientX);
+    }
   };
 
   const handleSplitPointerUp = () => {
     draggingSplitRef.current = false;
+  };
+
+  const getExportArtifact = () => {
+    if (!activeProject || !targetNode) {
+      throw new Error('No active project or node available to export.');
+    }
+    const cached = processedArtifactRef.current;
+    if (cached && cached.pipelineKey === pipelineKey) {
+      return cached;
+    }
+    const raw = rawImageRef.current;
+    if (!raw) {
+      throw new Error('Source sprite image is still loading.');
+    }
+    const effective =
+      config.bgRemoval === 'ai-rembg' ? { ...config, bgRemoval: 'none' as const } : config;
+    const res = runPostProcessPipeline(
+      raw.rgba,
+      raw.width,
+      raw.height,
+      effective,
+      activeProject.artBible.palette,
+    );
+    const pngBytes = encodeRgbaToPngBytes(res.rgba, res.width, res.height);
+    const artifact = {
+      rgba: res.rgba,
+      width: res.width,
+      height: res.height,
+      pngBytes,
+      pipelineKey,
+    };
+    processedArtifactRef.current = artifact;
+    return artifact;
+  };
+
+  const buildCurrentRecipeAndSlug = () => {
+    if (!activeProject || !targetNode) {
+      throw new Error('No active project or node available to export.');
+    }
+    const artifact = getExportArtifact();
+    const slug = toAssetSlug(
+      `${activeProject.name}-${targetNode.kind}-${targetNode.generationMeta.seed}`,
+    );
+    const recipe = buildAssetRecipe({
+      project: activeProject,
+      node: targetNode,
+      postProcess: config,
+      filename: `${slug}.png`,
+      outputWidth: artifact.width,
+      outputHeight: artifact.height,
+      normalizedWidth: rawSize.width,
+      normalizedHeight: rawSize.height,
+    });
+    return { artifact, slug, recipe };
+  };
+
+  const handleDownloadPng = () => {
+    try {
+      const { artifact, slug } = buildCurrentRecipeAndSlug();
+      const copy = new Uint8Array(artifact.pngBytes.byteLength);
+      copy.set(artifact.pngBytes);
+      triggerBlobDownload(new Blob([copy.buffer], { type: 'image/png' }), `${slug}.png`);
+      setExportNotice(`Downloaded ${slug}.png (${artifact.width}×${artifact.height})`);
+    } catch (error) {
+      setExportNotice(error instanceof Error ? error.message : 'Failed to download PNG.');
+    }
+  };
+
+  const handleDownloadZip = () => {
+    try {
+      const { artifact, slug, recipe } = buildCurrentRecipeAndSlug();
+      const zipBytes = packageSpriteZip({
+        slug,
+        pngBytes: artifact.pngBytes,
+        recipe,
+      });
+      const copy = new Uint8Array(zipBytes.byteLength);
+      copy.set(zipBytes);
+      triggerBlobDownload(new Blob([copy.buffer], { type: 'application/zip' }), `${slug}.zip`);
+      setExportNotice(`Downloaded ${slug}.zip (${slug}.png + ${slug}.recipe.json)`);
+    } catch (error) {
+      setExportNotice(error instanceof Error ? error.message : 'Failed to build ZIP bundle.');
+    }
+  };
+
+  const handleExportLocalFolder = async () => {
+    try {
+      const { artifact, slug, recipe } = buildCurrentRecipeAndSlug();
+      const { directoryName } = await exportBundleToDirectory({
+        slug,
+        pngBytes: artifact.pngBytes,
+        recipe,
+      });
+      setExportNotice(`Wrote ${slug}.png + ${slug}.recipe.json to "${directoryName}"`);
+    } catch (error) {
+      setExportNotice(error instanceof Error ? error.message : 'Folder export failed.');
+    }
   };
 
   if (!activeProject || !targetNode) {
@@ -256,6 +436,8 @@ export function PostProcessInspector({ nodeId }: { nodeId: string }) {
 
   const stageW = Math.round(Math.max(rawSize.width, processedSize.width) * (zoomPercent / 100));
   const stageH = Math.round(Math.max(rawSize.height, processedSize.height) * (zoomPercent / 100));
+  const pivotPx = computePivotPx(config.pivotNorm, processedSize.width, processedSize.height);
+  const fsaSupported = supportsFileSystemAccess();
 
   const backdropStyle = backdrop === 'game-green' ? { backgroundColor: '#2D5A27' } : undefined;
   const backdropClass =
@@ -398,7 +580,9 @@ export function PostProcessInspector({ nodeId }: { nodeId: string }) {
               onPointerMove={handleSplitPointerMove}
               onPointerUp={handleSplitPointerUp}
               onPointerCancel={handleSplitPointerUp}
-              className="relative cursor-ew-resize shadow-2xl ring-1 ring-slate-600/80 select-none"
+              className={`relative shadow-2xl ring-1 ring-slate-600/80 select-none ${
+                pivotPlaceMode ? 'cursor-crosshair' : 'cursor-ew-resize'
+              }`}
               style={{
                 width: `${stageW}px`,
                 height: `${stageH}px`,
@@ -450,6 +634,22 @@ export function PostProcessInspector({ nodeId }: { nodeId: string }) {
                 <span className="absolute top-2 left-2 rounded bg-indigo-600/90 px-1.5 py-0.5 text-[10px] font-semibold text-white">
                   Processed
                 </span>
+              </div>
+
+              {/* Pivot Crosshair Overlay */}
+              <div
+                data-testid="pivot-crosshair"
+                className="pointer-events-none absolute -translate-x-1/2 -translate-y-1/2"
+                style={{
+                  left: `${(pivotPx.x / Math.max(1, processedSize.width)) * 100}%`,
+                  top: `${(pivotPx.y / Math.max(1, processedSize.height)) * 100}%`,
+                }}
+              >
+                <div className="relative h-5 w-5">
+                  <span className="absolute top-1/2 right-0 left-0 h-0.5 -translate-y-1/2 bg-amber-400 shadow-[0_0_4px_#000]" />
+                  <span className="absolute top-0 bottom-0 left-1/2 w-0.5 -translate-x-1/2 bg-amber-400 shadow-[0_0_4px_#000]" />
+                  <span className="absolute top-1/2 left-1/2 h-2 w-2 -translate-x-1/2 -translate-y-1/2 rounded-full border border-slate-950 bg-amber-300" />
+                </div>
               </div>
             </div>
           </div>
@@ -806,11 +1006,160 @@ export function PostProcessInspector({ nodeId }: { nodeId: string }) {
             </div>
           </div>
 
-          <div className="flex items-center gap-2 rounded-lg border border-slate-800 bg-slate-950/40 p-3 text-[11px] text-slate-400">
-            <Layers className="h-3.5 w-3.5 shrink-0 text-indigo-400" />
-            <span>
-              Pivot placement and reproducible PNG + recipe ZIP export unlock in Milestone 6.
-            </span>
+          {/* Card 5: Interactive Pivot Editor */}
+          <div className="space-y-3 rounded-lg border border-slate-800 bg-slate-950/60 p-3.5">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2 text-xs font-semibold text-slate-200">
+                <Crosshair className="h-3.5 w-3.5 text-amber-400" />
+                <span>5. Pivot Anchor</span>
+              </div>
+              <span
+                data-testid="pivot-norm-readout"
+                className="font-mono text-[11px] text-amber-300"
+              >
+                ({config.pivotNorm.x.toFixed(2)}, {config.pivotNorm.y.toFixed(2)})
+              </span>
+            </div>
+
+            <div className="grid grid-cols-3 gap-1.5">
+              <button
+                type="button"
+                data-testid="pivot-preset-center"
+                onClick={() => setConfig((prev) => ({ ...prev, pivotNorm: { x: 0.5, y: 0.5 } }))}
+                className="rounded border border-slate-700 bg-slate-900 px-2 py-1 text-[11px] text-slate-200 hover:bg-slate-800"
+              >
+                Center
+              </button>
+              <button
+                type="button"
+                data-testid="pivot-preset-bottom-center"
+                onClick={() => setConfig((prev) => ({ ...prev, pivotNorm: { x: 0.5, y: 1.0 } }))}
+                className="rounded border border-slate-700 bg-slate-900 px-2 py-1 text-[11px] text-slate-200 hover:bg-slate-800"
+              >
+                Bottom-Center
+              </button>
+              <button
+                type="button"
+                data-testid="pivot-preset-top-left"
+                onClick={() => setConfig((prev) => ({ ...prev, pivotNorm: { x: 0, y: 0 } }))}
+                className="rounded border border-slate-700 bg-slate-900 px-2 py-1 text-[11px] text-slate-200 hover:bg-slate-800"
+              >
+                Top-Left
+              </button>
+            </div>
+
+            <div className="grid grid-cols-2 gap-2">
+              <label className="space-y-0.5 text-[11px] text-slate-400">
+                <span>Pivot X (px)</span>
+                <input
+                  type="number"
+                  data-testid="pivot-px-x"
+                  min={0}
+                  max={processedSize.width}
+                  value={pivotPx.x}
+                  onChange={(e) => {
+                    const px = Number.parseInt(e.target.value, 10);
+                    if (!Number.isNaN(px) && px >= 0 && px <= processedSize.width) {
+                      setConfig((prev) => ({
+                        ...prev,
+                        pivotNorm: {
+                          ...prev.pivotNorm,
+                          x: px / Math.max(1, processedSize.width),
+                        },
+                      }));
+                    }
+                  }}
+                  className="w-full rounded border border-slate-700 bg-slate-900 px-2 py-1 font-mono text-xs text-slate-100"
+                />
+              </label>
+              <label className="space-y-0.5 text-[11px] text-slate-400">
+                <span>Pivot Y (px)</span>
+                <input
+                  type="number"
+                  data-testid="pivot-px-y"
+                  min={0}
+                  max={processedSize.height}
+                  value={pivotPx.y}
+                  onChange={(e) => {
+                    const py = Number.parseInt(e.target.value, 10);
+                    if (!Number.isNaN(py) && py >= 0 && py <= processedSize.height) {
+                      setConfig((prev) => ({
+                        ...prev,
+                        pivotNorm: {
+                          ...prev.pivotNorm,
+                          y: py / Math.max(1, processedSize.height),
+                        },
+                      }));
+                    }
+                  }}
+                  className="w-full rounded border border-slate-700 bg-slate-900 px-2 py-1 font-mono text-xs text-slate-100"
+                />
+              </label>
+            </div>
+
+            <button
+              type="button"
+              data-testid="pivot-place-mode-btn"
+              aria-pressed={pivotPlaceMode}
+              onClick={() => setPivotPlaceMode(!pivotPlaceMode)}
+              className={`flex w-full items-center justify-center gap-1.5 rounded border px-2.5 py-1.5 text-xs font-medium ${
+                pivotPlaceMode
+                  ? 'border-amber-400/60 bg-amber-500/20 text-amber-200'
+                  : 'border-slate-700 bg-slate-900 text-slate-300 hover:bg-slate-800'
+              }`}
+            >
+              <Crosshair className="h-3.5 w-3.5" />
+              {pivotPlaceMode ? 'Click/Drag Canvas to Set Pivot (Active)' : 'Place Pivot on Canvas'}
+            </button>
+          </div>
+
+          {/* Export Bar */}
+          <div
+            data-testid="export-bar"
+            className="space-y-2.5 rounded-lg border border-indigo-500/30 bg-indigo-950/20 p-3.5"
+          >
+            <h4 className="text-xs font-semibold tracking-wider text-indigo-200 uppercase">
+              Export Bundle
+            </h4>
+            <div className="grid grid-cols-2 gap-2">
+              <button
+                type="button"
+                data-testid="download-png-btn"
+                onClick={handleDownloadPng}
+                className="inline-flex items-center justify-center gap-1.5 rounded-md border border-slate-700 bg-slate-800 px-2.5 py-2 text-xs font-medium text-slate-100 hover:bg-slate-700"
+              >
+                <Download className="h-3.5 w-3.5" />
+                Download PNG
+              </button>
+              <button
+                type="button"
+                data-testid="download-zip-btn"
+                onClick={handleDownloadZip}
+                className="inline-flex items-center justify-center gap-1.5 rounded-md bg-indigo-600 px-2.5 py-2 text-xs font-semibold text-white hover:bg-indigo-500"
+              >
+                <FileArchive className="h-3.5 w-3.5" />
+                Download ZIP
+              </button>
+            </div>
+
+            <button
+              type="button"
+              data-testid="export-folder-btn"
+              disabled={!fsaSupported}
+              onClick={() => void handleExportLocalFolder()}
+              className="flex w-full items-center justify-center gap-1.5 rounded-md border border-emerald-500/40 bg-emerald-500/15 px-3 py-2 text-xs font-medium text-emerald-200 hover:bg-emerald-500/25 disabled:cursor-not-allowed disabled:opacity-40"
+            >
+              <FolderOutput className="h-3.5 w-3.5" />
+              {fsaSupported
+                ? 'Export to Local Folder'
+                : 'Export to Local Folder (Chrome/Edge Only)'}
+            </button>
+
+            {exportNotice && (
+              <p data-testid="export-notice" className="text-[11px] text-emerald-300">
+                {exportNotice}
+              </p>
+            )}
           </div>
         </aside>
       </div>

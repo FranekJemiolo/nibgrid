@@ -7,6 +7,7 @@
 - `src/workers/`: Thin Dedicated Web Worker wrappers (`normalize.worker.ts`, `postprocess.worker.ts`) executing `src/processing/` math off the main UI thread (plus lazy WebGPU / single-threaded WASM segmentation without COEP headers).
 - `src/db/`: Typed Dexie.js IndexedDB persistence layer with runtime Zod validation and explicit cascade deletion for orphaned binary blobs.
 - `src/providers/`: `ProviderAdapter` contract, built-in `OfflineMockProvider`, `GeminiProvider` (direct browser BYOK multimodal REST client), `ComfyUiProvider` (local HTTP + WebSocket workflow runner with versioned JSON templates), and `ProviderError` classifier with secret redaction.
+- `src/export/`: Reproducible `asset.recipe.json` (v1.0.0) Zod builder, `fflate` ZIP bundler, and File System Access API local folder writer.
 - `src/store/`: Zustand store coordinating active project state, studio viewport controls, and persistence synchronization.
 - `src/ui/`: React 19 UI organized into four screens:
   - `src/ui/hub/`: Screen 1 — Project Hub & Local Provider Vault
@@ -54,4 +55,18 @@ All image-manipulation stages operate on raw `Uint8ClampedArray` buffers in `src
 2. **Alpha Cleanup & Interior-RGB Defringing (`alphaCleanup.ts`):** Applies alpha threshold cutoff (`0..255`), 0–2px 4/8-connected morphological alpha erosion, and inverse-distance weighted interior RGB color decontamination on semi-transparent edge pixels (`0 < alpha < 255`).
 3. **Resample, Auto-Trim & PoT Padding (`resampleAndTrim.ts`):** Nearest-Neighbor crisp scaling and premultiplied-alpha Area-Average box filtering, tight transparent bounding-box auto-trimming with configurable margin, and Power-of-Two padding.
 4. **Perceptual OKLab Palette Quantization (`paletteQuantize.ts`):** Maps non-transparent pixels in OKLab color space to exact Art Bible `#RRGGBB` entries with optional 4×4 Ordered Bayer dithering, leaving `alpha === 0` pixels untouched.
+
+## 7. Reproducible Export (`asset.recipe.json` v1.0.0) & Offline PWA (Milestone 6)
+
+- **`asset.recipe.json` Specification (`src/export/recipeBuilder.ts`):**
+  Every exported bundle (`<slug>.png` + `<slug>.recipe.json`) is validated against `AssetRecipeSchema`:
+  - `schemaVersion`: `"1.0.0"`, `app`: `"nibgrid"`, `exportedAt`
+  - `project`: `{ id, name }`
+  - `artBible`: `{ projection, lighting, artMode, targetWidth, targetHeight, palette, stylePrompt, negativePrompt }`
+  - `source`: `{ sketchSha256, normalizedWidth, normalizedHeight }`
+  - `generation`: `{ providerId, modelId, seed, adherence, promptDelta, compiledPrompt, parentNodeId }` (validated to contain zero API key or credential fields)
+  - `postProcess`: full `PostProcessConfig` snapshot (`bgRemoval`, alpha cleanup, defringe, OKLab palette snap, resampling, trim, PoT)
+  - `output`: `{ filename, width, height, pivotPx: { x, y }, pivotNorm: { x, y } }`
+- **Bundling & Direct Repo Export (`zipPackager.ts` & `fsAccess.ts`):** Uses `fflate.zipSync` for client-side ZIP downloads and `window.showDirectoryPicker()` (where supported) to write directly into a local game project directory.
+- **Zero-Server Offline PWA (`vite.config.ts`, `public/manifest.webmanifest`, `src/main.tsx`):** A custom Vite build plugin emits `dist/sw.js` precaching static HTML, JS, CSS, Worker bundles, manifest, and icon under `VITE_BASE_PATH` while leaving large optional `.wasm` model runtimes lazy-cached on demand and bypassing cross-origin API calls.
 

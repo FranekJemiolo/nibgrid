@@ -114,3 +114,22 @@
 - `npm run build`: passed (`dist/assets/postprocess.worker-BI3peHzk.js` 10.91 kB, `dist/assets/index-9jg6mFo6.js` 551.78 kB)
 - `VITE_BASE_PATH=/nibgrid/ npm run build`: passed (`dist/index.html` 0.58 kB, `dist/assets/index-DN_lqCva.js` 551.80 kB)
 
+---
+
+## Milestone 6: Pivot Editor, Reproducible Recipe Export & Offline PWA Release (Screen 4B)
+
+### Architectural Decisions & Trade-Offs
+- **Synchronous Export Fallback Against Debounce Races (`PostProcessInspector.tsx`):** Worker preview updates debounce by 60ms so interactive sliders remain fluid. When clicking **Download PNG**, **Download ZIP**, or **Export to Local Folder**, `getExportArtifact()` checks whether `processedArtifactRef` matches the current `pipelineKey` and computes `runPostProcessPipeline()` on demand if a debounced update is still in flight, guaranteeing exported pixels and `asset.recipe.json` metadata never drift.
+- **Zero-Key Recipe Validation (`src/export/recipeBuilder.ts`):** Validated `asset.recipe.json` (`schemaVersion: "1.0.0"`) with strict Zod schemas (`AssetRecipeSchema`) and explicit regex checks ensuring API keys (`AIza...`, `sk-...`, `apiKey`) are never serialized into exported archives.
+- **Base-Path-Aware Offline Service Worker (`vite.config.ts`):** Built a Vite `generateBundle` plugin emitting `dist/sw.js` that precaches all static HTML, JS, CSS, Worker, manifest, and SVG icon assets under `VITE_BASE_PATH` (`/` locally or `/nibgrid/` on GitHub Pages) while intentionally excluding optional 26.8 MB `.wasm` runtimes from install-time precache and bypassing cross-origin requests.
+- **Studio Ergonomics (`SpriteStudio.tsx`):** Added non-intrusive keyboard shortcuts (`B` brush, `E` eraser, `M` mask toggle, `G` pixel grid, `Space` pan hold, `Ctrl/Cmd+Z` undo, `Ctrl/Cmd+Shift+Z` redo) gated cleanly when typing in form controls.
+
+### Verification Results
+- `npm run typecheck`: passed (`tsc --noEmit`, 0 errors)
+- `npm run lint`: passed (`eslint .`, 0 errors, 0 warnings)
+- `npm run format:check`: passed (Prettier verified across all files)
+- `npm run test:unit`: passed (7 test files, 23/23 tests passed in 353ms; verified `AssetRecipeSchema` validation, zero secret leakage, and `fflate` ZIP round-trip with exact 8-byte PNG signature `89 50 4E 47 0D 0A 1A 0A`)
+- `npm run test:e2e`: passed (8/8 Playwright Chromium tests passed in 11.0s; verified full zero-to-export journey including `Bottom-Center` pivot `(0.5, 1.0)` + `64×64` ZIP download inspection and full offline PWA reload -> Sketch -> Mock Generate -> Post-Process -> ZIP Export under `context.setOffline(true)`)
+- `npm run build`: passed (`dist/sw.js` 1.71 kB, `dist/assets/index-QZYBrVyS.js` 575.20 kB)
+- `VITE_BASE_PATH=/nibgrid/ npm run build`: passed (`dist/sw.js` 1.81 kB, `dist/assets/index-B2Z6U39k.js` 575.24 kB)
+
