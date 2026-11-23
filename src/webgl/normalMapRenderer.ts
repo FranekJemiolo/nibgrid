@@ -14,6 +14,7 @@ import {
   requestWebGl2Context,
   restoreReleasedWebGlContextIfNeeded,
   setWebGlTextureFilter,
+  setWebGlTextureWrap,
   type WebGlLifecycleHooks,
 } from './glUtils';
 import fullscreenVertSrc from './shaders/fullscreen.vert.glsl?raw';
@@ -43,6 +44,7 @@ export interface PointLightParams {
 
 export interface NormalMapRendererOptions extends WebGlLifecycleHooks {
   readonly artMode?: ArtMode;
+  readonly seamlessTile?: boolean;
 }
 
 const VIEW_MODE_INT: Record<NormalViewMode, number> = {
@@ -70,6 +72,7 @@ export class NormalMapRenderer {
   private vao: WebGLVertexArrayObject | null = null;
 
   private artMode: ArtMode;
+  private seamlessTile: boolean;
   private width = 1;
   private height = 1;
   private lastSprite: RgbaBuffer | null = null;
@@ -85,6 +88,7 @@ export class NormalMapRenderer {
     this.canvas = canvas;
     this.options = options;
     this.artMode = options.artMode ?? 'pixel-art';
+    this.seamlessTile = options.seamlessTile ?? false;
     this.gl = requestWebGl2Context(canvas, 'NormalMapRenderer');
 
     this.canvas.addEventListener('webglcontextlost', this.handleContextLost);
@@ -110,6 +114,15 @@ export class NormalMapRenderer {
     setWebGlTextureFilter(this.gl, this.diffuseTex, filter);
     setWebGlTextureFilter(this.gl, this.bevelTex, filter);
     setWebGlTextureFilter(this.gl, this.normalTex, filter);
+  }
+
+  public setSeamlessTile(isSeamless: boolean): void {
+    this.seamlessTile = isSeamless;
+    if (this.isContextLost()) return;
+    const wrap = this.getTextureWrap();
+    setWebGlTextureWrap(this.gl, this.diffuseTex, wrap);
+    setWebGlTextureWrap(this.gl, this.bevelTex, wrap);
+    setWebGlTextureWrap(this.gl, this.normalTex, wrap);
   }
 
   public setSprite(sprite: RgbaBuffer): void {
@@ -167,7 +180,10 @@ export class NormalMapRenderer {
       1 / this.width,
       1 / this.height,
     );
-    gl.uniform1f(gl.getUniformLocation(this.bakeProg, 'uBevelStrength'), params.bevelStrength);
+    gl.uniform1f(
+      gl.getUniformLocation(this.bakeProg, 'uBevelStrength'),
+      this.seamlessTile ? 0 : params.bevelStrength,
+    );
     gl.uniform1f(gl.getUniformLocation(this.bakeProg, 'uDetailStrength'), params.detailStrength);
     gl.uniform1f(
       gl.getUniformLocation(this.bakeProg, 'uInvertY'),
@@ -244,7 +260,10 @@ export class NormalMapRenderer {
   public readNormalMapBuffer(): RgbaBuffer {
     if (this.isContextLost() || !this.normalFbo) {
       if (this.lastSprite && this.lastBakeParams) {
-        return bakeNormalMapCpu(this.lastSprite, this.lastBakeParams);
+        return bakeNormalMapCpu(this.lastSprite, {
+          ...this.lastBakeParams,
+          seamlessWrap: this.seamlessTile,
+        });
       }
       return {
         width: this.width,
@@ -262,7 +281,10 @@ export class NormalMapRenderer {
     if (!checkWebGlNoError(gl, 'NormalMapRenderer.readNormalMapBuffer')) {
       this.contextLost = true;
       if (this.lastSprite && this.lastBakeParams) {
-        return bakeNormalMapCpu(this.lastSprite, this.lastBakeParams);
+        return bakeNormalMapCpu(this.lastSprite, {
+          ...this.lastBakeParams,
+          seamlessWrap: this.seamlessTile,
+        });
       }
     }
 
@@ -324,6 +346,10 @@ export class NormalMapRenderer {
     return this.artMode === 'pixel-art' ? this.gl.NEAREST : this.gl.LINEAR;
   }
 
+  private getTextureWrap(): number {
+    return this.seamlessTile ? this.gl.REPEAT : this.gl.CLAMP_TO_EDGE;
+  }
+
   private initGpuResources(): void {
     const { gl } = this;
     const vao = gl.createVertexArray();
@@ -338,9 +364,13 @@ export class NormalMapRenderer {
       'LightPreview',
     );
     const filter = this.getTextureFilter();
+    const wrap = this.getTextureWrap();
     this.diffuseTex = createWebGlTexture2D(gl, filter);
     this.bevelTex = createWebGlTexture2D(gl, filter);
     this.normalTex = createWebGlTexture2D(gl, filter);
+    setWebGlTextureWrap(gl, this.diffuseTex, wrap);
+    setWebGlTextureWrap(gl, this.bevelTex, wrap);
+    setWebGlTextureWrap(gl, this.normalTex, wrap);
 
     const fbo = gl.createFramebuffer();
     if (!fbo) throw new Error('Failed to allocate WebGL2 framebuffer.');

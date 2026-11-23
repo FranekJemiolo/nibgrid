@@ -219,3 +219,25 @@
 ### Audit Phase 4: Final Release Gate
 - Verified `npm run typecheck`, `npm run lint`, `npm run format:check`, `npm run test:unit` (15 files, 51/51 tests), `python3 -m unittest tests/unit/test_nibgrid_bridge.py -v` (6/6 tests), `npm run test:e2e` (21/21 Playwright tests), and `VITE_BASE_PATH=/nibgrid/ npm run build` all pass cleanly.
 
+---
+
+## Milestone 12A: Seamless Tile 50% Wrap-Offset & Auto-Masking Workflow
+
+- **Pure-TS Toroidal Math (`src/processing/seamlessTile.ts`):** Implemented `wrapOffsetBuffer` (exact involution across even and odd dimensions), `generateCrossSeamMask` (configurable seam band width, deterministic trig edge jitter, `tileX`/`tileY` flags, and strict outer 2px border lock), `computeSeamContinuity`, and separable toroidal `flattenMacroLighting`.
+- **Toroidal Normal Map Synergy (`src/webgl/glUtils.ts`, `normalMapRenderer.ts`, `distanceField.ts`, `NormalMapPreview.tsx`):** Added `gl.REPEAT` wrapping + `bevelStrength = 0` when sprites are flagged `isSeamlessTile: true`.
+- **Screen 4D Seamless Tile Mode (`TileAndSliceWorkshop.tsx`, `PostProcessInspector.tsx`, `schemas.ts`, `recipeBuilder.ts`):** Wired live `1×1` mask preview + `3×3` tiled preview wall, continuity score badge, guided **Wrap 50% → Seam Inpaint → Un-Wrap & Commit Node** workflow into the Sprite DAG, and `seamlessTile` recipe persistence.
+- **Verification:** Verified via `tests/unit/m12a-seamless-tile.test.ts` and `tests/e2e/m12a-seamless-tile.spec.ts`.
+
+## Milestone 12B: Visual 9-Slice UI Panel Workshop & Engine Exporters
+
+- **Pure-TS 9-Slice Core & Exporters (`src/processing/nineSlice.ts`, `src/export/nineSliceExporters.ts`):** Implemented `autoDetectNineSliceMargins`, corner-exact `renderNineSlice` (`stretch`/`tile` edges, `stretch`/`tile`/`transparent` center), Godot 4 `StyleBoxTexture` `.tres`, Phaser 3 JSON, and PixiJS v8 JSON exporters, wired into `SpriteNode`, `AssetRecipe`, `PostProcessInspector`, and `AtlasWorkshop` (`packageAtlasZip`).
+- **Screen 4D 9-Slice Mode (`src/ui/inspector/TileAndSliceWorkshop.tsx`):** Built 1px integer draggable cyan/magenta margin guides, symmetry locks (`Lock L=R`, `Lock T=B`), auto-detect button, live 4-target Stress-Test Matrix (`240×48`, `72×220`, `180×180`, and resizable box), and 1-click ZIP bundle export.
+- **Verification:** Verified via `tests/unit/m12b-nine-slice.test.ts` and `tests/e2e/m12b-nine-slice.spec.ts`.
+
+## Milestone 12C: Indexed Palette-Swap & 1D/Stacked LUT Exporter
+
+- **Pure-TS Indexed Palette & OKLCH LUT Engine (`src/processing/paletteLut.ts`):** Implemented `countUniqueOpaqueColors`, `quantizeBufferToMaxColors` (`<= 256` OKLab color reducer), `extractIndexedSprite`, OKLCH ramp clustering (`clusterPaletteRamps`), identity-preserving OKLCH ramp evaluation (`evaluatePaletteVariant`), `encodeLutBuffer`, and `decodeIndexedSprite`.
+- **Engine Shader Generators (`src/export/lutShaders.ts`):** Implemented `generateGodotPaletteSwapShader` (`filter_nearest`, half-texel `(palette_idx + 0.5)` lookup, flash uniforms) and `generatePixiPaletteSwapFilterTs` (PixiJS v8 `scaleMode = 'nearest'` + un-premultiplied UV lookup).
+- **Screen 4E Workshop & Recipe Persistence (`src/ui/inspector/PaletteLutWorkshop.tsx`, `PostProcessInspector.tsx`, `schemas.ts`, `recipeBuilder.ts`):** Added **Palette-Swap & LUT** tab with 1-click `> 256`-color quantization, variant/preset manager, OKLCH Hue/Chroma/Lightness/Temperature sliders, per-swatch overrides, live `N×M` LUT strip preview, Stacked vs. Single-row toggle, `AssetRecipe.paletteLut` metadata, and 1-click ZIP export.
+- **Verification:** Verified via `tests/unit/m12c-palette-lut.test.ts`, `tests/e2e/m12c-palette-lut.spec.ts`, and the full Milestone 12 regression & production build suite.
+

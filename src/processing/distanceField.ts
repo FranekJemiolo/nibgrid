@@ -17,6 +17,7 @@ export interface CpuNormalBakeOptions {
   readonly detailStrength: number;
   readonly convention: NormalConvention;
   readonly alphaThreshold?: number;
+  readonly seamlessWrap?: boolean;
 }
 
 const INF = 1e12;
@@ -158,11 +159,15 @@ export function bakeNormalMapCpu(buf: RgbaBuffer, options: CpuNormalBakeOptions)
   if (width <= 0 || height <= 0) return { width, height, data: out };
 
   const threshold = options.alphaThreshold ?? 128;
-  const bevel = computeBevelHeightmap(buf, {
-    bevelRadiusPx: options.bevelRadiusPx,
-    profile: options.bevelProfile,
-    alphaThreshold: threshold,
-  });
+  const seamlessWrap = Boolean(options.seamlessWrap);
+  const bevelStrength = seamlessWrap ? 0 : options.bevelStrength;
+  const bevel = seamlessWrap
+    ? new Uint8Array(width * height)
+    : computeBevelHeightmap(buf, {
+        bevelRadiusPx: options.bevelRadiusPx,
+        profile: options.bevelProfile,
+        alphaThreshold: threshold,
+      });
 
   const heightField = new Float32Array(width * height);
   for (let i = 0; i < width * height; i++) {
@@ -173,12 +178,14 @@ export function bakeNormalMapCpu(buf: RgbaBuffer, options: CpuNormalBakeOptions)
     const b = (data[px + 2] ?? 0) / 255;
     const luma = (0.2126 * r + 0.7152 * g + 0.0722 * b) * a;
     const bVal = (bevel[i] ?? 0) / 255;
-    heightField[i] = bVal * options.bevelStrength + luma * options.detailStrength;
+    heightField[i] = bVal * bevelStrength + luma * options.detailStrength;
   }
 
   const sampleH = (x: number, y: number): number => {
-    const cx = Math.max(0, Math.min(width - 1, x));
-    const cy = Math.max(0, Math.min(height - 1, y));
+    const cx = seamlessWrap ? ((x % width) + width) % width : Math.max(0, Math.min(width - 1, x));
+    const cy = seamlessWrap
+      ? ((y % height) + height) % height
+      : Math.max(0, Math.min(height - 1, y));
     return heightField[cy * width + cx] ?? 0;
   };
 

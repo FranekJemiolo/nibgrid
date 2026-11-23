@@ -23,21 +23,26 @@ import {
 import { strToU8 } from 'fflate';
 import { repository } from '../../db/database';
 import {
+  createDefaultNineSliceConfig,
   createDefaultNormalMapConfig,
   createDefaultPostProcessConfig,
   createDefaultPuppetAnimConfig,
+  createDefaultSeamlessTileConfig,
   type BackgroundRemovalMode,
   type DemixelMode,
   type ErosionConnectivity,
   type Lighting,
+  type NineSliceConfig,
   type NormalMapConfig,
   type PostProcessConfig,
   type PuppetAnimConfig,
   type ResampleMode,
+  type SeamlessTileConfig,
   type SelOutMode,
   type SpriteNode,
 } from '../../domain/schemas';
 import { exportBundleToDirectory, supportsFileSystemAccess } from '../../export/fsAccess';
+import { buildNineSliceExportFiles } from '../../export/nineSliceExporters';
 import { buildAssetRecipe, computePivotPx } from '../../export/recipeBuilder';
 import { packageSpriteZip, toAssetSlug, triggerBlobDownload } from '../../export/zipPackager';
 import type { DetectedGrid } from '../../processing/demixel';
@@ -53,7 +58,9 @@ import {
   runPostProcessInWorker,
 } from '../../workers/postprocessClient';
 import { NormalMapPreview } from './NormalMapPreview';
+import { PaletteLutWorkshop } from './PaletteLutWorkshop';
 import { PuppetWarpEditor } from './PuppetWarpEditor';
+import { TileAndSliceWorkshop } from './TileAndSliceWorkshop';
 
 export type InspectorBackdrop = 'checkerboard' | 'dark' | 'light' | 'game-green';
 
@@ -115,14 +122,20 @@ export function PostProcessInspector({ nodeId }: { nodeId: string }) {
   const [workerError, setWorkerError] = useState<string | null>(null);
   const [pivotPlaceMode, setPivotPlaceMode] = useState(false);
   const [exportNotice, setExportNotice] = useState<string | null>(null);
-  const [inspectorTab, setInspectorTab] = useState<'postprocess' | 'normal' | 'puppet'>(
-    'postprocess',
-  );
+  const [inspectorTab, setInspectorTab] = useState<
+    'postprocess' | 'normal' | 'puppet' | 'tile-slice' | 'palette-lut'
+  >('postprocess');
   const [normalConfig, setNormalConfig] = useState<NormalMapConfig>(() =>
     createDefaultNormalMapConfig(),
   );
   const [puppetConfig, setPuppetConfig] = useState<PuppetAnimConfig>(
     () => targetNode?.puppetAnim ?? createDefaultPuppetAnimConfig(),
+  );
+  const [seamlessConfig, setSeamlessConfig] = useState<SeamlessTileConfig>(
+    () => targetNode?.seamlessTile ?? createDefaultSeamlessTileConfig(),
+  );
+  const [nineSliceConfig, setNineSliceConfig] = useState<NineSliceConfig>(
+    () => targetNode?.nineSlice ?? createDefaultNineSliceConfig(),
   );
   const [activeSpriteBuffer, setActiveSpriteBuffer] = useState<RgbaBuffer | null>(null);
   const bakedNormalRef = useRef<{ buffer: RgbaBuffer; key: string } | null>(null);
@@ -169,6 +182,10 @@ export function PostProcessInspector({ nodeId }: { nodeId: string }) {
   latestConfigRef.current = config;
   const latestPuppetRef = useRef(puppetConfig);
   latestPuppetRef.current = puppetConfig;
+  const latestSeamlessRef = useRef(seamlessConfig);
+  latestSeamlessRef.current = seamlessConfig;
+  const latestNineSliceRef = useRef(nineSliceConfig);
+  latestNineSliceRef.current = nineSliceConfig;
 
   // Sync initial config when node changes
   useEffect(() => {
@@ -182,16 +199,22 @@ export function PostProcessInspector({ nodeId }: { nodeId: string }) {
         ),
     );
     setPuppetConfig(node.puppetAnim ?? createDefaultPuppetAnimConfig());
+    setSeamlessConfig(node.seamlessTile ?? createDefaultSeamlessTileConfig());
+    setNineSliceConfig(node.nineSlice ?? createDefaultNineSliceConfig());
   }, [targetNodeId, activeProject]);
 
-  // Persist puppet animation rig onto SpriteNode in Dexie for reloads & Screen 5 Atlas Workshop
+  // Persist puppet animation / 9-slice panel metadata onto SpriteNode in Dexie for reloads & Screen 5
   useEffect(() => {
     const nodeSnapshot = latestNodeRef.current;
     if (!activeProject || !targetNodeId || !nodeSnapshot) return;
-    if (
-      JSON.stringify(nodeSnapshot.puppetAnim ?? createDefaultPuppetAnimConfig()) ===
-      JSON.stringify(puppetConfig)
-    ) {
+    const puppetChanged =
+      JSON.stringify(nodeSnapshot.puppetAnim ?? createDefaultPuppetAnimConfig()) !==
+      JSON.stringify(puppetConfig);
+    const sliceChanged =
+      nineSliceConfig.enabled &&
+      JSON.stringify(nodeSnapshot.nineSlice ?? createDefaultNineSliceConfig()) !==
+        JSON.stringify(nineSliceConfig);
+    if (!puppetChanged && !sliceChanged) {
       return;
     }
     const timer = window.setTimeout(() => {
@@ -201,11 +224,12 @@ export function PostProcessInspector({ nodeId }: { nodeId: string }) {
         .saveSpriteNode({
           ...currentNode,
           puppetAnim: latestPuppetRef.current,
+          ...(latestNineSliceRef.current.enabled ? { nineSlice: latestNineSliceRef.current } : {}),
         })
         .then(() => refreshSpriteNodes(activeProject.id));
     }, 120);
     return () => window.clearTimeout(timer);
-  }, [puppetConfig, activeProject, targetNodeId, refreshSpriteNodes]);
+  }, [puppetConfig, nineSliceConfig, activeProject, targetNodeId, refreshSpriteNodes]);
 
   const drawCanvasBuffer = useCallback(
     (canvas: HTMLCanvasElement | null, rgba: Uint8ClampedArray, width: number, height: number) => {
@@ -307,6 +331,12 @@ export function PostProcessInspector({ nodeId }: { nodeId: string }) {
             processedBlobId: stored.id,
             postProcessConfig: latestConfigRef.current,
             puppetAnim: latestPuppetRef.current,
+            ...(latestSeamlessRef.current.isSeamlessTile
+              ? { seamlessTile: latestSeamlessRef.current }
+              : {}),
+            ...(latestNineSliceRef.current.enabled
+              ? { nineSlice: latestNineSliceRef.current }
+              : {}),
           });
           await repository.cleanupOrphanedBlobs();
           if (
@@ -452,7 +482,7 @@ export function PostProcessInspector({ nodeId }: { nodeId: string }) {
     height: number;
   }): Uint8Array | undefined => {
     if (!normalConfig.enabled) return undefined;
-    const expectedKey = `${targetNodeId ?? ''}:${pipelineKey}:${normalConfig.bevelRadiusPx}:${normalConfig.bevelProfile}:${normalConfig.bevelStrength}:${normalConfig.detailStrength}:${normalConfig.convention}`;
+    const expectedKey = `${targetNodeId ?? ''}:${pipelineKey}:${normalConfig.bevelRadiusPx}:${normalConfig.bevelProfile}:${normalConfig.bevelStrength}:${normalConfig.detailStrength}:${normalConfig.convention}:${seamlessConfig.isSeamlessTile ? 'repeat' : 'clamp'}`;
     if (
       bakedNormalRef.current &&
       bakedNormalRef.current.key === expectedKey &&
@@ -470,9 +500,10 @@ export function PostProcessInspector({ nodeId }: { nodeId: string }) {
       {
         bevelRadiusPx: normalConfig.bevelRadiusPx,
         bevelProfile: normalConfig.bevelProfile,
-        bevelStrength: normalConfig.bevelStrength,
+        bevelStrength: seamlessConfig.isSeamlessTile ? 0 : normalConfig.bevelStrength,
         detailStrength: normalConfig.detailStrength,
         convention: normalConfig.convention,
+        seamlessWrap: seamlessConfig.isSeamlessTile,
       },
     );
     return encodeRgbaToPngBytes(cpuNormal.data, cpuNormal.width, cpuNormal.height);
@@ -548,6 +579,10 @@ export function PostProcessInspector({ nodeId }: { nodeId: string }) {
       };
     }
 
+    if (nineSliceConfig.enabled) {
+      Object.assign(extraFiles, buildNineSliceExportFiles(slug, nineSliceConfig));
+    }
+
     const recipe = buildAssetRecipe({
       project: activeProject,
       node: targetNode,
@@ -561,6 +596,12 @@ export function PostProcessInspector({ nodeId }: { nodeId: string }) {
         ? { normalMap: { ...normalConfig, filename: `${slug}_n.png` } }
         : {}),
       ...(puppetMeta ? { puppetAnim: puppetMeta } : {}),
+      ...(seamlessConfig.isSeamlessTile || targetNode.seamlessTile?.isSeamlessTile
+        ? { seamlessTile: seamlessConfig.isSeamlessTile ? seamlessConfig : targetNode.seamlessTile }
+        : {}),
+      ...(nineSliceConfig.enabled || targetNode.nineSlice?.enabled
+        ? { nineSlice: nineSliceConfig.enabled ? nineSliceConfig : targetNode.nineSlice }
+        : {}),
     });
     return { artifact, slug, recipe, normalPngBytes, extraFiles };
   };
@@ -618,7 +659,7 @@ export function PostProcessInspector({ nodeId }: { nodeId: string }) {
 
   const handleNormalBufferBaked = useCallback(
     (normalBuf: RgbaBuffer) => {
-      const key = `${targetNodeId ?? ''}:${pipelineKey}:${normalConfig.bevelRadiusPx}:${normalConfig.bevelProfile}:${normalConfig.bevelStrength}:${normalConfig.detailStrength}:${normalConfig.convention}`;
+      const key = `${targetNodeId ?? ''}:${pipelineKey}:${normalConfig.bevelRadiusPx}:${normalConfig.bevelProfile}:${normalConfig.bevelStrength}:${normalConfig.detailStrength}:${normalConfig.convention}:${seamlessConfig.isSeamlessTile ? 'repeat' : 'clamp'}`;
       bakedNormalRef.current = { buffer: normalBuf, key };
     },
     [
@@ -629,7 +670,48 @@ export function PostProcessInspector({ nodeId }: { nodeId: string }) {
       normalConfig.bevelStrength,
       normalConfig.detailStrength,
       normalConfig.convention,
+      seamlessConfig.isSeamlessTile,
     ],
+  );
+
+  const handleSeamlessNodeCommitted = useCallback(
+    async (newNode: SpriteNode, unwrappedBuffer: RgbaBuffer, updatedConfig: SeamlessTileConfig) => {
+      if (!activeProject) return;
+      setSeamlessConfig(updatedConfig);
+      rawImageRef.current = {
+        rgba: unwrappedBuffer.data,
+        width: unwrappedBuffer.width,
+        height: unwrappedBuffer.height,
+      };
+      const cleanPost = createDefaultPostProcessConfig(
+        unwrappedBuffer.width,
+        unwrappedBuffer.height,
+      );
+      setConfig(cleanPost);
+      const cleanKey = JSON.stringify({ ...cleanPost, pivotNorm: undefined });
+      processedArtifactRef.current = {
+        rgba: unwrappedBuffer.data,
+        width: unwrappedBuffer.width,
+        height: unwrappedBuffer.height,
+        pngBytes: encodeRgbaToPngBytes(
+          unwrappedBuffer.data,
+          unwrappedBuffer.width,
+          unwrappedBuffer.height,
+        ),
+        pipelineKey: cleanKey,
+      };
+      setRawSize({ width: unwrappedBuffer.width, height: unwrappedBuffer.height });
+      setProcessedSize({ width: unwrappedBuffer.width, height: unwrappedBuffer.height });
+      setActiveSpriteBuffer(unwrappedBuffer);
+      await repository.saveSpriteNode({
+        ...newNode,
+        postProcessConfig: cleanPost,
+        seamlessTile: updatedConfig,
+      });
+      await refreshSpriteNodes(activeProject.id);
+      await navigate({ screen: 'inspector', projectId: activeProject.id, nodeId: newNode.id });
+    },
+    [activeProject, refreshSpriteNodes, navigate],
   );
 
   if (!activeProject || !targetNode) {
@@ -778,6 +860,30 @@ export function PostProcessInspector({ nodeId }: { nodeId: string }) {
             >
               Puppet Warp Animator
             </button>
+            <button
+              type="button"
+              data-testid="inspector-tab-tile-slice"
+              onClick={() => setInspectorTab('tile-slice')}
+              className={`rounded px-2.5 py-1 font-medium transition-colors ${
+                inspectorTab === 'tile-slice'
+                  ? 'bg-indigo-600 text-white'
+                  : 'text-slate-300 hover:text-white'
+              }`}
+            >
+              Tile &amp; 9-Slice
+            </button>
+            <button
+              type="button"
+              data-testid="inspector-tab-palette-lut"
+              onClick={() => setInspectorTab('palette-lut')}
+              className={`rounded px-2.5 py-1 font-medium transition-colors ${
+                inspectorTab === 'palette-lut'
+                  ? 'bg-indigo-600 text-white'
+                  : 'text-slate-300 hover:text-white'
+              }`}
+            >
+              Palette-Swap &amp; LUT
+            </button>
           </div>
 
           <span
@@ -801,6 +907,7 @@ export function PostProcessInspector({ nodeId }: { nodeId: string }) {
           sprite={activeSpriteBuffer}
           artMode={activeProject.artBible.artMode}
           normalConfig={normalConfig}
+          isSeamlessTile={seamlessConfig.isSeamlessTile}
           onChangeConfig={setNormalConfig}
           onNormalBufferBaked={handleNormalBufferBaked}
           exportSlot={exportBarNode}
@@ -812,6 +919,31 @@ export function PostProcessInspector({ nodeId }: { nodeId: string }) {
           puppetConfig={puppetConfig}
           onChangeConfig={setPuppetConfig}
           onExportStripZip={handleDownloadZip}
+          exportSlot={exportBarNode}
+        />
+      ) : inspectorTab === 'tile-slice' && activeSpriteBuffer ? (
+        <TileAndSliceWorkshop
+          sprite={activeSpriteBuffer}
+          artMode={activeProject.artBible.artMode}
+          project={activeProject}
+          targetNode={targetNode}
+          seamlessConfig={seamlessConfig}
+          nineSliceConfig={nineSliceConfig}
+          onChangeSeamlessConfig={setSeamlessConfig}
+          onChangeNineSliceConfig={setNineSliceConfig}
+          onExportNineSliceZip={handleDownloadZip}
+          onSeamlessNodeCommitted={handleSeamlessNodeCommitted}
+          exportSlot={exportBarNode}
+        />
+      ) : inspectorTab === 'palette-lut' && activeSpriteBuffer ? (
+        <PaletteLutWorkshop
+          sprite={activeSpriteBuffer}
+          artMode={activeProject.artBible.artMode}
+          project={activeProject}
+          targetNode={targetNode}
+          postProcessConfig={config}
+          rawWidth={rawSize.width}
+          rawHeight={rawSize.height}
           exportSlot={exportBarNode}
         />
       ) : (

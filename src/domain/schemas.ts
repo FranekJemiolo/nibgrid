@@ -133,6 +133,77 @@ export function createDefaultPuppetAnimConfig(): PuppetAnimConfig {
   return PuppetAnimConfigSchema.parse({});
 }
 
+export const SeamlessTileConfigSchema = z.object({
+  isSeamlessTile: z.boolean().default(false),
+  tileX: z.boolean().default(true),
+  tileY: z.boolean().default(true),
+  seamWidthPx: z.number().int().min(16).max(96).default(28),
+  jitterPx: z.number().int().min(0).max(12).default(4),
+  flattenEnabled: z.boolean().default(false),
+  flattenRadiusPx: z.number().int().min(4).max(32).default(12),
+  wrappedPendingUnwrap: z.boolean().default(false),
+  continuityScore: z.number().min(0).max(100).optional(),
+});
+export type SeamlessTileConfig = z.infer<typeof SeamlessTileConfigSchema>;
+
+export function createDefaultSeamlessTileConfig(): SeamlessTileConfig {
+  return SeamlessTileConfigSchema.parse({});
+}
+
+export const NineSliceFillModeSchema = z.enum(['stretch', 'tile']);
+export type NineSliceFillMode = z.infer<typeof NineSliceFillModeSchema>;
+
+export const NineSliceCenterModeSchema = z.enum(['stretch', 'tile', 'transparent']);
+export type NineSliceCenterMode = z.infer<typeof NineSliceCenterModeSchema>;
+
+export const NineSliceConfigSchema = z.object({
+  enabled: z.boolean().default(false),
+  left: z.number().int().min(0).max(512).default(8),
+  right: z.number().int().min(0).max(512).default(8),
+  top: z.number().int().min(0).max(512).default(8),
+  bottom: z.number().int().min(0).max(512).default(8),
+  edgeMode: NineSliceFillModeSchema.default('stretch'),
+  centerMode: NineSliceCenterModeSchema.default('stretch'),
+  lockHorizontal: z.boolean().default(false),
+  lockVertical: z.boolean().default(false),
+});
+export type NineSliceConfig = z.infer<typeof NineSliceConfigSchema>;
+
+export function createDefaultNineSliceConfig(): NineSliceConfig {
+  return NineSliceConfigSchema.parse({});
+}
+
+export const RampTransformSchema = z.object({
+  rampId: z.string().min(1),
+  hueShiftDeg: z.number().min(-180).max(180).default(0),
+  chromaScale: z.number().min(0).max(2).default(1),
+  lightnessShift: z.number().min(-0.4).max(0.4).default(0),
+  temperatureShift: z.number().min(-0.05).max(0.05).default(0),
+});
+export type RampTransformConfig = z.infer<typeof RampTransformSchema>;
+
+export const PaletteVariantRecipeSchema = z.object({
+  id: z.string().min(1),
+  name: z.string().min(1),
+  rampTransforms: z.array(RampTransformSchema),
+  overrides: z.record(z.string(), HexColorSchema).default({}),
+});
+export type PaletteVariantRecipe = z.infer<typeof PaletteVariantRecipeSchema>;
+
+export const PaletteLutConfigSchema = z.object({
+  mode: z.enum(['stacked', 'single']).default('stacked'),
+  paletteSize: z.number().int().min(1).max(256).default(1),
+  variantCount: z.number().int().min(1).max(32).default(1),
+  idxFilename: z.string().min(1).optional(),
+  lutFilename: z.string().min(1).optional(),
+  variants: z.array(PaletteVariantRecipeSchema).default([]),
+});
+export type PaletteLutConfig = z.infer<typeof PaletteLutConfigSchema>;
+
+export function createDefaultPaletteLutConfig(): PaletteLutConfig {
+  return PaletteLutConfigSchema.parse({});
+}
+
 export const DemixelModeSchema = z.enum(['auto', 'manual']);
 export type DemixelMode = z.infer<typeof DemixelModeSchema>;
 
@@ -221,6 +292,9 @@ export const SpriteNodeSchema = z.object({
   processedBlobId: z.string().min(1).optional(),
   postProcessConfig: PostProcessConfigSchema.optional(),
   puppetAnim: PuppetAnimConfigSchema.optional(),
+  seamlessTile: SeamlessTileConfigSchema.optional(),
+  nineSlice: NineSliceConfigSchema.optional(),
+  paletteLut: PaletteLutConfigSchema.optional(),
   sketchSha256: z.string().regex(/^[0-9a-f]{64}$/, 'sketchSha256 must be a 64-char hex SHA-256'),
   generationMeta: GenerationMetaSchema,
 });

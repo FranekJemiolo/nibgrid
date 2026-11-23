@@ -50,6 +50,17 @@ export function setWebGlTextureFilter(
   gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, filter);
 }
 
+export function setWebGlTextureWrap(
+  gl: WebGL2RenderingContext,
+  tex: WebGLTexture | null,
+  wrap: number,
+): void {
+  if (!tex) return;
+  gl.bindTexture(gl.TEXTURE_2D, tex);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, wrap);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, wrap);
+}
+
 export function compileWebGlProgram(
   gl: WebGL2RenderingContext,
   vertSrc: string,

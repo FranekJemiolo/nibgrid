@@ -4,6 +4,7 @@ import { repository } from '../../db/database';
 import { createDefaultPuppetAnimConfig, type SpriteNode } from '../../domain/schemas';
 import { decodeBlobToNativeRgba } from '../../export/animationExporter';
 import { packageAtlasZip, type AtlasEngineTarget } from '../../export/atlasExporters';
+import { buildNineSliceExportFiles } from '../../export/nineSliceExporters';
 import { toAssetSlug, triggerBlobDownload } from '../../export/zipPackager';
 import { ANIM_PRESETS } from '../../processing/animPresets';
 import { composeAtlasPages, type AtlasFrameInput } from '../../processing/atlasCompositor';
@@ -341,11 +342,20 @@ export function AtlasWorkshop() {
 
   const handleDownloadAtlasZip = () => {
     if (!activeProject || !atlasResult) return;
+    const extraFiles: Record<string, Uint8Array> = {};
+    for (let idx = 0; idx < decodedAssets.length; idx++) {
+      const asset = decodedAssets[idx]!;
+      if (selectedStaticIds[asset.node.id] && asset.node.nineSlice?.enabled) {
+        const nodeSlug = `sprite_${idx}_${asset.node.generationMeta.seed}`;
+        Object.assign(extraFiles, buildNineSliceExportFiles(nodeSlug, asset.node.nineSlice));
+      }
+    }
     const zipBytes = packageAtlasZip({
       atlas: atlasResult,
       baseSlug: 'atlas',
       engines,
       artMode: activeProject.artBible.artMode,
+      extraFiles,
     });
     const copy = new Uint8Array(zipBytes.byteLength);
     copy.set(zipBytes);

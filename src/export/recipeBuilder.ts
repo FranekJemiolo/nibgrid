@@ -8,15 +8,21 @@ import {
   HexColorSchema,
   LightingSchema,
   MlsModeSchema,
+  NineSliceConfigSchema,
   NormalConventionSchema,
+  PaletteLutConfigSchema,
   PivotNormSchema,
   PostProcessConfigSchema,
   ProjectionSchema,
   PuppetPinSchema,
+  SeamlessTileConfigSchema,
+  type NineSliceConfig,
   type NormalMapConfig,
+  type PaletteLutConfig,
   type PostProcessConfig,
   type Project,
   type PuppetAnimConfig,
+  type SeamlessTileConfig,
   type SpriteNode,
 } from '../domain/schemas';
 
@@ -95,6 +101,9 @@ export const AssetRecipeSchema = z.object({
       pins: z.array(PuppetPinSchema),
     })
     .optional(),
+  seamlessTile: SeamlessTileConfigSchema.optional(),
+  nineSlice: NineSliceConfigSchema.optional(),
+  paletteLut: PaletteLutConfigSchema.optional(),
 });
 
 export type AssetRecipe = z.infer<typeof AssetRecipeSchema>;
@@ -122,6 +131,9 @@ export interface BuildAssetRecipeInput {
   exportedAt?: string;
   normalMap?: NormalMapConfig & { filename: string };
   puppetAnim?: PuppetAnimConfig & { stripFilename: string; atlasJsonFilename: string };
+  seamlessTile?: SeamlessTileConfig;
+  nineSlice?: NineSliceConfig;
+  paletteLut?: PaletteLutConfig;
 }
 
 const SENSITIVE_KEY_PATTERNS: readonly RegExp[] = [
@@ -185,6 +197,15 @@ export function buildAssetRecipe(input: BuildAssetRecipeInput): AssetRecipe {
     ...(input.normalMap?.enabled ? { normalMap: input.normalMap } : {}),
     ...(input.puppetAnim && input.puppetAnim.pins.length > 0
       ? { puppetAnim: input.puppetAnim }
+      : {}),
+    ...(input.seamlessTile?.isSeamlessTile || node.seamlessTile?.isSeamlessTile
+      ? { seamlessTile: input.seamlessTile ?? node.seamlessTile }
+      : {}),
+    ...(input.nineSlice?.enabled || node.nineSlice?.enabled
+      ? { nineSlice: input.nineSlice ?? node.nineSlice }
+      : {}),
+    ...(input.paletteLut || node.paletteLut
+      ? { paletteLut: input.paletteLut ?? node.paletteLut }
       : {}),
   });
 

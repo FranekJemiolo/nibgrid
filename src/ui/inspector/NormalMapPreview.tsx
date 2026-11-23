@@ -17,6 +17,7 @@ interface NormalMapPreviewProps {
   sprite: RgbaBuffer;
   artMode: ArtMode;
   normalConfig: NormalMapConfig;
+  isSeamlessTile?: boolean;
   onChangeConfig: (updater: (prev: NormalMapConfig) => NormalMapConfig) => void;
   onNormalBufferBaked?: (normalBuf: RgbaBuffer) => void;
   exportSlot?: ReactNode;
@@ -26,6 +27,7 @@ export function NormalMapPreview({
   sprite,
   artMode,
   normalConfig,
+  isSeamlessTile = false,
   onChangeConfig,
   onNormalBufferBaked,
   exportSlot,
@@ -123,6 +125,7 @@ export function NormalMapPreview({
     try {
       const renderer = new NormalMapRenderer(canvas, {
         artMode,
+        seamlessTile: isSeamlessTile,
         onContextLost: () => {
           cancelAnimationFrame(rafRef.current);
           rafRef.current = 0;
@@ -159,10 +162,11 @@ export function NormalMapPreview({
 
   useEffect(() => {
     rendererRef.current?.setArtMode(artMode);
+    rendererRef.current?.setSeamlessTile(isSeamlessTile);
     if (rendererRef.current && !usingCpuFallback && !isContextLost) {
       rendererRef.current.renderPreview(lightRef.current, normalConfig.convention);
     }
-  }, [artMode, normalConfig.convention, usingCpuFallback, isContextLost]);
+  }, [artMode, isSeamlessTile, normalConfig.convention, usingCpuFallback, isContextLost]);
 
   // Re-bake normal map whenever sprite or bake params change (or after context restore)
   useEffect(() => {
@@ -170,13 +174,14 @@ export function NormalMapPreview({
     const params = {
       bevelRadiusPx: normalConfig.bevelRadiusPx,
       bevelProfile: normalConfig.bevelProfile,
-      bevelStrength: normalConfig.bevelStrength,
+      bevelStrength: isSeamlessTile ? 0 : normalConfig.bevelStrength,
       detailStrength: normalConfig.detailStrength,
       convention: normalConfig.convention,
     };
 
     if (renderer && !usingCpuFallback) {
       renderer.setArtMode(artMode);
+      renderer.setSeamlessTile(isSeamlessTile);
       renderer.setSprite(sprite);
       renderer.bakeNormalMap(params);
       if (!isContextLost && !renderer.isContextLost()) {
@@ -188,12 +193,16 @@ export function NormalMapPreview({
       return;
     }
 
-    const normalBuf = bakeNormalMapCpu(sprite, params);
+    const normalBuf = bakeNormalMapCpu(sprite, {
+      ...params,
+      seamlessWrap: isSeamlessTile,
+    });
     lastBakedNormalRef.current = normalBuf;
     onNormalBufferBaked?.(normalBuf);
   }, [
     sprite,
     artMode,
+    isSeamlessTile,
     normalConfig.bevelRadiusPx,
     normalConfig.bevelProfile,
     normalConfig.bevelStrength,
@@ -379,6 +388,15 @@ export function NormalMapPreview({
             <SunMedium className="h-3.5 w-3.5 text-amber-400" />
             <span>Bevel &amp; Sobel Normal Bake</span>
           </div>
+
+          {isSeamlessTile && (
+            <div
+              data-testid="normal-seamless-badge"
+              className="rounded border border-emerald-500/40 bg-emerald-950/30 px-2.5 py-1.5 text-[11px] text-emerald-200"
+            >
+              Toroidal <code>gl.REPEAT</code> Active · Bevel Weight = 0 for Seamless Borders
+            </div>
+          )}
 
           <div className="space-y-1 text-xs">
             <span className="text-slate-400">Engine Y Convention</span>

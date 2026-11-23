@@ -250,6 +250,7 @@ export interface PackageAtlasZipInput {
   readonly engines: readonly AtlasEngineTarget[];
   readonly artMode: ArtMode;
   readonly fps?: number;
+  readonly extraFiles?: Record<string, Uint8Array>;
 }
 
 /**
@@ -300,6 +301,12 @@ export function packageAtlasZip(input: PackageAtlasZipInput): Uint8Array {
     files[godot.framesTresFilename] = strToU8(godot.framesTresContent);
     for (const [relPath, text] of Object.entries(godot.texturesTresFiles)) {
       files[relPath] = strToU8(text);
+    }
+  }
+
+  if (input.extraFiles) {
+    for (const [relPath, bytes] of Object.entries(input.extraFiles)) {
+      files[relPath] = bytes;
     }
   }
 
