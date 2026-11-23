@@ -3,8 +3,10 @@ import { z } from 'zod';
 import type { AudioVariationArtifact } from '../audio/variations';
 import {
   AudioPostProcessConfigSchema,
+  AudioSketchMetaSchema,
   GoogleAudioRouteSchema,
   ProceduralSfxParamsSchema,
+  type AudioSketchMeta,
 } from '../domain/schemas';
 import { redactSecrets } from '../providers/errors';
 import type { AudioPostProcessConfig, GoogleAudioRoute, ProceduralSfxParams } from '../audio/types';
@@ -18,6 +20,7 @@ export const AudioRecipeSchema = z.object({
   modelId: z.string().min(1),
   promptOrScript: z.string(),
   synthParams: ProceduralSfxParamsSchema.optional(),
+  audioSketch: AudioSketchMetaSchema.optional(),
   postProcess: AudioPostProcessConfigSchema,
   variationCount: z.number().int().min(1).max(6),
   sampleRate: z.number().int().min(8000),
@@ -43,6 +46,7 @@ export function buildAudioRecipe(input: {
   readonly modelId: string;
   readonly promptOrScript: string;
   readonly synthParams?: ProceduralSfxParams;
+  readonly audioSketch?: AudioSketchMeta;
   readonly postProcess: AudioPostProcessConfig;
   readonly variations: readonly AudioVariationArtifact[];
   readonly secretsToRedact?: readonly (string | undefined)[];
@@ -63,6 +67,7 @@ export function buildAudioRecipe(input: {
     modelId: input.modelId,
     promptOrScript: cleanPrompt,
     ...(input.synthParams ? { synthParams: input.synthParams } : {}),
+    ...(input.audioSketch ? { audioSketch: input.audioSketch } : {}),
     postProcess: input.postProcess,
     variationCount: input.variations.length,
     sampleRate,

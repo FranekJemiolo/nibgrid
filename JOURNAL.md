@@ -267,3 +267,20 @@
 - **9-Slice Click SFX Auditioning (`src/ui/inspector/TileAndSliceWorkshop.tsx`):** Added **Click SFX** binding and tactile clickable matrix previews (`Wide Button`, `Tall Sidebar`, `Square Dialog`) backed by `patchProjectAudioBindings` in IndexedDB.
 - **Verification:** Verified via `tests/e2e/m14c-sandbox-audio-binding.spec.ts` (including hard-reload persistence) and the full TypeScript, ESLint, Prettier, unit, Python bridge, E2E, and GitHub Pages production build gate.
 
+## Milestone 15A: Pure-TS Vocal Sketch Analyzer & Contour-Following Synth
+
+- **Pure-TS NSDF Pitch & Envelope Extraction (`src/audio/vocalAnalyzer.ts`):** Implemented 10ms hop analysis computing normalized `A(t)`, zero-crossing rate, clarity, and McLeod first-key-maximum NSDF `f0(t)` with parabolic lag interpolation + `extractMelodySummary()` MIDI/key/BPM inference.
+- **Contour-Following Synth & Timbre Patch Schema (`src/audio/contourSynth.ts`, `src/audio/contourPatchSchema.ts`, `schemas.ts`, `audioExport.ts`):** Built `synthesizeFromContour()` + `generateContourVariations()` (voiced FM/sub vs. unvoiced SVF noise crossfading + scale snapping), 4 starter offline patches, Gemini JSON `CONTOUR_TIMBRE_RESPONSE_SCHEMA` clamping, and `audioSketch` persistence/export metadata.
+- **Verification:** Verified via `tests/unit/m15a-vocal-and-contour.test.ts` alongside the full TypeScript, ESLint, Prettier, unit, E2E, and GitHub Pages production build gate.
+
+## Milestone 15B: AudioWorklet Mic Recorder, Multimodal Hum Router & Worker Integration
+
+- **Inline Blob AudioWorklet Mic Recorder (`src/audio/micRecorder.ts`):** Implemented subpath-safe raw PCM mic capture (disabling echo/noise DSP, 10s max duration, live VU callbacks, and strict `track.stop()` / `URL.revokeObjectURL()` / `AudioContext.close()` teardown) alongside `ingestWavSketchBytes()`.
+- **Multimodal Hum-to-Sound Router & Audio Worker (`src/audio/humToSoundProvider.ts`, `src/workers/audio.worker.ts`, `src/workers/audioClient.ts`):** Built request/fetch orchestration across `hum-to-timbre`, `hum-to-lyria` (injecting extracted BPM + dominant key), and `hum-to-tts` with API-key redaction, plus offloaded `analyze-vocal` and `contour` variation worker handlers.
+- **Verification:** Verified via `tests/unit/m15b-hum-routing.test.ts` and the full TypeScript, ESLint, Prettier, unit, E2E, and GitHub Pages production build suite.
+
+## Milestone 15C: Mic SketchPad UI, Pitch Ribbon & End-to-End Hum-to-Sandbox Loop
+
+- **Interactive Pitch Ribbon & Mic SketchPad UI (`src/ui/audio/PitchRibbonCanvas.tsx`, `src/ui/audio/MicSketchPanel.tsx`, `src/ui/audio/AudioFoundry.tsx`):** Integrated Screen 6 `Mic Sketch` tab featuring cyan `65–1100 Hz` logarithmic pitch ribbons, amber unvoiced foley markers, hold-to-record `R` shortcut (isolated from focused text fields), `.wav` sketch upload, 6 quick intent chips, live `$0.00` contour sliders, A/B `My Hum` vs. `Transformed Sound` auditioning, IndexedDB `audioSketch` persistence, `.zip` provenance export (`sketchSha256`), and Sandbox `H` hit-flash SFX binding.
+- **Verification:** Verified via `tests/e2e/m15c-hum-to-sound.spec.ts` alongside TypeScript, ESLint, Prettier, unit tests, Python loopback bridge unit tests, full Playwright E2E suite, and GitHub Pages production build.
+

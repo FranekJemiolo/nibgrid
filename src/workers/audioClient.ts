@@ -1,6 +1,10 @@
+import type { ContourTimbrePatch } from '../audio/contourPatchSchema';
 import type { AudioPostProcessConfig, PcmBuffer, ProceduralSfxParams } from '../audio/types';
+import type { VocalContour } from '../audio/vocalAnalyzer';
 import {
   executeAudioWorkerJob,
+  executeVocalAnalyzeJob,
+  type AudioAnalyzeSuccess,
   type AudioWorkerMessage,
   type AudioWorkerRequest,
   type AudioWorkerSuccess,
@@ -10,7 +14,7 @@ let audioWorkerInstance: Worker | null = null;
 let nextAudioRequestId = 1;
 
 interface PendingAudioJob {
-  resolve: (val: AudioWorkerSuccess) => void;
+  resolve: (val: AudioWorkerSuccess | AudioAnalyzeSuccess) => void;
   reject: (err: Error) => void;
 }
 
@@ -47,9 +51,11 @@ function getAudioWorker(): Worker | null {
 }
 
 export interface RunAudioWorkerInput {
-  readonly sourceKind: 'procedural' | 'pcm';
+  readonly sourceKind: 'procedural' | 'pcm' | 'contour';
   readonly synthParams?: ProceduralSfxParams;
   readonly rawPcm?: PcmBuffer;
+  readonly contour?: VocalContour;
+  readonly contourPatch?: ContourTimbrePatch;
   readonly postProcess: AudioPostProcessConfig;
   readonly variationCount: 1 | 4 | 6;
   readonly seed?: number;
@@ -67,11 +73,14 @@ export async function runAudioPipelineInWorker(
       }
     : undefined;
 
-  const req: AudioWorkerRequest = {
+  const req: Extract<AudioWorkerRequest, { sourceKind: unknown }> = {
+    op: 'synth',
     id,
     sourceKind: input.sourceKind,
     synthParams: input.synthParams,
     rawPcm: rawCopy,
+    contour: input.contour,
+    contourPatch: input.contourPatch,
     postProcess: input.postProcess,
     variationCount: input.variationCount,
     seed: input.seed,
@@ -83,8 +92,39 @@ export async function runAudioPipelineInWorker(
   }
 
   return new Promise<AudioWorkerSuccess>((resolve, reject) => {
-    pendingJobs.set(id, { resolve, reject });
+    pendingJobs.set(id, {
+      resolve: (val) => resolve(val as AudioWorkerSuccess),
+      reject,
+    });
     const transfers: Transferable[] = rawCopy ? [rawCopy.samples.buffer as ArrayBuffer] : [];
     worker.postMessage(req, transfers);
+  });
+}
+
+export async function analyzeVocalSketchInWorker(rawPcm: PcmBuffer): Promise<AudioAnalyzeSuccess> {
+  const id = nextAudioRequestId++;
+  const rawCopy: PcmBuffer = {
+    sampleRate: rawPcm.sampleRate,
+    channels: rawPcm.channels,
+    samples: new Float32Array(rawPcm.samples),
+  };
+
+  const req: AudioWorkerRequest = {
+    op: 'analyze-vocal',
+    id,
+    rawPcm: rawCopy,
+  };
+
+  const worker = getAudioWorker();
+  if (!worker) {
+    return executeVocalAnalyzeJob(req);
+  }
+
+  return new Promise<AudioAnalyzeSuccess>((resolve, reject) => {
+    pendingJobs.set(id, {
+      resolve: (val) => resolve(val as AudioAnalyzeSuccess),
+      reject,
+    });
+    worker.postMessage(req, [rawCopy.samples.buffer as ArrayBuffer]);
   });
 }

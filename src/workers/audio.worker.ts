@@ -1,3 +1,5 @@
+import type { ContourTimbrePatch } from '../audio/contourPatchSchema';
+import { generateContourVariations } from '../audio/contourSynth';
 import { encodeWav16 } from '../audio/pcmPostProcess';
 import { synthesizeProceduralSfx } from '../audio/proceduralSynth';
 import type { AudioPostProcessConfig, PcmBuffer, ProceduralSfxParams } from '../audio/types';
@@ -6,23 +8,47 @@ import {
   generateProceduralVariations,
   type AudioVariationArtifact,
 } from '../audio/variations';
+import {
+  analyzeVocalSketch,
+  extractMelodySummary,
+  type MelodySummary,
+  type VocalContour,
+} from '../audio/vocalAnalyzer';
 
-export interface AudioWorkerRequest {
-  readonly id: number;
-  readonly sourceKind: 'procedural' | 'pcm';
-  readonly synthParams?: ProceduralSfxParams;
-  readonly rawPcm?: PcmBuffer;
-  readonly postProcess: AudioPostProcessConfig;
-  readonly variationCount: 1 | 4 | 6;
-  readonly seed?: number;
-}
+export type AudioWorkerRequest =
+  | {
+      readonly op?: 'synth';
+      readonly id: number;
+      readonly sourceKind: 'procedural' | 'pcm' | 'contour';
+      readonly synthParams?: ProceduralSfxParams;
+      readonly rawPcm?: PcmBuffer;
+      readonly contour?: VocalContour;
+      readonly contourPatch?: ContourTimbrePatch;
+      readonly postProcess: AudioPostProcessConfig;
+      readonly variationCount: 1 | 4 | 6;
+      readonly seed?: number;
+    }
+  | {
+      readonly op: 'analyze-vocal';
+      readonly id: number;
+      readonly rawPcm: PcmBuffer;
+    };
 
 export interface AudioWorkerSuccess {
   readonly id: number;
+  readonly op?: 'synth';
   readonly ok: true;
   readonly rawPcm: PcmBuffer;
   readonly rawWavBytes: Uint8Array;
   readonly variations: readonly AudioVariationArtifact[];
+}
+
+export interface AudioAnalyzeSuccess {
+  readonly id: number;
+  readonly op: 'analyze-vocal';
+  readonly ok: true;
+  readonly contour: VocalContour;
+  readonly melody: MelodySummary;
 }
 
 export interface AudioWorkerFailure {
@@ -31,12 +57,29 @@ export interface AudioWorkerFailure {
   readonly error: string;
 }
 
-export type AudioWorkerMessage = AudioWorkerSuccess | AudioWorkerFailure;
+export type AudioWorkerMessage = AudioWorkerSuccess | AudioAnalyzeSuccess | AudioWorkerFailure;
 
 /**
  * Pure worker execution core shared by Web Worker and Node fallback.
  */
-export function executeAudioWorkerJob(req: AudioWorkerRequest): AudioWorkerSuccess {
+export function executeVocalAnalyzeJob(req: {
+  readonly id: number;
+  readonly rawPcm: PcmBuffer;
+}): AudioAnalyzeSuccess {
+  const contour = analyzeVocalSketch(req.rawPcm);
+  const melody = extractMelodySummary(contour);
+  return {
+    id: req.id,
+    op: 'analyze-vocal',
+    ok: true,
+    contour,
+    melody,
+  };
+}
+
+export function executeAudioWorkerJob(
+  req: Extract<AudioWorkerRequest, { sourceKind: unknown }>,
+): AudioWorkerSuccess {
   let rawPcm: PcmBuffer;
   let variations: readonly AudioVariationArtifact[];
 
@@ -46,6 +89,18 @@ export function executeAudioWorkerJob(req: AudioWorkerRequest): AudioWorkerSucce
     }
     rawPcm = synthesizeProceduralSfx(req.synthParams);
     variations = generateProceduralVariations(req.synthParams, req.postProcess, req.variationCount);
+  } else if (req.sourceKind === 'contour') {
+    if (!req.contour || !req.contourPatch) {
+      throw new Error('Missing vocal contour or ContourTimbrePatch for contour synthesis job.');
+    }
+    variations = generateContourVariations(
+      req.contour,
+      req.contourPatch,
+      req.postProcess,
+      req.variationCount,
+      req.seed ?? 1024,
+    );
+    rawPcm = req.rawPcm ?? variations[0]!.buffer;
   } else {
     if (!req.rawPcm) {
       throw new Error('Missing rawPcm buffer for PCM DSP job.');
@@ -62,6 +117,7 @@ export function executeAudioWorkerJob(req: AudioWorkerRequest): AudioWorkerSucce
   const rawWavBytes = encodeWav16(rawPcm);
   return {
     id: req.id,
+    op: 'synth',
     ok: true,
     rawPcm,
     rawWavBytes,
@@ -83,6 +139,11 @@ if (
   workerSelf.onmessage = (event: MessageEvent<AudioWorkerRequest>) => {
     const req = event.data;
     try {
+      if (req.op === 'analyze-vocal') {
+        const res = executeVocalAnalyzeJob(req);
+        workerSelf.postMessage(res);
+        return;
+      }
       const result = executeAudioWorkerJob(req);
       const buffers = new Set<ArrayBuffer>();
       buffers.add(result.rawPcm.samples.buffer as ArrayBuffer);

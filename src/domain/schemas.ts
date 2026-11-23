@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { ContourTimbrePatchSchema } from '../audio/contourPatchSchema';
 
 export const DEFAULT_NEGATIVE_PROMPT = 'drop shadow, floor plane, busy background, text, watermark';
 
@@ -268,6 +269,16 @@ export const AudioBindingsSchema = z.object({
 });
 export type AudioBindings = z.infer<typeof AudioBindingsSchema>;
 
+export const AudioSketchMetaSchema = z.object({
+  sketchSha256: z.string().regex(/^[0-9a-f]{64}$/),
+  durationSec: z.number().min(0),
+  humRoute: z.string().min(1),
+  contourPatch: ContourTimbrePatchSchema.optional(),
+  detectedBpm: z.number().optional(),
+  dominantKey: z.string().optional(),
+});
+export type AudioSketchMeta = z.infer<typeof AudioSketchMetaSchema>;
+
 export const AudioAssetSchema = z.object({
   id: z.string().min(1),
   projectId: z.string().min(1),
@@ -278,6 +289,7 @@ export const AudioAssetSchema = z.object({
   wavBlobId: z.string().min(1),
   variationBlobIds: z.array(z.string().min(1)).default([]),
   synthParams: ProceduralSfxParamsSchema.optional(),
+  audioSketch: AudioSketchMetaSchema.optional(),
   postProcess: AudioPostProcessConfigSchema,
   lufs: z.number(),
   durationSec: z.number().min(0),
