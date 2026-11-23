@@ -56,6 +56,7 @@ import { bakeNormalMapCpu } from '../../processing/distanceField';
 import type { PaletteVariant } from '../../processing/paletteLut';
 import { runPostProcessPipeline } from '../../processing/pipeline';
 import { decodePngBytesToRgba, encodeRgbaToPngBytes, rgbaToPngBlob } from '../../processing/png';
+import { computeArtBibleHash } from '../../processing/projectAudit';
 import { buildAlphaClippedMesh } from '../../processing/spriteMesh';
 import type { RgbaBuffer } from '../../processing/types';
 import { useAppStore, type InspectorTab } from '../../store/useAppStore';
@@ -428,6 +429,7 @@ export function PostProcessInspector({
             processedBlobId: stored.id,
             postProcessConfig: latestConfigRef.current,
             puppetAnim: latestPuppetRef.current,
+            recipeArtBibleHash: computeArtBibleHash(activeProject.artBible),
             ...(latestSeamlessRef.current.isSeamlessTile
               ? { seamlessTile: latestSeamlessRef.current }
               : {}),
@@ -715,6 +717,7 @@ export function PostProcessInspector({
         ? { nineSlice: nineSliceConfig.enabled ? nineSliceConfig : targetNode.nineSlice }
         : {}),
       ...(collisionShapes.length > 0 ? { collisionShapes } : {}),
+      recipeArtBibleHash: computeArtBibleHash(activeProject.artBible),
     });
     return { artifact, slug, recipe, normalPngBytes, extraFiles };
   };

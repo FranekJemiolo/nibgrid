@@ -301,3 +301,18 @@
 - **Interactive Vector Overlay & Frame Sync UI (`src/ui/inspector/ColliderEditor.tsx`, `src/ui/inspector/PostProcessInspector.tsx`, `src/store/useAppStore.ts`):** Built Screen 4G (`Collider & Hitbox`) featuring semantic Collider/Hurtbox/Hitbox layers, Auto-Trace Silhouette & `8-Vertex Box2D Safe` preset, convexity guard badge, HiDPI-safe vertex drag/midpoint-insert/right-click-delete tools, M9 Puppet-Warp frame timeline scrubber with onion-skinning & per-frame active toggles, live Godot 4 `.tres` / Matter.js code previews, and IndexedDB persistence.
 - **Verification:** Verified via `tests/e2e/m16c-collider-editor.spec.ts` (including `deviceScaleFactor: 2` HiDPI drag accuracy, ZIP bundle unpacking, and reload persistence) alongside the full TypeScript, ESLint, Prettier, unit, Python bridge, Playwright E2E, and GitHub Pages production build gate.
 
+## Milestone 17A: Pure-TS Project Audit Engine & Art Bible Sync Hashing
+
+- **Deterministic Sync Hashing & Audit Analyzers (`src/processing/projectAudit.ts`, `src/domain/schemas.ts`, `src/export/recipeBuilder.ts`, `PostProcessInspector.tsx`):** Implemented synchronous pure-TS `computeArtBibleHash()` + `recipeArtBibleHash` stamping on processed sprites/recipes, paired with `auditSpriteAsset()`, `auditAudioAsset()`, and `summarizeProjectAudit()` orchestrating M7 `detectPixelGrid()`, M13 `computeBiomeContrast()`, and M14 `measureApproxLufs()` with zero DOM dependencies.
+- **Verification:** Verified via `tests/unit/m17a-project-audit.test.ts` (palette drift thresholds, 2× mixel detection vs. HD-2D bypass, stale Art Bible hash flagging, LUFS drift vs. clean clips, and weighted Readiness Score) alongside the full TypeScript, ESLint, Prettier, unit, E2E, and GitHub Pages production build gate.
+
+## Milestone 17B: Deterministic Batch Recipe Runner, Cancellation & Rollback
+
+- **Batch Dry-Run, Executor & Undo Engine (`src/processing/batchRunner.ts`):** Implemented `buildBatchDryRunSummary()`, atomic per-asset `executeBatchRecipePlan()` (`in-place` and `fork-children` modes covering palette sync, M7 Pixel Foundry, missing M16 `collider` auto-tracing preserving manual `hitbox`/`hurtbox` layers, LUT re-bake, and M14 silence trim + LUFS normalize), `AbortSignal` mid-run cancellation, and `rollbackBatchRun()` / `cleanupSupersededBatchBlobs()` orphan GC.
+- **Verification:** Verified via `tests/unit/m17b-batch-runner.test.ts` (5-asset atomic batch completion, manual hitbox preservation, LUFS normalization, 2-of-6 cancellation + rollback, zero orphan blobs) alongside the full TypeScript, ESLint, Prettier, unit, E2E, and GitHub Pages production build gate.
+
+## Milestone 17C: Screen 7 Project-Wide Asset Audit Matrix & Batch Runner UI
+
+- **Screen 7 UI & Navigation (`src/ui/audit/AuditMatrixView.tsx`, `src/ui/audit/BatchRunnerDrawer.tsx`, `src/store/useAppStore.ts`, `src/App.tsx`):** Mounted the top-level **Audit** tab (`#/project/:id/audit`) displaying a weighted `0–100` Readiness Score, filter pills, dynamic Target Biome contrast auditing, 1-click jump-to-fix table cells, `$0.00 local compute` Batch Recipe Drawer with `AbortSignal` cancellation, Before → After Readiness banner, and session **Undo Batch** with automatic IndexedDB orphan cleanup.
+- **Verification:** Verified via `tests/e2e/m17c-audit-batch-e2e.spec.ts` (3 sprites + quiet `-31.7 LUFS` audio clip, dynamic biome contrast updates, batch run raising Readiness Score to `97`, exact `Undo Batch` reversion, and hard-reload persistence) alongside Prettier, TypeScript, ESLint, unit tests, Python bridge unit tests, Playwright E2E, and GitHub Pages production build.
+

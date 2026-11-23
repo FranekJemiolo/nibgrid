@@ -19,7 +19,8 @@ export type ScreenRoute =
   | { screen: 'studio'; projectId: string }
   | { screen: 'inspector'; projectId: string; nodeId: string; initialTab?: InspectorTab }
   | { screen: 'atlas'; projectId: string }
-  | { screen: 'audio'; projectId: string };
+  | { screen: 'audio'; projectId: string }
+  | { screen: 'audit'; projectId: string };
 
 const VALID_INSPECTOR_TABS = new Set<InspectorTab>([
   'postprocess',
@@ -63,6 +64,10 @@ export function parseHashRoute(hash: string): ScreenRoute {
   if (audioMatch?.[1]) {
     return { screen: 'audio', projectId: audioMatch[1] };
   }
+  const auditMatch = /^\/project\/([^/]+)\/audit$/.exec(path);
+  if (auditMatch?.[1]) {
+    return { screen: 'audit', projectId: auditMatch[1] };
+  }
   return { screen: 'hub' };
 }
 
@@ -82,6 +87,9 @@ export function formatHashRoute(route: ScreenRoute): string {
   }
   if (route.screen === 'audio') {
     return `#/project/${route.projectId}/audio`;
+  }
+  if (route.screen === 'audit') {
+    return `#/project/${route.projectId}/audit`;
   }
   return '#/';
 }

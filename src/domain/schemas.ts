@@ -428,6 +428,7 @@ export const SpriteNodeSchema = z.object({
   paletteLut: PaletteLutConfigSchema.optional(),
   audioBindings: AudioBindingsSchema.optional(),
   collisionShapes: z.array(CollisionLayerShapeSchema).optional(),
+  recipeArtBibleHash: z.string().min(1).optional(),
   sketchSha256: z.string().regex(/^[0-9a-f]{64}$/, 'sketchSha256 must be a 64-char hex SHA-256'),
   generationMeta: GenerationMetaSchema,
 });

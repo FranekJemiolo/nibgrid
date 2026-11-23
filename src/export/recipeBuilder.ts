@@ -107,6 +107,7 @@ export const AssetRecipeSchema = z.object({
   nineSlice: NineSliceConfigSchema.optional(),
   paletteLut: PaletteLutConfigSchema.optional(),
   collisionShapes: z.array(CollisionLayerShapeSchema).optional(),
+  recipeArtBibleHash: z.string().min(1).optional(),
 });
 
 export type AssetRecipe = z.infer<typeof AssetRecipeSchema>;
@@ -138,6 +139,7 @@ export interface BuildAssetRecipeInput {
   nineSlice?: NineSliceConfig;
   paletteLut?: PaletteLutConfig;
   collisionShapes?: readonly CollisionLayerShape[];
+  recipeArtBibleHash?: string;
 }
 
 const SENSITIVE_KEY_PATTERNS: readonly RegExp[] = [
@@ -215,6 +217,9 @@ export function buildAssetRecipe(input: BuildAssetRecipeInput): AssetRecipe {
       const shapes = input.collisionShapes ?? node.collisionShapes;
       return shapes && shapes.length > 0 ? { collisionShapes: shapes } : {};
     })(),
+    ...((input.recipeArtBibleHash ?? node.recipeArtBibleHash)
+      ? { recipeArtBibleHash: input.recipeArtBibleHash ?? node.recipeArtBibleHash }
+      : {}),
   });
 
   const serialized = JSON.stringify(recipe);

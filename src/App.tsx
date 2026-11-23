@@ -1,6 +1,7 @@
 import { useEffect } from 'react';
 import {
   BookOpen,
+  ClipboardCheck,
   FolderKanban,
   Grid2X2,
   KeyRound,
@@ -12,6 +13,7 @@ import {
 import { parseHashRoute, useAppStore } from './store/useAppStore';
 import { AtlasWorkshop } from './ui/atlas/AtlasWorkshop';
 import { AudioFoundry } from './ui/audio/AudioFoundry';
+import { AuditMatrixView } from './ui/audit/AuditMatrixView';
 import { ArtBibleEditor } from './ui/bible/ArtBibleEditor';
 import { ProjectHub } from './ui/hub/ProjectHub';
 import { ProviderVaultModal } from './ui/hub/ProviderVaultModal';
@@ -133,6 +135,19 @@ export function App() {
                 <Music className="h-3.5 w-3.5" />
                 Audio Foundry
               </button>
+              <button
+                type="button"
+                data-testid="nav-audit-matrix"
+                onClick={() => void navigate({ screen: 'audit', projectId: activeProject.id })}
+                className={`inline-flex items-center gap-2 rounded-md px-3 py-1.5 text-xs font-medium transition-colors ${
+                  route.screen === 'audit'
+                    ? 'bg-indigo-600 text-white'
+                    : 'text-slate-300 hover:bg-slate-800 hover:text-white'
+                }`}
+              >
+                <ClipboardCheck className="h-3.5 w-3.5" />
+                Audit
+              </button>
             </>
           )}
 
@@ -181,6 +196,8 @@ export function App() {
           <AtlasWorkshop />
         ) : route.screen === 'audio' ? (
           <AudioFoundry />
+        ) : route.screen === 'audit' ? (
+          <AuditMatrixView />
         ) : (
           <SpriteStudio />
         )}
