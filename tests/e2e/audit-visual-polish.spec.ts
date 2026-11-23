@@ -137,4 +137,3 @@ test.describe('Phase 3 Audit: Visual Polish, Pixel-Art Fidelity & Studio Ergonom
     expect(pageErrors).toEqual([]);
   });
 });
-
