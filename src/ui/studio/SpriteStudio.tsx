@@ -1893,6 +1893,14 @@ export function SpriteStudio() {
             nodeId: targetNodeId,
           })
         }
+        onOpenSandbox={(targetNodeId) =>
+          void navigate({
+            screen: 'inspector',
+            projectId: activeProject.id,
+            nodeId: targetNodeId,
+            initialTab: 'sandbox',
+          })
+        }
         onOpenAnimationStudio={() => setAnimationStudioOpen(true)}
         onDeleteLeafNode={(id) => void handleDeleteLeafNode(id)}
       />

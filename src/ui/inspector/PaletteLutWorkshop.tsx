@@ -37,6 +37,8 @@ export interface PaletteLutWorkshopProps {
   postProcessConfig: PostProcessConfig;
   rawWidth: number;
   rawHeight: number;
+  variants?: PaletteVariant[];
+  onChangeVariants?: (variants: PaletteVariant[]) => void;
   exportSlot?: ReactNode;
 }
 
@@ -148,10 +150,25 @@ export function PaletteLutWorkshop({
   postProcessConfig,
   rawWidth,
   rawHeight,
+  variants: controlledVariants,
+  onChangeVariants,
   exportSlot,
 }: PaletteLutWorkshopProps) {
   const [workingSprite, setWorkingSprite] = useState<RgbaBuffer>(sprite);
-  const [variants, setVariants] = useState<PaletteVariant[]>([]);
+  const [localVariants, setLocalVariants] = useState<PaletteVariant[]>([]);
+  const variants = controlledVariants ?? localVariants;
+  const variantsRef = useRef(variants);
+  variantsRef.current = variants;
+  const setVariants = (
+    updater: PaletteVariant[] | ((prev: PaletteVariant[]) => PaletteVariant[]),
+  ) => {
+    const next = typeof updater === 'function' ? updater(variantsRef.current) : updater;
+    if (onChangeVariants) {
+      onChangeVariants(next);
+    } else {
+      setLocalVariants(next);
+    }
+  };
   const [activeVariantIdx, setActiveVariantIdx] = useState(0);
   const [selectedRampId, setSelectedRampId] = useState<string | null>(null);
   const [lutMode, setLutMode] = useState<'stacked' | 'single'>('stacked');

@@ -161,7 +161,7 @@ export function App() {
         ) : route.screen === 'bible' ? (
           <ArtBibleEditor />
         ) : route.screen === 'inspector' ? (
-          <PostProcessInspector nodeId={route.nodeId} />
+          <PostProcessInspector nodeId={route.nodeId} initialTab={route.initialTab} />
         ) : route.screen === 'atlas' ? (
           <AtlasWorkshop />
         ) : (

@@ -8,28 +8,50 @@ import type {
   SpriteNode,
 } from '../domain/schemas';
 
+export type InspectorTab =
+  'postprocess' | 'normal' | 'puppet' | 'tile-slice' | 'palette-lut' | 'sandbox';
+
 export type ScreenRoute =
   | { screen: 'hub' }
   | { screen: 'bible'; projectId: string }
   | { screen: 'studio'; projectId: string }
-  | { screen: 'inspector'; projectId: string; nodeId: string }
+  | { screen: 'inspector'; projectId: string; nodeId: string; initialTab?: InspectorTab }
   | { screen: 'atlas'; projectId: string };
 
+const VALID_INSPECTOR_TABS = new Set<InspectorTab>([
+  'postprocess',
+  'normal',
+  'puppet',
+  'tile-slice',
+  'palette-lut',
+  'sandbox',
+]);
+
 export function parseHashRoute(hash: string): ScreenRoute {
-  const cleaned = hash.replace(/^#/, '');
-  const bibleMatch = /^\/project\/([^/]+)\/bible$/.exec(cleaned);
+  const raw = hash.replace(/^#/, '');
+  const [cleaned, query] = raw.split('?');
+  const path = cleaned ?? '';
+  const bibleMatch = /^\/project\/([^/]+)\/bible$/.exec(path);
   if (bibleMatch?.[1]) {
     return { screen: 'bible', projectId: bibleMatch[1] };
   }
-  const studioMatch = /^\/project\/([^/]+)\/studio$/.exec(cleaned);
+  const studioMatch = /^\/project\/([^/]+)\/studio$/.exec(path);
   if (studioMatch?.[1]) {
     return { screen: 'studio', projectId: studioMatch[1] };
   }
-  const inspectorMatch = /^\/project\/([^/]+)\/inspector\/([^/]+)$/.exec(cleaned);
+  const inspectorMatch = /^\/project\/([^/]+)\/inspector\/([^/]+)$/.exec(path);
   if (inspectorMatch?.[1] && inspectorMatch[2]) {
-    return { screen: 'inspector', projectId: inspectorMatch[1], nodeId: inspectorMatch[2] };
+    const params = query ? new URLSearchParams(query) : null;
+    const rawTab = params?.get('tab') as InspectorTab | null;
+    const initialTab = rawTab && VALID_INSPECTOR_TABS.has(rawTab) ? rawTab : undefined;
+    return {
+      screen: 'inspector',
+      projectId: inspectorMatch[1],
+      nodeId: inspectorMatch[2],
+      ...(initialTab ? { initialTab } : {}),
+    };
   }
-  const atlasMatch = /^\/project\/([^/]+)\/atlas$/.exec(cleaned);
+  const atlasMatch = /^\/project\/([^/]+)\/atlas$/.exec(path);
   if (atlasMatch?.[1]) {
     return { screen: 'atlas', projectId: atlasMatch[1] };
   }
@@ -44,7 +66,8 @@ export function formatHashRoute(route: ScreenRoute): string {
     return `#/project/${route.projectId}/studio`;
   }
   if (route.screen === 'inspector') {
-    return `#/project/${route.projectId}/inspector/${route.nodeId}`;
+    const base = `#/project/${route.projectId}/inspector/${route.nodeId}`;
+    return route.initialTab ? `${base}?tab=${route.initialTab}` : base;
   }
   if (route.screen === 'atlas') {
     return `#/project/${route.projectId}/atlas`;

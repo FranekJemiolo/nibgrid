@@ -13,6 +13,7 @@ import {
   Eraser,
   FileArchive,
   FolderOutput,
+  Gamepad2,
   Grid3X3,
   Palette,
   Sliders,
@@ -25,6 +26,7 @@ import { repository } from '../../db/database';
 import {
   createDefaultNineSliceConfig,
   createDefaultNormalMapConfig,
+  createDefaultPaletteLutConfig,
   createDefaultPostProcessConfig,
   createDefaultPuppetAnimConfig,
   createDefaultSeamlessTileConfig,
@@ -34,6 +36,7 @@ import {
   type Lighting,
   type NineSliceConfig,
   type NormalMapConfig,
+  type PaletteLutConfig,
   type PostProcessConfig,
   type PuppetAnimConfig,
   type ResampleMode,
@@ -45,18 +48,21 @@ import { exportBundleToDirectory, supportsFileSystemAccess } from '../../export/
 import { buildNineSliceExportFiles } from '../../export/nineSliceExporters';
 import { buildAssetRecipe, computePivotPx } from '../../export/recipeBuilder';
 import { packageSpriteZip, toAssetSlug, triggerBlobDownload } from '../../export/zipPackager';
+import { parseHexRgb } from '../../processing/backgroundKey';
 import type { DetectedGrid } from '../../processing/demixel';
 import { bakeNormalMapCpu } from '../../processing/distanceField';
+import type { PaletteVariant } from '../../processing/paletteLut';
 import { runPostProcessPipeline } from '../../processing/pipeline';
 import { decodePngBytesToRgba, encodeRgbaToPngBytes, rgbaToPngBlob } from '../../processing/png';
 import { buildAlphaClippedMesh } from '../../processing/spriteMesh';
 import type { RgbaBuffer } from '../../processing/types';
-import { useAppStore } from '../../store/useAppStore';
+import { useAppStore, type InspectorTab } from '../../store/useAppStore';
 import { buildPuppetStripArtifacts } from '../../webgl/puppetRenderer';
 import {
   createMonotonicRequestGuard,
   runPostProcessInWorker,
 } from '../../workers/postprocessClient';
+import { GameSandbox } from './GameSandbox';
 import { NormalMapPreview } from './NormalMapPreview';
 import { PaletteLutWorkshop } from './PaletteLutWorkshop';
 import { PuppetWarpEditor } from './PuppetWarpEditor';
@@ -97,7 +103,54 @@ async function decodeBlobFlexible(blob: Blob): Promise<DecodedImage> {
   }
 }
 
-export function PostProcessInspector({ nodeId }: { nodeId: string }) {
+function paletteVariantsFromNode(node?: SpriteNode): PaletteVariant[] {
+  const saved = node?.paletteLut?.variants;
+  if (!saved || saved.length === 0) return [];
+  return saved.map((v) => ({
+    id: v.id,
+    name: v.name,
+    rampTransforms: v.rampTransforms,
+    overrides: Object.fromEntries(
+      Object.entries(v.overrides).map(([k, hex]) => [Number(k), parseHexRgb(hex)]),
+    ),
+  }));
+}
+
+function rgbToUpperHex(r: number, g: number, b: number): string {
+  const h = (n: number) =>
+    Math.max(0, Math.min(255, Math.round(n)))
+      .toString(16)
+      .padStart(2, '0')
+      .toUpperCase();
+  return `#${h(r)}${h(g)}${h(b)}`;
+}
+
+function paletteVariantsToConfig(
+  variants: readonly PaletteVariant[],
+  prev?: PaletteLutConfig,
+): PaletteLutConfig {
+  const base = prev ?? createDefaultPaletteLutConfig();
+  return {
+    ...base,
+    variantCount: Math.max(1, variants.length + 1),
+    variants: variants.map((v) => ({
+      id: v.id,
+      name: v.name,
+      rampTransforms: [...v.rampTransforms],
+      overrides: Object.fromEntries(
+        Object.entries(v.overrides).map(([k, rgb]) => [k, rgbToUpperHex(rgb.r, rgb.g, rgb.b)]),
+      ),
+    })),
+  };
+}
+
+export function PostProcessInspector({
+  nodeId,
+  initialTab,
+}: {
+  nodeId: string;
+  initialTab?: InspectorTab;
+}) {
   const { activeProject, spriteNodes, refreshSpriteNodes, navigate } = useAppStore();
 
   const targetNode: SpriteNode | undefined =
@@ -122,9 +175,7 @@ export function PostProcessInspector({ nodeId }: { nodeId: string }) {
   const [workerError, setWorkerError] = useState<string | null>(null);
   const [pivotPlaceMode, setPivotPlaceMode] = useState(false);
   const [exportNotice, setExportNotice] = useState<string | null>(null);
-  const [inspectorTab, setInspectorTab] = useState<
-    'postprocess' | 'normal' | 'puppet' | 'tile-slice' | 'palette-lut'
-  >('postprocess');
+  const [inspectorTab, setInspectorTab] = useState<InspectorTab>(initialTab ?? 'postprocess');
   const [normalConfig, setNormalConfig] = useState<NormalMapConfig>(() =>
     createDefaultNormalMapConfig(),
   );
@@ -136,6 +187,9 @@ export function PostProcessInspector({ nodeId }: { nodeId: string }) {
   );
   const [nineSliceConfig, setNineSliceConfig] = useState<NineSliceConfig>(
     () => targetNode?.nineSlice ?? createDefaultNineSliceConfig(),
+  );
+  const [lutVariants, setLutVariants] = useState<PaletteVariant[]>(() =>
+    paletteVariantsFromNode(targetNode),
   );
   const [activeSpriteBuffer, setActiveSpriteBuffer] = useState<RgbaBuffer | null>(null);
   const bakedNormalRef = useRef<{ buffer: RgbaBuffer; key: string } | null>(null);
@@ -186,6 +240,14 @@ export function PostProcessInspector({ nodeId }: { nodeId: string }) {
   latestSeamlessRef.current = seamlessConfig;
   const latestNineSliceRef = useRef(nineSliceConfig);
   latestNineSliceRef.current = nineSliceConfig;
+  const latestLutVariantsRef = useRef(lutVariants);
+  latestLutVariantsRef.current = lutVariants;
+
+  useEffect(() => {
+    if (initialTab) {
+      setInspectorTab(initialTab);
+    }
+  }, [initialTab]);
 
   // Sync initial config when node changes
   useEffect(() => {
@@ -201,9 +263,10 @@ export function PostProcessInspector({ nodeId }: { nodeId: string }) {
     setPuppetConfig(node.puppetAnim ?? createDefaultPuppetAnimConfig());
     setSeamlessConfig(node.seamlessTile ?? createDefaultSeamlessTileConfig());
     setNineSliceConfig(node.nineSlice ?? createDefaultNineSliceConfig());
+    setLutVariants(paletteVariantsFromNode(node));
   }, [targetNodeId, activeProject]);
 
-  // Persist puppet animation / 9-slice panel metadata onto SpriteNode in Dexie for reloads & Screen 5
+  // Persist puppet animation / 9-slice panel / LUT variant metadata onto SpriteNode in Dexie for reloads & Screen 4F
   useEffect(() => {
     const nodeSnapshot = latestNodeRef.current;
     if (!activeProject || !targetNodeId || !nodeSnapshot) return;
@@ -214,22 +277,34 @@ export function PostProcessInspector({ nodeId }: { nodeId: string }) {
       nineSliceConfig.enabled &&
       JSON.stringify(nodeSnapshot.nineSlice ?? createDefaultNineSliceConfig()) !==
         JSON.stringify(nineSliceConfig);
-    if (!puppetChanged && !sliceChanged) {
+    const nextLutConfig =
+      lutVariants.length > 0
+        ? paletteVariantsToConfig(lutVariants, nodeSnapshot.paletteLut)
+        : undefined;
+    const lutChanged =
+      lutVariants.length > 0 &&
+      JSON.stringify(nodeSnapshot.paletteLut ?? null) !== JSON.stringify(nextLutConfig);
+    if (!puppetChanged && !sliceChanged && !lutChanged) {
       return;
     }
     const timer = window.setTimeout(() => {
       const currentNode = latestNodeRef.current;
       if (!currentNode || currentNode.id !== targetNodeId) return;
+      const persistedLut =
+        latestLutVariantsRef.current.length > 0
+          ? paletteVariantsToConfig(latestLutVariantsRef.current, currentNode.paletteLut)
+          : currentNode.paletteLut;
       void repository
         .saveSpriteNode({
           ...currentNode,
           puppetAnim: latestPuppetRef.current,
           ...(latestNineSliceRef.current.enabled ? { nineSlice: latestNineSliceRef.current } : {}),
+          ...(persistedLut ? { paletteLut: persistedLut } : {}),
         })
         .then(() => refreshSpriteNodes(activeProject.id));
     }, 120);
     return () => window.clearTimeout(timer);
-  }, [puppetConfig, nineSliceConfig, activeProject, targetNodeId, refreshSpriteNodes]);
+  }, [puppetConfig, nineSliceConfig, lutVariants, activeProject, targetNodeId, refreshSpriteNodes]);
 
   const drawCanvasBuffer = useCallback(
     (canvas: HTMLCanvasElement | null, rgba: Uint8ClampedArray, width: number, height: number) => {
@@ -336,6 +411,14 @@ export function PostProcessInspector({ nodeId }: { nodeId: string }) {
               : {}),
             ...(latestNineSliceRef.current.enabled
               ? { nineSlice: latestNineSliceRef.current }
+              : {}),
+            ...(latestLutVariantsRef.current.length > 0
+              ? {
+                  paletteLut: paletteVariantsToConfig(
+                    latestLutVariantsRef.current,
+                    nodeSnapshot.paletteLut,
+                  ),
+                }
               : {}),
           });
           await repository.cleanupOrphanedBlobs();
@@ -884,6 +967,19 @@ export function PostProcessInspector({ nodeId }: { nodeId: string }) {
             >
               Palette-Swap &amp; LUT
             </button>
+            <button
+              type="button"
+              data-testid="inspector-tab-sandbox"
+              onClick={() => setInspectorTab('sandbox')}
+              className={`inline-flex items-center gap-1 rounded px-2.5 py-1 font-medium transition-colors ${
+                inspectorTab === 'sandbox'
+                  ? 'bg-emerald-600 text-white'
+                  : 'text-slate-300 hover:text-white'
+              }`}
+            >
+              <Gamepad2 className="h-3.5 w-3.5" />
+              Game Sandbox
+            </button>
           </div>
 
           <span
@@ -944,7 +1040,19 @@ export function PostProcessInspector({ nodeId }: { nodeId: string }) {
           postProcessConfig={config}
           rawWidth={rawSize.width}
           rawHeight={rawSize.height}
+          variants={lutVariants}
+          onChangeVariants={setLutVariants}
           exportSlot={exportBarNode}
+        />
+      ) : inspectorTab === 'sandbox' && activeSpriteBuffer ? (
+        <GameSandbox
+          sprite={activeSpriteBuffer}
+          artMode={activeProject.artBible.artMode}
+          projection={activeProject.artBible.projection}
+          pivotNorm={config.pivotNorm}
+          paletteHex={activeProject.artBible.palette}
+          puppetConfig={puppetConfig}
+          lutVariants={lutVariants}
         />
       ) : (
         <div className="grid min-w-0 flex-1 grid-cols-1 lg:grid-cols-[minmax(0,1fr)_360px]">

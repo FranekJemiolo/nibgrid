@@ -1,4 +1,4 @@
-import { Columns2, Film, GitBranch, GitFork, Sliders, Trash2 } from 'lucide-react';
+import { Columns2, Film, Gamepad2, GitBranch, GitFork, Sliders, Trash2 } from 'lucide-react';
 import { buildDagTreeRows } from '../../domain/dag';
 import type { ArtMode, SpriteNode, SpriteNodeKind } from '../../domain/schemas';
 import { BlobImage } from '../components/BlobImage';
@@ -12,6 +12,7 @@ interface DagTreeDockProps {
   onForkNode: (nodeId: string) => void;
   onCompareNode: (nodeId: string) => void;
   onOpenInspector: (nodeId: string) => void;
+  onOpenSandbox?: (nodeId: string) => void;
   onOpenAnimationStudio?: () => void;
   onDeleteLeafNode: (nodeId: string) => void;
 }
@@ -40,6 +41,7 @@ export function DagTreeDock({
   onForkNode,
   onCompareNode,
   onOpenInspector,
+  onOpenSandbox,
   onOpenAnimationStudio,
   onDeleteLeafNode,
 }: DagTreeDockProps) {
@@ -58,6 +60,18 @@ export function DagTreeDock({
           </h3>
         </div>
         <div className="flex items-center gap-2">
+          {nodes.length >= 1 && activeNodeId && onOpenSandbox && (
+            <button
+              type="button"
+              data-testid="dag-quick-sandbox-btn"
+              onClick={() => onOpenSandbox(activeNodeId)}
+              className="inline-flex items-center gap-1.5 rounded border border-emerald-500/40 bg-emerald-500/15 px-2.5 py-1 text-xs font-medium text-emerald-200 hover:bg-emerald-500/25"
+              title="Open selected sprite at 1× game scale in Screen 4F Game Sandbox"
+            >
+              <Gamepad2 className="h-3.5 w-3.5" />
+              1× Preview
+            </button>
+          )}
           {nodes.length >= 1 && onOpenAnimationStudio && (
             <button
               type="button"
