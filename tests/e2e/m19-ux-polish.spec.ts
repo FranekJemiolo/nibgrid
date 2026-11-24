@@ -67,6 +67,7 @@ test.describe('M19: UX Polish, Studio Chrome, ScrubInput & Floating HUD', () => 
 
     // ScrubInput drag (coarse), Shift+drag (0.1x precision), double-click Enter commit & Escape cancel
     const scrub = page.getByTestId('scrub-alpha-threshold');
+    await scrub.scrollIntoViewIfNeeded();
     await expect(scrub).toHaveAttribute('data-value', '16');
     const box = await scrub.boundingBox();
     expect(box).not.toBeNull();

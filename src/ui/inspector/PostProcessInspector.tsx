@@ -1318,15 +1318,16 @@ export function PostProcessInspector({
                   key={tabId}
                   type="button"
                   data-testid={meta.testId}
+                  title={meta.label}
                   onClick={() => selectTab(tabId)}
-                  className={`inline-flex items-center gap-1 rounded px-2.5 py-1 font-medium transition-colors ${tabButtonStyle(
+                  className={`inline-flex items-center gap-1 rounded px-2 py-1 font-medium whitespace-nowrap transition-colors ${tabButtonStyle(
                     tabId,
                     inspectorTab === tabId,
                   )}`}
                 >
                   {tabId === 'sandbox' && <Gamepad2 className="h-3.5 w-3.5" />}
                   {tabId === 'turnaround' && <Scissors className="h-3.5 w-3.5" />}
-                  {meta.label}
+                  {meta.shortLabel}
                 </button>
               );
             })}

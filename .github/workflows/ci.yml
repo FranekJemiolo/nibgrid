@@ -38,6 +38,9 @@ jobs:
       - name: Unit tests
         run: npm run test:unit
 
+      - name: Python bridge unit tests
+        run: python3 -m unittest tests/unit/test_nibgrid_bridge.py -v
+
       - name: End-to-end tests
         run: npm run test:e2e
 

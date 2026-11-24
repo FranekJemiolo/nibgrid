@@ -38,6 +38,7 @@ Local-first, zero-server Bring-Your-Own-Key / Bring-Your-Own-Model (BYOK/BYOM) P
   - [2.19 Assemble Godot 4 `.tscn` Prefabs & Live `res://` Folder Sync (Entity Hub)](#219-assemble-godot-4-tscn-prefabs--live-res-folder-sync-entity-hub)
   - [2.20 Build Full Entities + Typed GDScript from One Prompt (AI Director)](#220-build-full-entities--typed-gdscript-from-one-prompt-ai-director)
   - [2.21 Author Live Godot 4 `.gdshader` & `ShaderMaterial` `.tres` FX (Screen 4N)](#221-author-live-godot-4-gdshader--shadermaterial-tres-fx-screen-4n)
+  - [2.22 End-to-End Godot 4 AI Foundry Workflow (Prompt → Shader → `res://` Sync)](#222-end-to-end-godot-4-ai-foundry-workflow-prompt--shader--res-sync)
 - [Part 3 — Engine Drop-In Integration Examples](#part-3--engine-drop-in-integration-examples)
 - [Architecture Summary](#architecture-summary)
 - [Development & Verification](#development--verification)
@@ -540,6 +541,8 @@ Once a sprite is inside **Post-Process & Export Inspector** (`Screen 4`), switch
 
 ![Prompt-to-Entity Director Blueprint Review](docs/demo/25-prompt-to-entity-director.png)
 
+![Entity Hub — Typed Godot 4.3+ GDScript Preview](docs/demo/25b-director-gdscript-preview.png)
+
 ---
 
 ### 2.21 Author Live Godot 4 `.gdshader` & `ShaderMaterial` `.tres` FX (Screen 4N)
@@ -553,7 +556,28 @@ Once a sprite is inside **Post-Process & Export Inspector** (`Screen 4`), switch
 3. Tune every parsed uniform live at 60 FPS on the WebGL2 sprite stage using auto-generated **`ScrubInput`** sliders (from Godot 4 `hint_range(min, max, step)`) and color pickers (from `source_color`), toggle **`Pause` / `t=0` / `Speed`** and **`checker` / `dark` / `light`** backdrops, or edit code directly with inline Godot 3 (`hint_color`) / GLSL syntax diagnostics.
 4. Switch to the **`ShaderMaterial .tres`** tab to inspect serialized `shader_parameter/*` overrides, click **`Save Shader to Node`** to persist across reloads and auto-attach `material = ExtResource(...)` onto `AnimatedSprite2D` during M25 `Sync to Godot`, or click **`Download Shader Bundle (.zip)`** (`<slug>.gdshader` + `<slug>_mat.tres` + `<slug>.recipe.json`).
 
-![Screen 4N — Godot 4 Shader Studio](docs/demo/26-godot-shader-studio.png)
+![Screen 4N — Godot 4 Shader Studio Live Metallic Sheen & GLSL Source](docs/demo/26-godot-shader-studio.png)
+
+![Screen 4N — Pixel Outline Shader & Serialized ShaderMaterial .tres Export](docs/demo/26b-shader-material-tres.png)
+
+---
+
+### 2.22 End-to-End Godot 4 AI Foundry Workflow (Prompt → Shader → `res://` Sync)
+
+Combining **M25 (Entity Hub + FSAA Sync)**, **M26 (Prompt-to-Entity AI Director)**, and **M27 (Shader Studio)** eliminates the manual ZIP → re-import → boilerplate scripting loop:
+
+```mermaid
+flowchart LR
+  P["1. Single Entity Prompt<br/>(M26 Director)"] --> B["Sprite + Hull + Sockets<br/>SFX + Typed .gd Script"]
+  B --> S["2. Author Shader FX<br/>(M27 Screen 4N WebGL2)"]
+  S --> M[".gdshader + _mat.tres<br/>Saved to Sprite Node"]
+  M --> G["3. Sync to Godot Pill<br/>(M25 SHA-256 Diff)"]
+  G --> R["Godot 4 res:// Hot-Reload<br/>.tscn + .gd + _mat.tres + .png.import"]
+```
+
+1. **Draft & Build (`Entities` → `+ Prompt-to-Entity (AI)`):** Generate the palette-locked sprite, convex hull collider/hurtbox/hitbox, opaque-snapped `Marker2D` sockets (`hand_r`, `muzzle`), LUFS-normalized WAV SFX cues, and typed Godot 4.3+ `.gd` controller in one pass (above: **Blueprint Review** & **`.gd Script` output**).
+2. **Attach Custom Shader FX (`Sprite Studio` → `Shader Studio`):** Open the entity's sprite in **Screen 4N**, generate or tweak `Metallic Sheen` / `Pixel Outline` / `Hit Flash` uniforms live at 60 FPS in WebGL2 (above: **`Metallic Sheen`** & **`ShaderMaterial .tres`**), and click **`Save Shader to Node`**.
+3. **1-Click `Sync to Godot` (Header Sync Pill):** Bind your local Godot 4 project folder (`Bind Godot res://`). Clicking **`Sync to Godot`** writes only changed files (`SHA-256` diffed) directly into `assets/nibgrid/<slug>/`—automatically attaching `script = ExtResource(...)` to the root `CharacterBody2D` and `material = ExtResource(...)` (`<slug>_mat.tres`) to `AnimatedSprite2D` inside `<slug>.tscn` with lossless `.png.import` sidecars ready for instant `F6` playtesting in Godot.
 
 ---
 

@@ -1027,7 +1027,7 @@ export function ShaderStudio({
           ) : (
             <pre
               data-testid="shader-tres-preview"
-              className="h-full min-h-[260px] overflow-auto rounded border border-[#2A2A2E] bg-[#121214] p-2.5 font-mono text-[11px] leading-relaxed text-zinc-200"
+              className="h-full min-h-[260px] overflow-auto rounded border border-[#2A2A2E] bg-[#121214] p-2.5 font-mono text-[11px] leading-relaxed whitespace-pre-wrap break-words text-zinc-200"
             >
               {tresPreviewText}
             </pre>
