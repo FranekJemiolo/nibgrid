@@ -359,6 +359,7 @@ export async function collectEntitySyncFiles(
     audioFiles,
     colliderPolygons,
     sockets,
+    ...(entity.scriptContent ? { scriptContent: entity.scriptContent } : {}),
   });
 }
 

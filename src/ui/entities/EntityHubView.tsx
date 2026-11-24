@@ -3,11 +3,13 @@ import {
   Boxes,
   Code2,
   FileArchive,
+  FileCode2,
   FolderSync,
   Plus,
   Save,
   Settings2,
   Trash2,
+  Wand2,
   X,
 } from 'lucide-react';
 import { db } from '../../db/database';
@@ -29,6 +31,7 @@ import {
   syncFilesToGodotDirectory,
 } from '../../sync/fsaaSyncEngine';
 import { BlobImage } from '../components/BlobImage';
+import { EntityDirectorModal } from './EntityDirectorModal';
 
 const BODY_TYPES: readonly GodotBodyType[] = GodotBodyTypeSchema.options;
 
@@ -75,7 +78,8 @@ export function EntityHubView() {
   } = useAppStore();
 
   const [drawerOpen, setDrawerOpen] = useState(false);
-  const [drawerTab, setDrawerTab] = useState<'config' | 'tscn'>('config');
+  const [drawerTab, setDrawerTab] = useState<'config' | 'tscn' | 'gdscript'>('config');
+  const [directorOpen, setDirectorOpen] = useState(false);
   const [draft, setDraft] = useState<EntityDefinition | null>(null);
   const [slugLocked, setSlugLocked] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -267,6 +271,14 @@ export function EntityHubView() {
           </span>
           <button
             type="button"
+            data-testid="entity-director-open-btn"
+            onClick={() => setDirectorOpen(true)}
+            className="inline-flex items-center gap-1.5 rounded-md border border-[#F5B82E]/50 bg-[#F5B82E]/15 px-3 py-1.5 text-xs font-semibold text-[#F5B82E] hover:bg-[#F5B82E]/25"
+          >
+            <Wand2 className="h-3.5 w-3.5" />+ Prompt-to-Entity (AI)
+          </button>
+          <button
+            type="button"
             data-testid="entity-create-btn"
             disabled={spriteNodes.length === 0}
             onClick={handleOpenNew}
@@ -299,16 +311,25 @@ export function EntityHubView() {
             No sprites found in <strong>{activeProject.name}</strong> yet.
           </p>
           <p className="max-w-md text-xs text-slate-400">
-            Generate or import at least one sprite in Sprite Studio first, then bundle it with
-            colliders, sockets, and audio into a Godot 4 Entity.
+            Launch the AI Prompt-to-Entity Director to generate sprite, collider, sockets, SFX pack,
+            and GDScript in one pass, or create sprites in Sprite Studio first.
           </p>
-          <button
-            type="button"
-            onClick={() => void navigate({ screen: 'studio', projectId: activeProject.id })}
-            className="rounded-md bg-[#F5B82E] px-3 py-1.5 text-xs font-semibold text-zinc-950 hover:bg-[#fbcb57]"
-          >
-            Go to Sprite Studio
-          </button>
+          <div className="flex flex-wrap items-center justify-center gap-2">
+            <button
+              type="button"
+              onClick={() => setDirectorOpen(true)}
+              className="inline-flex items-center gap-1.5 rounded-md bg-[#F5B82E] px-3 py-1.5 text-xs font-semibold text-zinc-950 hover:bg-[#fbcb57]"
+            >
+              <Wand2 className="h-3.5 w-3.5" />+ Prompt-to-Entity (AI)
+            </button>
+            <button
+              type="button"
+              onClick={() => void navigate({ screen: 'studio', projectId: activeProject.id })}
+              className="rounded-md border border-[var(--border-hairline)] bg-[var(--bg-well)] px-3 py-1.5 text-xs font-medium text-slate-200 hover:bg-slate-800"
+            >
+              Go to Sprite Studio
+            </button>
+          </div>
         </div>
       ) : entities.length === 0 ? (
         <div className="flex flex-1 flex-col items-center justify-center gap-3 rounded-lg border border-dashed border-[var(--border-hairline)] bg-[var(--bg-panel)] p-8 text-center">
@@ -337,6 +358,7 @@ export function EntityHubView() {
             const hasCollider = (primaryNode?.collisionShapes?.length ?? 0) > 0;
             const hasSockets = (primaryNode?.sockets?.length ?? 0) > 0;
             const hasAudio = entity.audioAssetIds.length > 0;
+            const hasScript = Boolean(entity.scriptContent || entity.scriptResPath);
 
             const coverage = [
               { label: 'Sprite', ok: hasSprite },
@@ -344,6 +366,7 @@ export function EntityHubView() {
               { label: 'Collider', ok: hasCollider },
               { label: 'Sockets', ok: hasSockets },
               { label: 'Audio', ok: hasAudio },
+              { label: '.gd', ok: hasScript },
             ];
 
             return (
@@ -474,7 +497,7 @@ export function EntityHubView() {
               </button>
             </div>
 
-            <div className="grid grid-cols-2 gap-1 border-b border-[var(--border-hairline)] bg-[var(--bg-well)] p-2 text-xs">
+            <div className="grid grid-cols-3 gap-1 border-b border-[var(--border-hairline)] bg-[var(--bg-well)] p-2 text-xs">
               <button
                 type="button"
                 data-testid="entity-tab-config"
@@ -500,6 +523,19 @@ export function EntityHubView() {
               >
                 <Code2 className="h-3.5 w-3.5" />
                 .tscn Preview
+              </button>
+              <button
+                type="button"
+                data-testid="entity-tab-gdscript"
+                onClick={() => setDrawerTab('gdscript')}
+                className={`inline-flex items-center justify-center gap-1.5 rounded px-3 py-1.5 font-medium ${
+                  drawerTab === 'gdscript'
+                    ? 'bg-[#F5B82E] font-semibold text-zinc-950'
+                    : 'text-slate-300 hover:text-white'
+                }`}
+              >
+                <FileCode2 className="h-3.5 w-3.5" />
+                .gd Script
               </button>
             </div>
 
@@ -746,7 +782,7 @@ export function EntityHubView() {
                     )}
                   </div>
                 </div>
-              ) : (
+              ) : drawerTab === 'tscn' ? (
                 <div className="space-y-3 text-xs">
                   <div className="space-y-1">
                     <span className="text-[11px] font-semibold text-slate-300">
@@ -769,6 +805,20 @@ export function EntityHubView() {
                     className="max-h-[480px] overflow-auto rounded-md border border-[var(--border-hairline)] bg-[var(--bg-well)] p-3 font-mono text-[11px] leading-relaxed whitespace-pre text-slate-200"
                   >
                     {tscnPreviewText}
+                  </pre>
+                </div>
+              ) : (
+                <div className="space-y-2 text-xs">
+                  <p className="font-mono text-[11px] text-slate-400">
+                    {draft.scriptResPath ||
+                      `res://${normalizeResSubpath(draft.resSubpath)}/${sanitizeEntitySlug(draft.slug)}/${sanitizeEntitySlug(draft.slug)}.gd`}
+                  </p>
+                  <pre
+                    data-testid="entity-gdscript-preview"
+                    className="max-h-[500px] overflow-auto rounded-md border border-[var(--border-hairline)] bg-[var(--bg-well)] p-3 font-mono text-[11px] leading-relaxed whitespace-pre text-slate-200"
+                  >
+                    {draft.scriptContent ||
+                      '# No attached GDScript controller yet.\n# Use Prompt-to-Entity (AI) to generate a typed Godot 4.3+ .gd controller.'}
                   </pre>
                 </div>
               )}
@@ -796,6 +846,16 @@ export function EntityHubView() {
           </div>
         </div>
       )}
+
+      <EntityDirectorModal
+        open={directorOpen}
+        onClose={() => setDirectorOpen(false)}
+        onCreated={(created) => {
+          setStatusBanner(
+            `Built entity "${created.displayName}" (${created.slug}) with typed Godot 4.3+ script.`,
+          );
+        }}
+      />
     </div>
   );
 }

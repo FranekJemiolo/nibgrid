@@ -1,6 +1,6 @@
 # Nibgrid
 
-Local-first, zero-server Bring-Your-Own-Key / Bring-Your-Own-Model (BYOK/BYOM) Progressive Web App for turning hand-drawn sketches and vocal hums into style-locked, engine-ready 2D game sprites, 4-view turnarounds, normal maps, animations, auto-tiles, mesh-tracked sockets, VFX flipbooks, parallax backgrounds, bitmap fonts & damage numerals, colliders, UI panels, Godot 4 `.tscn` prefabs & live `res://` sync, and audio.
+Local-first, zero-server Bring-Your-Own-Key / Bring-Your-Own-Model (BYOK/BYOM) Progressive Web App for turning hand-drawn sketches and vocal hums into style-locked, engine-ready 2D game sprites, 4-view turnarounds, normal maps, animations, auto-tiles, mesh-tracked sockets, VFX flipbooks, parallax backgrounds, bitmap fonts & damage numerals, colliders, UI panels, Godot 4 `.tscn` + typed `.gd` prefabs & live `res://` sync, and audio.
 
 **Live App (GitHub Pages):** https://franekjemiolo.github.io/nibgrid/
 
@@ -36,6 +36,7 @@ Local-first, zero-server Bring-Your-Own-Key / Bring-Your-Own-Model (BYOK/BYOM) P
   - [2.17 Compose Seamless Parallax Backgrounds & Depth Tinting (Screen 4L)](#217-compose-seamless-parallax-backgrounds--depth-tinting-screen-4l)
   - [2.18 Export Palette-Locked Bitmap Fonts & Damage Numerals (Screen 4M)](#218-export-palette-locked-bitmap-fonts--damage-numerals-screen-4m)
   - [2.19 Assemble Godot 4 `.tscn` Prefabs & Live `res://` Folder Sync (Entity Hub)](#219-assemble-godot-4-tscn-prefabs--live-res-folder-sync-entity-hub)
+  - [2.20 Build Full Entities + Typed GDScript from One Prompt (AI Director)](#220-build-full-entities--typed-gdscript-from-one-prompt-ai-director)
 - [Part 3 — Engine Drop-In Integration Examples](#part-3--engine-drop-in-integration-examples)
 - [Architecture Summary](#architecture-summary)
 - [Development & Verification](#development--verification)
@@ -68,6 +69,7 @@ Local-first, zero-server Bring-Your-Own-Key / Bring-Your-Own-Model (BYOK/BYOM) P
 | Multi-Layer Parallax Vistas & Aerial Depth Haze   | `Parallax BG` (Screen 4L)              | `$0.00 Local` or BYOK / Bridge Stack       | Horizontal seamless band PNGs, Godot `Parallax2D` `.tscn`, Phaser/Pixi JSON                         |
 | Palette-Locked Bitmap Fonts & Damage Numerals     | `Bitmap Font` (Screen 4M)              | `$0.00 Local` (Worker PoT Packer)          | `<slug>.png`, AngelCode `.fnt` + `.xml`, `<slug>.recipe.json`                                       |
 | Godot 4 `.tscn` Prefabs & Live `res://` Sync      | `Entities` (Entity Hub) + Sync Pill    | `$0.00 Local` (FSAA + SHA-256 Diff)        | `.tscn`, `_frames.tres`, `_anims.tres`, `CanvasTexture`, lossless `.png.import`                     |
+| Prompt-to-Entity AI Director + Typed GDScript     | `Entities` → `+ Prompt-to-Entity (AI)` | `$0.00` Mock or `~$0.04` Gemini BYOK       | Sprite, hull, snapped sockets, SFX pack, typed `.gd` controller + wired `.tscn`                     |
 
 ---
 
@@ -522,6 +524,22 @@ Once a sprite is inside **Post-Process & Export Inspector** (`Screen 4`), switch
 
 ---
 
+### 2.20 Build Full Entities + Typed GDScript from One Prompt (AI Director)
+
+**When to use it:** Instead of generating sprites, tracing colliders, placing sockets, synthesizing footstep/attack SFX, and writing boilerplate `CharacterBody2D` movement code step by step, let Nibgrid's **Prompt-to-Entity Director** draft a structured editable blueprint from one sentence and orchestrate the entire pipeline in one abort-safe run.
+
+**Click-by-Click:**
+
+1. Open **`Entities`** (`Cmd/Ctrl+K` → `Prompt-to-Entity Director`) and click **`+ Prompt-to-Entity (AI)`**.
+2. Pick your **AI / Local Provider** (`Offline Mock $0.00`, **Antigravity Bridge**, or **Gemini BYOK**), select a **Target Game Genre** (**`Side-Platformer`**, **`Top-Down`**, **`Twin-Stick`**, or **`Interactive Prop`**), enter a description such as `"Armored goblin scout, 32px pixel art, sword slash, heavy boots"`, and click **`Draft Blueprint`**.
+3. Review and edit the generated blueprint—tweak **`Display Name`**, **`Slug`**, **`Body Type`**, **`Normal Map`**, **`2×2 Turnaround`**, **`Hitbox`**, **`Hurtbox`**, **`Typed Godot 4.3+ Script (.gd)`**, socket hints, and per-cue **`Procedural ($0.00)` / `Google AI`** SFX engines alongside the live cost estimate badge—then click **`Build Entity`**.
+4. Watch all 6 stages stream live (**Sprite & Post-Process**, **Collision Hulls**, **Opaque-Bound Sockets**, **SFX Pack + LUFS Trim**, **Typed GDScript**, **Atomic Entity Commit**), or click **`Abort Build`** to cancel cleanly with zero orphan blobs.
+5. Click **`View Entity`** to inspect your finished Entity Card with its `.gd` coverage dot and **`.gd Script`** preview tab, then click **`Sync to Godot`** in the header pill to write `<slug>.tscn` (script pre-attached) and `<slug>.gd` directly into `res://`.
+
+![Prompt-to-Entity Director Blueprint Review](docs/demo/25-prompt-to-entity-director.png)
+
+---
+
 ## Part 3 — Engine Drop-In Integration Examples
 
 ### Godot 4 (`4.2+`)
@@ -672,6 +690,7 @@ const pop = new BitmapText({
 - **Parallax Background Layer Compositor, Atmospheric Tinter & Matched-Stack Generator (Screen 4L):** Orchestrate 2-stage AI blueprints (`parallaxBlueprint.ts`), optional Master Keyframe anchoring, `#FF00FF` chroma-isolated band streaming (`parallaxGenerator.ts`), or `$0.00` Offline Mock bands; execute Worker-isolated smoothstep horizontal seam-wrapping and contrast-dampening horizon scatter tinting (`parallaxCompositor.ts`, `PROCESS_PARALLAX_LAYER`); preview live 60 FPS Canvas2D scroll ratios with `1×` foreground contrast checks (`ParallaxWorkshop.tsx`); and export Godot 4.3+ `Parallax2D` `.tscn`, Phaser 3 `TileSprite` / PixiJS `TilingSprite` manifests (`parallaxExporters.ts`), and orphan-blob-safe Dexie ZIPs.
 - **Bitmap Font & Damage Numeral Exporter (Screen 4M):** Rasterize pure-TS `5×7` monochrome bitmaps (`pixelGlyphTable.ts`) or `.ttf`/`.otf`/`.woff2` / system font faces (`fontRasterizer.ts`), bake vertical 2-stop palette-snapped gradients + 4-/8-way OKLab Sel-Out outlines + hard drop shadows into Power-of-Two shelf atlases off-thread (`bitmapFont.ts`, `BAKE_BITMAP_FONT`), audition animated floating Crit Pops over game biomes (`BitmapFontWorkshop.tsx`), and export Godot 4 `.fnt`, Phaser 3 / PixiJS `.xml`, `<slug>.png`, and Zod-validated `<slug>.recipe.json` ZIPs (`bmfontExporter.ts`, `zipPackager.ts`).
 - **Entity Hub, Godot 4 `.tscn` Prefab Assembler & Live `res://` Sync:** Group `SpriteNode` clips, optional Sobel normal maps, M16 colliders/hitboxes, M21 sockets, and M14/M15 WAVs into Dexie v3 `EntityDefinition` records (`entitySchema.ts`) without duplicating blobs; assemble lossless `.png.import` sidecars, `CanvasTexture`, `SpriteFrames`, synchronized `AnimationLibrary`, and complete `.tscn` scenes in pure TS (`godotPrefabAssembler.ts`); inspect cards & `.tscn Preview` (`EntityHubView.tsx`); and stream SHA-256-diffed writes (`syncDiff.ts`) straight to a bound local Godot project via the File System Access API or `fflate` ZIP fallback (`fsaaSyncEngine.ts`, `GodotSyncPill.tsx`).
+- **GenAI Prompt-to-Entity Director & Typed GDScript Generator:** Plan structured `EntityDirectorBlueprint` specs (`entityDirectorBlueprint.ts`) via Gemini Flash JSON `responseSchema`, Antigravity Bridge, or `$0.00` Offline Mock; execute an abort-safe 6-stage pipeline (`entityDirector.ts`) generating sprites, M16 hulls, opaque-bound M21 sockets (`resolveSocketHintsToPixels()`), LUFS-trimmed procedural SFX, and Godot 4.3+ typed `.gd` controllers (`gdscriptGenerator.ts`, `validateAndCompileGdScript()` rejections of Godot 3 tokens) inside `EntityDirectorModal.tsx`, wired straight into `<slug>.tscn` and `Sync to Godot`.
 
 ---
 

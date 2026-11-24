@@ -487,3 +487,20 @@
 - **Entity Hub & Sync Pill UI (`src/ui/entities/EntityHubView.tsx`, `src/ui/entities/GodotSyncPill.tsx`, `src/App.tsx`, `src/store/useAppStore.ts`, `src/ui/command/CommandPalette.tsx`):** Added the Entities screen (`#/project/:id/entities`) featuring Entity Cards, 5 coverage dots, animation clip & audio binders, live `.tscn Preview`, single-entity sync/ZIP actions, top-bar `GodotSyncPill` with SHA-256 dry-run diff popover (`+ Added` / `~ Modified`), and `nav-entities` in `Cmd/Ctrl+K`.
 - **Race-Condition Fix (`src/ui/inspector/PostProcessInspector.tsx`):** Preserved `collisionShapes` and `sockets` refs inside `handleSaveSockets()` and `handleSaveVfxFlipbook()` so switching immediately from Collider to Sockets never overwrites pending collision hulls before the debounced save flushes.
 - **Verification:** Added `tests/e2e/m25c-entity-sync-e2e.spec.ts` verifying in-memory `showDirectoryPicker` sync, zero-write repeat sync, hard-reload IndexedDB persistence, and zero orphan blobs alongside live demo capture (`docs/demo/24-entity-hub-godot-sync.png`) and full CI verification.
+
+## Milestone 26A: Pure-TS `EntityDirectorBlueprint`, Socket Snapping & Godot 4.3+ GDScript Validator
+
+- **Blueprint Sanitizer & Opaque Socket Snapper (`src/processing/entityDirectorBlueprint.ts`):** Implemented `ENTITY_BLUEPRINT_GEMINI_RESPONSE_SCHEMA`, `parseAndClampDirectorBlueprint()`, `computeOpaqueBounds()`, and `resolveSocketHintsToPixels()` enforcing strict slug/socket/state identifiers and bounding-box clamping.
+- **Godot 4.3+ GDScript Validator & Deterministic Fallback (`src/export/gdscriptGenerator.ts`):** Implemented `stripGdScriptFences()`, `validateGdScript()`, `compileDeterministicGdScript()`, and `validateAndCompileGdScript()` rejecting Godot 3 tokens (`KinematicBody2D`, `yield(`, `export var`, `onready var`, non-empty `move_and_slide(...)`) and compiling typed `.gd` controllers wired to M25 nodes.
+- **Verification:** Added `tests/unit/m26a-director-blueprint.test.ts` verifying clamping, opaque-bound socket placement, valid Godot 4 acceptance, and Godot 3 rejection fallback.
+
+## Milestone 26B: GenAI / Mock Prompt-to-Entity Director & M25 `.gd` Prefab Script Wiring
+
+- **M25 Script Wiring (`src/domain/entitySchema.ts`, `src/export/godotPrefabAssembler.ts`, `src/sync/fsaaSyncEngine.ts`):** Added optional `scriptContent` to `EntityDefinitionSchema` and emitted `<slug>.gd` in `assembleGodotEntityFiles()` whenever `scriptResPath` + `scriptContent` exist, updating `<slug>.tscn` `ExtResource` & `load_steps`.
+- **Orchestrator & Abort Safety (`src/providers/entityDirector.ts`):** Implemented `draftEntityBlueprint()`, `estimateDirectorCost()`, `buildMockEntityBlueprint()`, and abortable 6-stage `executeEntityDirectorPlan()` (`sprite`, `collider`, `sockets`, `sfx`, `gdscript`, `commit`) with atomic Dexie commit, rollback cleanup for zero orphan blobs, and `ProviderError` key redaction.
+- **Verification:** Added `tests/unit/m26b-director-runner.test.ts` verifying Mock end-to-end build + `.tscn` script wiring, mid-run `AbortController` cleanup (`findOrphanBlobIds(db) === []`), and HTTP 401 API key redaction.
+
+## Milestone 26C: `EntityDirectorModal` 3-Step UI, Entity Hub Integration & Director E2E Flow
+
+- **Director UI & Entity Hub Wiring (`src/ui/entities/EntityDirectorModal.tsx`, `src/ui/entities/EntityHubView.tsx`, `src/ui/command/CommandPalette.tsx`):** Added the 3-step Prompt-to-Entity modal (Prompt & Genre, Editable Blueprint Review with cost badge & per-cue audio engine selection, Live 6-stage abortable Build Stream), `+ Prompt-to-Entity (AI)` CTAs, `.gd` coverage dot, read-only `.gd Script` preview tab, and `act-prompt-to-entity` palette entry.
+- **Verification:** Added `tests/e2e/m26c-director-e2e.spec.ts` intercepting Gemini Blueprint, Sprite Image, and GDScript endpoints via `page.route()`, verifying all 6 build stages, `.tscn` + `.gd` FSAA sync writes, reload persistence, and zero orphan blobs alongside live demo capture (`docs/demo/25-prompt-to-entity-director.png`) and full CI verification.

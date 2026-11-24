@@ -42,6 +42,7 @@ export interface EntityAssemblyInput {
   readonly audioFiles: readonly EntityAssemblyAudioFile[];
   readonly colliderPolygons: readonly EntityAssemblyColliderPolygon[];
   readonly sockets: readonly EntityAssemblySocket[];
+  readonly scriptContent?: string;
 }
 
 function roundTo(n: number, decimals = 4): number {
@@ -423,10 +424,18 @@ export function assembleGodotEntityFiles(input: EntityAssemblyInput): readonly V
   }
   let scriptExtId: string | null = null;
   if (input.entity.scriptResPath && input.entity.scriptResPath.trim().length > 0) {
+    const cleanScriptRes = input.entity.scriptResPath.trim();
     scriptExtId = `${nextTscnExt++}_script`;
     tscnExtResources.push(
-      `[ext_resource type="Script" path="${escapeGodotString(input.entity.scriptResPath.trim())}" id="${scriptExtId}"]`,
+      `[ext_resource type="Script" path="${escapeGodotString(cleanScriptRes)}" id="${scriptExtId}"]`,
     );
+    if (input.scriptContent && input.scriptContent.trim().length > 0) {
+      const scriptRelPath = normalizeResSubpath(cleanScriptRes);
+      const normalizedScript = input.scriptContent.endsWith('\n')
+        ? input.scriptContent
+        : `${input.scriptContent}\n`;
+      files.push({ relativePath: scriptRelPath, content: normalizedScript });
+    }
   }
 
   const tscnLoadSteps = 1 + tscnExtResources.length;

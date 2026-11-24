@@ -35,6 +35,7 @@ export const EntityDefinitionSchema = z.object({
   audioAssetIds: z.array(z.string().min(1)).default([]),
   includeNormalMap: z.boolean().default(false),
   scriptResPath: z.string().trim().min(1).max(200).optional(),
+  scriptContent: z.string().max(64000).optional(),
   updatedAt: z.number().int().nonnegative(),
 });
 export type EntityDefinition = z.infer<typeof EntityDefinitionSchema>;

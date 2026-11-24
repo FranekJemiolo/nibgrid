@@ -263,6 +263,14 @@ export function CommandPalette({ open, onOpenChange }: CommandPaletteProps) {
           execute: () => navigate({ screen: 'entities', projectId: projId }),
         },
         {
+          id: 'act-prompt-to-entity',
+          title: 'Prompt-to-Entity Director (AI)',
+          subtitle: 'Generate sprite, collider, sockets, SFX pack & typed .gd script from 1 prompt',
+          category: 'action',
+          keywords: ['director', 'prompt', 'entity', 'ai', 'gdscript', 'godot', 'magic'],
+          execute: () => navigate({ screen: 'entities', projectId: projId }),
+        },
+        {
           id: 'nav-studio',
           title: 'Sprite Studio & Generation DAG',
           subtitle: 'Sketch pad, turnaround prompt mode, and variation tree',
