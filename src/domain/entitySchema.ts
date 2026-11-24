@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { ShaderConfigSchema } from './schemas';
 
 export const GodotBodyTypeSchema = z.enum([
   'CharacterBody2D',
@@ -36,6 +37,7 @@ export const EntityDefinitionSchema = z.object({
   includeNormalMap: z.boolean().default(false),
   scriptResPath: z.string().trim().min(1).max(200).optional(),
   scriptContent: z.string().max(64000).optional(),
+  shaderConfig: ShaderConfigSchema.optional(),
   updatedAt: z.number().int().nonnegative(),
 });
 export type EntityDefinition = z.infer<typeof EntityDefinitionSchema>;

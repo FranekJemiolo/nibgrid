@@ -1,6 +1,6 @@
 # Nibgrid
 
-Local-first, zero-server Bring-Your-Own-Key / Bring-Your-Own-Model (BYOK/BYOM) Progressive Web App for turning hand-drawn sketches and vocal hums into style-locked, engine-ready 2D game sprites, 4-view turnarounds, normal maps, animations, auto-tiles, mesh-tracked sockets, VFX flipbooks, parallax backgrounds, bitmap fonts & damage numerals, colliders, UI panels, Godot 4 `.tscn` + typed `.gd` prefabs & live `res://` sync, and audio.
+Local-first, zero-server Bring-Your-Own-Key / Bring-Your-Own-Model (BYOK/BYOM) Progressive Web App for turning hand-drawn sketches and vocal hums into style-locked, engine-ready 2D game sprites, 4-view turnarounds, normal maps, animations, auto-tiles, mesh-tracked sockets, VFX flipbooks, parallax backgrounds, bitmap fonts & damage numerals, colliders, UI panels, Godot 4 `.gdshader` + `ShaderMaterial` `.tres` shaders, `.tscn` + typed `.gd` prefabs & live `res://` sync, and audio.
 
 **Live App (GitHub Pages):** https://franekjemiolo.github.io/nibgrid/
 
@@ -37,6 +37,7 @@ Local-first, zero-server Bring-Your-Own-Key / Bring-Your-Own-Model (BYOK/BYOM) P
   - [2.18 Export Palette-Locked Bitmap Fonts & Damage Numerals (Screen 4M)](#218-export-palette-locked-bitmap-fonts--damage-numerals-screen-4m)
   - [2.19 Assemble Godot 4 `.tscn` Prefabs & Live `res://` Folder Sync (Entity Hub)](#219-assemble-godot-4-tscn-prefabs--live-res-folder-sync-entity-hub)
   - [2.20 Build Full Entities + Typed GDScript from One Prompt (AI Director)](#220-build-full-entities--typed-gdscript-from-one-prompt-ai-director)
+  - [2.21 Author Live Godot 4 `.gdshader` & `ShaderMaterial` `.tres` FX (Screen 4N)](#221-author-live-godot-4-gdshader--shadermaterial-tres-fx-screen-4n)
 - [Part 3 — Engine Drop-In Integration Examples](#part-3--engine-drop-in-integration-examples)
 - [Architecture Summary](#architecture-summary)
 - [Development & Verification](#development--verification)
@@ -70,6 +71,7 @@ Local-first, zero-server Bring-Your-Own-Key / Bring-Your-Own-Model (BYOK/BYOM) P
 | Palette-Locked Bitmap Fonts & Damage Numerals     | `Bitmap Font` (Screen 4M)              | `$0.00 Local` (Worker PoT Packer)          | `<slug>.png`, AngelCode `.fnt` + `.xml`, `<slug>.recipe.json`                                       |
 | Godot 4 `.tscn` Prefabs & Live `res://` Sync      | `Entities` (Entity Hub) + Sync Pill    | `$0.00 Local` (FSAA + SHA-256 Diff)        | `.tscn`, `_frames.tres`, `_anims.tres`, `CanvasTexture`, lossless `.png.import`                     |
 | Prompt-to-Entity AI Director + Typed GDScript     | `Entities` → `+ Prompt-to-Entity (AI)` | `$0.00` Mock or `~$0.04` Gemini BYOK       | Sprite, hull, snapped sockets, SFX pack, typed `.gd` controller + wired `.tscn`                     |
+| AI Godot 4 Shaders & Live WebGL2 Uniform FX       | `Shader Studio` (Screen 4N)            | `$0.00` Presets or `~$0.001` Gemini Flash  | `<slug>.gdshader`, `<slug>_mat.tres` (`ShaderMaterial`), live WebGL2 preview, wired `.tscn`         |
 
 ---
 
@@ -540,6 +542,21 @@ Once a sprite is inside **Post-Process & Export Inspector** (`Screen 4`), switch
 
 ---
 
+### 2.21 Author Live Godot 4 `.gdshader` & `ShaderMaterial` `.tres` FX (Screen 4N)
+
+**When to use it:** Instead of guessing Godot 4 `canvas_item` shader math in a text editor and repeatedly alt-tabbing back to Godot to inspect `hit_flash`, `wind_sway`, `metallic_sheen`, `pixel_outline`, or custom `dissolve` shaders against your pixel art, author and tune uniforms live in WebGL2 inside Nibgrid and export drop-in `.gdshader` + pre-bound `ShaderMaterial` `.tres` bundles (plus automatic M25 `.tscn` attachment).
+
+**Click-by-Click:**
+
+1. Open any processed sprite in **Post-Process Inspector (Screen 4)** and click **`Shader Studio`** (`?tab=shader`, primary tab for **Character** and **VFX** classes, inside **`+ Tools`** overflow elsewhere, or via `Cmd/Ctrl+K` → `Open Godot 4 Shader Studio`).
+2. Pick a built-in curated preset (**`Hit Flash`**, **`Wind Sway`**, **`Metallic Sheen`**, **`Pixel Outline`**, or **`Water Ripple`**), or enter an effect description such as `"diagonal golden armor glint matching Art Bible palette"`, select your provider (**`Offline Mock $0.00`**, **`Antigravity Bridge`**, or **`Gemini BYOK ~$0.001`**), and click **`Generate .gdshader`**.
+3. Tune every parsed uniform live at 60 FPS on the WebGL2 sprite stage using auto-generated **`ScrubInput`** sliders (from Godot 4 `hint_range(min, max, step)`) and color pickers (from `source_color`), toggle **`Pause` / `t=0` / `Speed`** and **`checker` / `dark` / `light`** backdrops, or edit code directly with inline Godot 3 (`hint_color`) / GLSL syntax diagnostics.
+4. Switch to the **`ShaderMaterial .tres`** tab to inspect serialized `shader_parameter/*` overrides, click **`Save Shader to Node`** to persist across reloads and auto-attach `material = ExtResource(...)` onto `AnimatedSprite2D` during M25 `Sync to Godot`, or click **`Download Shader Bundle (.zip)`** (`<slug>.gdshader` + `<slug>_mat.tres` + `<slug>.recipe.json`).
+
+![Screen 4N — Godot 4 Shader Studio](docs/demo/26-godot-shader-studio.png)
+
+---
+
 ## Part 3 — Engine Drop-In Integration Examples
 
 ### Godot 4 (`4.2+`)
@@ -573,6 +590,8 @@ Nibgrid exports Godot-native `.tres` resources (`AtlasTexture` / `SpriteFrames`,
    - Drop `<slug>.fnt` and `<slug>.png` into `res://fonts/`. Godot 4 imports `<slug>.fnt` natively as a `FontFile` (set `Antialiasing = None` and `Texture Filter = Nearest`), ready to assign directly to `Label` / `RichTextLabel` → `Theme Overrides` → `Fonts`.
 7. **1-Click Live `res://` Entity Prefabs (`<slug>.tscn` + `.png.import`):**
    - Bind your local Godot project root via **`Bind Godot res://`** in the top header bar and click **`Sync to Godot`** to write `assets/nibgrid/<slug>/<slug>.tscn`, `<slug>_frames.tres`, `<slug>_anims.tres`, `<slug>_canvas.tres`, WAV audio, and lossless `.png.import` sidecars straight to disk—Godot 4 hot-reloads the ready-to-instance prefab immediately.
+8. **AI `canvas_item` Shaders & `ShaderMaterial` (`<slug>.gdshader` + `<slug>_mat.tres`):**
+   - Drop exported `<slug>.gdshader` and `<slug>_mat.tres` into the same `res://` folder and assign `<slug>_mat.tres` to any `Sprite2D` / `AnimatedSprite2D` → **`Material`**. When saved on an Entity's primary sprite node in Screen 4N, M25 **`Sync to Godot`** automatically emits `<slug>.gdshader` + `<slug>_mat.tres` and wires `material = ExtResource(...)` onto `AnimatedSprite2D` inside `<slug>.tscn`.
 
 ### Phaser 3 (`3.60+`) + Matter.js
 
@@ -691,6 +710,7 @@ const pop = new BitmapText({
 - **Bitmap Font & Damage Numeral Exporter (Screen 4M):** Rasterize pure-TS `5×7` monochrome bitmaps (`pixelGlyphTable.ts`) or `.ttf`/`.otf`/`.woff2` / system font faces (`fontRasterizer.ts`), bake vertical 2-stop palette-snapped gradients + 4-/8-way OKLab Sel-Out outlines + hard drop shadows into Power-of-Two shelf atlases off-thread (`bitmapFont.ts`, `BAKE_BITMAP_FONT`), audition animated floating Crit Pops over game biomes (`BitmapFontWorkshop.tsx`), and export Godot 4 `.fnt`, Phaser 3 / PixiJS `.xml`, `<slug>.png`, and Zod-validated `<slug>.recipe.json` ZIPs (`bmfontExporter.ts`, `zipPackager.ts`).
 - **Entity Hub, Godot 4 `.tscn` Prefab Assembler & Live `res://` Sync:** Group `SpriteNode` clips, optional Sobel normal maps, M16 colliders/hitboxes, M21 sockets, and M14/M15 WAVs into Dexie v3 `EntityDefinition` records (`entitySchema.ts`) without duplicating blobs; assemble lossless `.png.import` sidecars, `CanvasTexture`, `SpriteFrames`, synchronized `AnimationLibrary`, and complete `.tscn` scenes in pure TS (`godotPrefabAssembler.ts`); inspect cards & `.tscn Preview` (`EntityHubView.tsx`); and stream SHA-256-diffed writes (`syncDiff.ts`) straight to a bound local Godot project via the File System Access API or `fflate` ZIP fallback (`fsaaSyncEngine.ts`, `GodotSyncPill.tsx`).
 - **GenAI Prompt-to-Entity Director & Typed GDScript Generator:** Plan structured `EntityDirectorBlueprint` specs (`entityDirectorBlueprint.ts`) via Gemini Flash JSON `responseSchema`, Antigravity Bridge, or `$0.00` Offline Mock; execute an abort-safe 6-stage pipeline (`entityDirector.ts`) generating sprites, M16 hulls, opaque-bound M21 sockets (`resolveSocketHintsToPixels()`), LUFS-trimmed procedural SFX, and Godot 4.3+ typed `.gd` controllers (`gdscriptGenerator.ts`, `validateAndCompileGdScript()` rejections of Godot 3 tokens) inside `EntityDirectorModal.tsx`, wired straight into `<slug>.tscn` and `Sync to Godot`.
+- **Godot 4 `canvas_item` `.gdshader` Studio & Live WebGL2 Preview (Screen 4N):** Strip code fences, extract typed `uniform` metadata (`hint_range`, `source_color`), reject Godot 3 tokens (`hint_color`), and transpile Godot 4 vertex/fragment shaders into `#version 300 es` GLSL (`gdshaderTranspiler.ts`); author via five curated offline presets (`gdshaderPresets.ts`) or Gemini Flash BYOK / Antigravity Bridge (`shaderGenerator.ts`); audition live 60 FPS WebGL2 uniform scrubbing, syntax diagnostics, and `.gdshader` / `ShaderMaterial .tres` previews (`ShaderStudio.tsx`); and export `.zip` bundles (`shaderExporters.ts`, `zipPackager.ts`) or auto-wire `material = ExtResource(...)` onto `AnimatedSprite2D` inside M25 `.tscn` prefabs (`godotPrefabAssembler.ts`).
 
 ---
 

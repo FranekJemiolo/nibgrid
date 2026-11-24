@@ -504,3 +504,21 @@
 
 - **Director UI & Entity Hub Wiring (`src/ui/entities/EntityDirectorModal.tsx`, `src/ui/entities/EntityHubView.tsx`, `src/ui/command/CommandPalette.tsx`):** Added the 3-step Prompt-to-Entity modal (Prompt & Genre, Editable Blueprint Review with cost badge & per-cue audio engine selection, Live 6-stage abortable Build Stream), `+ Prompt-to-Entity (AI)` CTAs, `.gd` coverage dot, read-only `.gd Script` preview tab, and `act-prompt-to-entity` palette entry.
 - **Verification:** Added `tests/e2e/m26c-director-e2e.spec.ts` intercepting Gemini Blueprint, Sprite Image, and GDScript endpoints via `page.route()`, verifying all 6 build stages, `.tscn` + `.gd` FSAA sync writes, reload persistence, and zero orphan blobs alongside live demo capture (`docs/demo/25-prompt-to-entity-director.png`) and full CI verification.
+
+## Milestone 27A: Godot 4 `canvas_item` `.gdshader` Transpiler, Presets & Schema Foundation
+
+- **Transpiler & Offline Presets (`src/processing/gdshaderTranspiler.ts`, `src/processing/gdshaderPresets.ts`):** Added `stripShaderCodeFences`, `parseGdShaderUniforms`, `transpileGdShaderToWebGL2` (`#version 300 es` vertex/fragment codegen with Godot 3 `hint_color` diagnostics), and five Godot 4.3+ presets (`hit_flash`, `wind_sway`, `metallic_sheen`, `pixel_outline`, `water_ripple`).
+- **Schema & Recipe Integration (`src/domain/schemas.ts`, `src/domain/entitySchema.ts`, `src/export/recipeBuilder.ts`):** Added `ShaderUniformValueSchema`, `ShaderConfigSchema`, and `createDefaultShaderConfig()` onto `SpriteNodeSchema`, `EntityDefinitionSchema`, and `AssetRecipeSchema`.
+- **Verification:** Added `tests/unit/m27a-gdshader-transpiler.test.ts` validating `#version 300 es` output across all 5 presets, uniform bounds/color extraction, fence stripping, and invalid/Godot 3 shader rejection.
+
+## Milestone 27B: GenAI `.gdshader` Generator, `ShaderMaterial` `.tres` Exporter & M25 Prefab Wiring
+
+- **GenAI / Offline Generator (`src/providers/shaderGenerator.ts`):** Implemented `generateGdShader()`, `estimateShaderGenerationCost()`, and `matchPresetForShaderPrompt()` supporting Gemini BYOK, Antigravity Bridge, and deterministic offline preset matching with full API key redaction.
+- **Exporter & M25 Sync Integration (`src/export/shaderExporters.ts`, `src/export/zipPackager.ts`, `src/export/godotPrefabAssembler.ts`, `src/sync/fsaaSyncEngine.ts`):** Implemented `exportGodotShaderMaterialTres()`, `buildShaderExportFiles()`, and `packageShaderZip()`, wired `shaderBundle` into `packageSpriteZip()`, and automatically attached `<slug>.gdshader` + `<slug>_mat.tres` onto `AnimatedSprite2D` in M25 `.tscn` prefabs.
+- **Verification:** Added `tests/unit/m27b-shader-exporter.test.ts` testing `.tres` `Color(...)` serialization, M25 `load_steps` + `material` `.tscn` wiring, `fflate` ZIP extraction, offline keyword generation, and HTTP 401 API key redaction.
+
+## Milestone 27C: Godot 4 Shader Studio UI (`Screen 4N`), Live WebGL2 Inspector & E2E Flow
+
+- **Navigation & Inspector Registration (`src/store/useAppStore.ts`, `src/ui/inspector/workspaceTabs.ts`, `src/ui/command/CommandPalette.tsx`):** Added `'shader'` tab (`?tab=shader`) and `act-shader-studio` command palette action, placing `Shader Studio` in primary tabs for `'character'` and `'vfx'` assets without perturbing `'ui-panel'` tab layout.
+- **Live WebGL2 Studio (`src/ui/inspector/ShaderStudio.tsx`, `src/ui/inspector/PostProcessInspector.tsx`):** Implemented Screen 4N with preset pills, AI prompt generation, auto-generated `ScrubInput` and `source_color` controls, 60 FPS WebGL2 preview (`forceReleaseWebGlContext()` disposal), `.gdshader` / `.tres` tabs with live compile diagnostics, Dexie persistence, and ZIP/individual downloads.
+- **Verification:** Added `tests/e2e/m27c-shader-studio-e2e.spec.ts` verifying Hit Flash WebGL2 rendering + uniform scrubbing, intercepted Gemini custom shader dynamic controls, syntax error inline diagnostics, `.zip` extraction (`gdshader` + `_mat.tres` + Zod-valid `recipe.json`), and reload persistence alongside live demo capture (`docs/demo/26-godot-shader-studio.png`) and full CI verification.

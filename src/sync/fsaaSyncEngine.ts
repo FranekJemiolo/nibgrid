@@ -352,6 +352,8 @@ export async function collectEntitySyncFiles(
     angleDeg: s.baseAngleDeg,
   }));
 
+  const effectiveShader = entity.shaderConfig ?? primaryNode?.shaderConfig;
+
   return assembleGodotEntityFiles({
     entity,
     isPixelArt,
@@ -360,6 +362,7 @@ export async function collectEntitySyncFiles(
     colliderPolygons,
     sockets,
     ...(entity.scriptContent ? { scriptContent: entity.scriptContent } : {}),
+    ...(effectiveShader ? { shaderConfig: effectiveShader } : {}),
   });
 }
 

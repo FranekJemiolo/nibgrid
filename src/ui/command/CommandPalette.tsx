@@ -171,6 +171,21 @@ export function CommandPalette({ open, onOpenChange }: CommandPaletteProps) {
             }),
         },
         {
+          id: 'act-shader-studio',
+          title: 'Open Godot 4 Shader Studio (.gdshader)',
+          subtitle:
+            'AI canvas_item shader generator, live WebGL2 preview & ShaderMaterial .tres export',
+          category: 'action',
+          keywords: ['shader', 'gdshader', 'shadermaterial', 'tres', 'glsl', 'godot', 'fx'],
+          execute: () =>
+            navigate({
+              screen: 'inspector',
+              projectId: projId,
+              nodeId: targetId,
+              initialTab: 'shader',
+            }),
+        },
+        {
           id: 'act-normal',
           title: 'Open 2D Lighting & Normal Map',
           subtitle: 'Interactive point-light preview and normal export',

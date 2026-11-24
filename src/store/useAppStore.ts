@@ -24,6 +24,7 @@ export type InspectorTab =
   | 'palette-lut'
   | 'collider'
   | 'sandbox'
+  | 'shader'
   | 'turnaround';
 
 export type ScreenRoute =
@@ -49,6 +50,7 @@ const VALID_INSPECTOR_TABS = new Set<InspectorTab>([
   'palette-lut',
   'collider',
   'sandbox',
+  'shader',
   'turnaround',
 ]);
 

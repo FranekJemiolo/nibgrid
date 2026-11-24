@@ -35,6 +35,7 @@ import {
   createDefaultPostProcessConfig,
   createDefaultPuppetAnimConfig,
   createDefaultSeamlessTileConfig,
+  createDefaultShaderConfig,
   createDefaultVfxFlipbookConfig,
   type AssetClass,
   type AutoTileConfig,
@@ -53,6 +54,7 @@ import {
   type ResampleMode,
   type SeamlessTileConfig,
   type SelOutMode,
+  type ShaderConfig,
   type SocketDefinition,
   type SpriteNode,
   type VfxFlipbookConfig,
@@ -91,6 +93,7 @@ import { PaletteLutWorkshop } from './PaletteLutWorkshop';
 import { ParallaxWorkshop } from './ParallaxWorkshop';
 import { PipBiomePreview } from './PipBiomePreview';
 import { PuppetWarpEditor } from './PuppetWarpEditor';
+import { ShaderStudio } from './ShaderStudio';
 import { SocketEditor } from './SocketEditor';
 import { TileAndSliceWorkshop } from './TileAndSliceWorkshop';
 import { TurnaroundSlicer } from './TurnaroundSlicer';
@@ -254,6 +257,9 @@ export function PostProcessInspector({
   const [bitmapFontConfig, setBitmapFontConfig] = useState<BitmapFontConfig>(
     () => targetNode?.bitmapFont ?? createDefaultBitmapFontConfig(),
   );
+  const [shaderConfig, setShaderConfig] = useState<ShaderConfig>(
+    () => targetNode?.shaderConfig ?? createDefaultShaderConfig(),
+  );
   const [activeSpriteBuffer, setActiveSpriteBuffer] = useState<RgbaBuffer | null>(null);
   const bakedNormalRef = useRef<{ buffer: RgbaBuffer; key: string } | null>(null);
   const [foundryStats, setFoundryStats] = useState<{
@@ -322,6 +328,8 @@ export function PostProcessInspector({
   latestParallaxSceneRef.current = parallaxSceneConfig;
   const latestBitmapFontRef = useRef(bitmapFontConfig);
   latestBitmapFontRef.current = bitmapFontConfig;
+  const latestShaderConfigRef = useRef(shaderConfig);
+  latestShaderConfigRef.current = shaderConfig;
 
   useEffect(() => {
     if (!overflowOpen) return;
@@ -359,6 +367,7 @@ export function PostProcessInspector({
     setVfxFlipbookConfig(node.vfxFlipbook ?? createDefaultVfxFlipbookConfig());
     setParallaxSceneConfig(node.parallaxScene ?? createDefaultParallaxSceneConfig());
     setBitmapFontConfig(node.bitmapFont ?? createDefaultBitmapFontConfig());
+    setShaderConfig(node.shaderConfig ?? createDefaultShaderConfig());
   }, [targetNodeId]);
 
   // Auto-infer tile / ui-panel when enabling Seamless Tile or 9-Slice on unclassified sprite
@@ -436,6 +445,7 @@ export function PostProcessInspector({
           ...(currentNode.vfxFlipbook ? { vfxFlipbook: latestVfxFlipbookRef.current } : {}),
           ...(currentNode.parallaxScene ? { parallaxScene: latestParallaxSceneRef.current } : {}),
           ...(currentNode.bitmapFont ? { bitmapFont: latestBitmapFontRef.current } : {}),
+          ...(currentNode.shaderConfig ? { shaderConfig: latestShaderConfigRef.current } : {}),
         })
         .then(() => refreshSpriteNodes(activeProject.id));
     }, 120);
@@ -585,6 +595,7 @@ export function PostProcessInspector({
               ? { parallaxScene: latestParallaxSceneRef.current }
               : {}),
             ...(nodeSnapshot.bitmapFont ? { bitmapFont: latestBitmapFontRef.current } : {}),
+            ...(nodeSnapshot.shaderConfig ? { shaderConfig: latestShaderConfigRef.current } : {}),
           });
           await repository.cleanupOrphanedBlobs();
           if (
@@ -892,6 +903,7 @@ export function PostProcessInspector({
       ...(targetNode.vfxFlipbook ? { vfxFlipbook: vfxFlipbookConfig } : {}),
       ...(targetNode.parallaxScene ? { parallaxScene: parallaxSceneConfig } : {}),
       ...(targetNode.bitmapFont ? { bitmapFont: bitmapFontConfig } : {}),
+      ...(targetNode.shaderConfig ? { shaderConfig } : {}),
       recipeArtBibleHash: computeArtBibleHash(activeProject.artBible),
       assetClass,
     });
@@ -921,6 +933,7 @@ export function PostProcessInspector({
         normalPngBytes,
         extraFiles,
         ...(evaluatedSocketsByFrame ? { evaluatedSocketsByFrame } : {}),
+        ...(targetNode?.shaderConfig ? { shaderBundle: shaderConfig } : {}),
         socketFps: puppetConfig.fps,
       });
       const copy = new Uint8Array(zipBytes.byteLength);
@@ -1092,6 +1105,22 @@ export function PostProcessInspector({
         ...current,
         assetClass: latestAssetClassRef.current,
         bitmapFont: savedConfig,
+      });
+      await refreshSpriteNodes(activeProject.id);
+    },
+    [activeProject, refreshSpriteNodes],
+  );
+
+  const handleSaveShaderConfig = useCallback(
+    async (savedConfig: ShaderConfig) => {
+      setShaderConfig(savedConfig);
+      latestShaderConfigRef.current = savedConfig;
+      const current = latestNodeRef.current;
+      if (!activeProject || !current) return;
+      await repository.saveSpriteNode({
+        ...current,
+        assetClass: latestAssetClassRef.current,
+        shaderConfig: savedConfig,
       });
       await refreshSpriteNodes(activeProject.id);
     },
@@ -1490,6 +1519,19 @@ export function PostProcessInspector({
             bitmapConfig={bitmapFontConfig}
             onChangeConfig={setBitmapFontConfig}
             onSaveToProject={handleSaveBitmapFont}
+          />
+        ) : inspectorTab === 'shader' && activeSpriteBuffer ? (
+          <ShaderStudio
+            sprite={activeSpriteBuffer}
+            project={activeProject}
+            targetNode={targetNode}
+            providers={providers}
+            postProcessConfig={config}
+            rawWidth={rawSize.width}
+            rawHeight={rawSize.height}
+            shaderConfig={shaderConfig}
+            onChangeConfig={setShaderConfig}
+            onSaveToProject={handleSaveShaderConfig}
           />
         ) : inspectorTab === 'palette-lut' && activeSpriteBuffer ? (
           <PaletteLutWorkshop

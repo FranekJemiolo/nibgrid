@@ -3,6 +3,9 @@ import {
   sanitizeEntitySlug,
   type EntityDefinition,
 } from '../domain/entitySchema';
+import type { ShaderConfig } from '../domain/schemas';
+import { exportGodotShaderMaterialTres } from './shaderExporters';
+import { stripShaderCodeFences } from '../processing/gdshaderTranspiler';
 
 export interface VirtualSyncFile {
   readonly relativePath: string;
@@ -43,6 +46,7 @@ export interface EntityAssemblyInput {
   readonly colliderPolygons: readonly EntityAssemblyColliderPolygon[];
   readonly sockets: readonly EntityAssemblySocket[];
   readonly scriptContent?: string;
+  readonly shaderConfig?: ShaderConfig;
 }
 
 function roundTo(n: number, decimals = 4): number {
@@ -438,6 +442,34 @@ export function assembleGodotEntityFiles(input: EntityAssemblyInput): readonly V
     }
   }
 
+  const effectiveShader = input.shaderConfig ?? input.entity.shaderConfig;
+  let shaderMatExtId: string | null = null;
+  if (effectiveShader && effectiveShader.gdshaderSource.trim().length > 0) {
+    const cleanedShader = stripShaderCodeFences(effectiveShader.gdshaderSource);
+    const shaderRel = `${baseDir}/${slug}.gdshader`;
+    const shaderRes = `res://${shaderRel}`;
+    const matRel = `${baseDir}/${slug}_mat.tres`;
+    const matRes = `res://${matRel}`;
+
+    files.push({
+      relativePath: shaderRel,
+      content: cleanedShader.endsWith('\n') ? cleanedShader : `${cleanedShader}\n`,
+    });
+    files.push({
+      relativePath: matRel,
+      content: exportGodotShaderMaterialTres(
+        shaderRes,
+        cleanedShader,
+        effectiveShader.uniformValues,
+      ),
+    });
+
+    shaderMatExtId = `${nextTscnExt++}_mat`;
+    tscnExtResources.push(
+      `[ext_resource type="Material" path="${escapeGodotString(matRes)}" id="${shaderMatExtId}"]`,
+    );
+  }
+
   const tscnLoadSteps = 1 + tscnExtResources.length;
   const rootName = toPascalCase(slug);
   const firstClipName = effectiveClips[0]?.name ?? 'idle';
@@ -452,6 +484,7 @@ export function assembleGodotEntityFiles(input: EntityAssemblyInput): readonly V
       `texture_filter = ${textureFilter}`,
       `sprite_frames = ExtResource("1_frames")`,
       `animation = &"${firstClipName}"`,
+      ...(shaderMatExtId ? [`material = ExtResource("${shaderMatExtId}")`] : []),
     ].join('\n'),
   ];
 

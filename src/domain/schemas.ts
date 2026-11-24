@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { ContourTimbrePatchSchema } from '../audio/contourPatchSchema';
+import { extractDefaultUniformValues, getGdShaderPreset } from '../processing/gdshaderPresets';
 import {
   ParallaxBandBlueprintSchema,
   ParallaxBandRoleSchema,
@@ -605,6 +606,41 @@ export function createDefaultBitmapFontConfig(): BitmapFontConfig {
   return BitmapFontConfigSchema.parse({});
 }
 
+export const ShaderUniformValueSchema = z.union([
+  z.number(),
+  z.boolean(),
+  z.array(z.number()).min(2).max(4),
+]);
+export type ShaderUniformValue = z.infer<typeof ShaderUniformValueSchema>;
+
+export const ShaderConfigSchema = z.object({
+  presetId: z.string().min(1).max(64).default('hit_flash'),
+  prompt: z.string().max(400).default(''),
+  gdshaderSource: z
+    .string()
+    .min(1)
+    .max(32000)
+    .default(() => getGdShaderPreset('hit_flash').source),
+  uniformValues: z
+    .record(z.string(), ShaderUniformValueSchema)
+    .default(() => extractDefaultUniformValues(getGdShaderPreset('hit_flash').source)),
+  paused: z.boolean().default(false),
+  timeScale: z.number().min(0).max(4).default(1),
+});
+export type ShaderConfig = z.infer<typeof ShaderConfigSchema>;
+
+export function createDefaultShaderConfig(presetId = 'hit_flash'): ShaderConfig {
+  const preset = getGdShaderPreset(presetId);
+  return ShaderConfigSchema.parse({
+    presetId: preset.id,
+    prompt: '',
+    gdshaderSource: preset.source,
+    uniformValues: extractDefaultUniformValues(preset.source),
+    paused: false,
+    timeScale: 1,
+  });
+}
+
 export const SpriteNodeSchema = z.object({
   id: z.string().min(1),
   projectId: z.string().min(1),
@@ -616,6 +652,7 @@ export const SpriteNodeSchema = z.object({
   vfxFlipbook: VfxFlipbookConfigSchema.optional(),
   parallaxScene: ParallaxSceneConfigSchema.optional(),
   bitmapFont: BitmapFontConfigSchema.optional(),
+  shaderConfig: ShaderConfigSchema.optional(),
   imageBlobId: z.string().min(1),
   maskBlobId: z.string().min(1).optional(),
   processedBlobId: z.string().min(1).optional(),

@@ -87,6 +87,12 @@ export const INSPECTOR_TAB_META: Record<InspectorTab, InspectorTabMeta> = {
     shortLabel: 'Sandbox',
     testId: 'inspector-tab-sandbox',
   },
+  shader: {
+    id: 'shader',
+    label: 'Godot 4 Shader Studio',
+    shortLabel: 'Shader Studio',
+    testId: 'inspector-tab-shader',
+  },
 };
 
 export const ALL_INSPECTOR_TABS: readonly InspectorTab[] = [
@@ -102,6 +108,7 @@ export const ALL_INSPECTOR_TABS: readonly InspectorTab[] = [
   'palette-lut',
   'collider',
   'sandbox',
+  'shader',
   'turnaround',
 ];
 
@@ -138,7 +145,15 @@ export function resolveInspectorTabs(
       primary = ['postprocess', 'tile-slice', 'bmfont', 'palette-lut'];
       break;
     case 'vfx':
-      primary = ['postprocess', 'vfx-baker', 'puppet', 'sockets', 'palette-lut', 'sandbox'];
+      primary = [
+        'postprocess',
+        'vfx-baker',
+        'shader',
+        'puppet',
+        'sockets',
+        'palette-lut',
+        'sandbox',
+      ];
       break;
     case 'character':
     default:
@@ -150,6 +165,7 @@ export function resolveInspectorTabs(
         'collider',
         'palette-lut',
         'sandbox',
+        'shader',
       ];
       break;
   }

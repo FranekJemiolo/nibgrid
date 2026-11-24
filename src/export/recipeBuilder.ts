@@ -21,6 +21,7 @@ import {
   ProjectionSchema,
   PuppetPinSchema,
   SeamlessTileConfigSchema,
+  ShaderConfigSchema,
   SocketDefinitionSchema,
   TurnaroundMetaSchema,
   VfxFlipbookConfigSchema,
@@ -36,6 +37,7 @@ import {
   type Project,
   type PuppetAnimConfig,
   type SeamlessTileConfig,
+  type ShaderConfig,
   type SocketDefinition,
   type SpriteNode,
   type TurnaroundMeta,
@@ -129,6 +131,7 @@ export const AssetRecipeSchema = z.object({
   vfxFlipbook: VfxFlipbookConfigSchema.optional(),
   parallaxScene: ParallaxSceneConfigSchema.optional(),
   bitmapFont: BitmapFontConfigSchema.optional(),
+  shaderConfig: ShaderConfigSchema.optional(),
 });
 
 export type AssetRecipe = z.infer<typeof AssetRecipeSchema>;
@@ -168,6 +171,7 @@ export interface BuildAssetRecipeInput {
   vfxFlipbook?: VfxFlipbookConfig;
   parallaxScene?: ParallaxSceneConfig;
   bitmapFont?: BitmapFontConfig;
+  shaderConfig?: ShaderConfig;
 }
 
 const SENSITIVE_KEY_PATTERNS: readonly RegExp[] = [
@@ -263,6 +267,9 @@ export function buildAssetRecipe(input: BuildAssetRecipeInput): AssetRecipe {
       : {}),
     ...((input.bitmapFont ?? node.bitmapFont)
       ? { bitmapFont: input.bitmapFont ?? node.bitmapFont }
+      : {}),
+    ...((input.shaderConfig ?? node.shaderConfig)
+      ? { shaderConfig: input.shaderConfig ?? node.shaderConfig }
       : {}),
     ...(() => {
       const sockList = input.sockets ?? node.sockets;
