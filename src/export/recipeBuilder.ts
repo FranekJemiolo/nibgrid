@@ -6,6 +6,7 @@ import {
   AssetClassSchema,
   AutoTileConfigSchema,
   BevelProfileSchema,
+  BitmapFontConfigSchema,
   CollisionLayerShapeSchema,
   DimensionSchema,
   HexColorSchema,
@@ -25,6 +26,7 @@ import {
   VfxFlipbookConfigSchema,
   type AssetClass,
   type AutoTileConfig,
+  type BitmapFontConfig,
   type CollisionLayerShape,
   type NineSliceConfig,
   type NormalMapConfig,
@@ -126,6 +128,7 @@ export const AssetRecipeSchema = z.object({
   sockets: z.array(SocketDefinitionSchema).optional(),
   vfxFlipbook: VfxFlipbookConfigSchema.optional(),
   parallaxScene: ParallaxSceneConfigSchema.optional(),
+  bitmapFont: BitmapFontConfigSchema.optional(),
 });
 
 export type AssetRecipe = z.infer<typeof AssetRecipeSchema>;
@@ -164,6 +167,7 @@ export interface BuildAssetRecipeInput {
   sockets?: readonly SocketDefinition[];
   vfxFlipbook?: VfxFlipbookConfig;
   parallaxScene?: ParallaxSceneConfig;
+  bitmapFont?: BitmapFontConfig;
 }
 
 const SENSITIVE_KEY_PATTERNS: readonly RegExp[] = [
@@ -256,6 +260,9 @@ export function buildAssetRecipe(input: BuildAssetRecipeInput): AssetRecipe {
       : {}),
     ...((input.parallaxScene ?? node.parallaxScene)
       ? { parallaxScene: input.parallaxScene ?? node.parallaxScene }
+      : {}),
+    ...((input.bitmapFont ?? node.bitmapFont)
+      ? { bitmapFont: input.bitmapFont ?? node.bitmapFont }
       : {}),
     ...(() => {
       const sockList = input.sockets ?? node.sockets;

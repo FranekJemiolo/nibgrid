@@ -19,6 +19,7 @@ export type InspectorTab =
   | 'tile-slice'
   | 'autotile'
   | 'parallax'
+  | 'bmfont'
   | 'palette-lut'
   | 'collider'
   | 'sandbox'
@@ -42,6 +43,7 @@ const VALID_INSPECTOR_TABS = new Set<InspectorTab>([
   'tile-slice',
   'autotile',
   'parallax',
+  'bmfont',
   'palette-lut',
   'collider',
   'sandbox',

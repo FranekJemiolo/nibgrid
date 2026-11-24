@@ -1,6 +1,6 @@
 # Nibgrid
 
-Local-first, zero-server Bring-Your-Own-Key / Bring-Your-Own-Model (BYOK/BYOM) Progressive Web App for turning hand-drawn sketches and vocal hums into style-locked, engine-ready 2D game sprites, 4-view turnarounds, normal maps, animations, auto-tiles, mesh-tracked sockets, VFX flipbooks, parallax backgrounds, colliders, UI panels, and audio.
+Local-first, zero-server Bring-Your-Own-Key / Bring-Your-Own-Model (BYOK/BYOM) Progressive Web App for turning hand-drawn sketches and vocal hums into style-locked, engine-ready 2D game sprites, 4-view turnarounds, normal maps, animations, auto-tiles, mesh-tracked sockets, VFX flipbooks, parallax backgrounds, bitmap fonts & damage numerals, colliders, UI panels, and audio.
 
 **Live App (GitHub Pages):** https://franekjemiolo.github.io/nibgrid/
 
@@ -34,6 +34,7 @@ Local-first, zero-server Bring-Your-Own-Key / Bring-Your-Own-Model (BYOK/BYOM) P
   - [2.15 Bind Mesh-Tracked Attachment Sockets onto Sprites & Rigs (Screen 4J)](#215-bind-mesh-tracked-attachment-sockets-onto-sprites--rigs-screen-4j)
   - [2.16 Bake Procedural 2D VFX Flipbooks & Particle Sheets (Screen 4K)](#216-bake-procedural-2d-vfx-flipbooks--particle-sheets-screen-4k)
   - [2.17 Compose Seamless Parallax Backgrounds & Depth Tinting (Screen 4L)](#217-compose-seamless-parallax-backgrounds--depth-tinting-screen-4l)
+  - [2.18 Export Palette-Locked Bitmap Fonts & Damage Numerals (Screen 4M)](#218-export-palette-locked-bitmap-fonts--damage-numerals-screen-4m)
 - [Part 3 — Engine Drop-In Integration Examples](#part-3--engine-drop-in-integration-examples)
 - [Architecture Summary](#architecture-summary)
 - [Development & Verification](#development--verification)
@@ -64,6 +65,7 @@ Local-first, zero-server Bring-Your-Own-Key / Bring-Your-Own-Model (BYOK/BYOM) P
 | Deforming Weapon, Muzzle & Exhaust Sockets        | `Attachment Sockets` (Screen 4J)       | `$0.00 Local` (Barycentric MLS Binding)    | `_sockets.json`, Godot `Marker2D` `.tscn`, Phaser/Pixi JSON                                         |
 | Procedural Sparks, Smoke, Rings & Dissolve VFX    | `VFX Baker` (Screen 4K)                | `$0.00 Local` (Worker FBM Synthesizer)     | Packed `_vfx_sheet.png`, Godot `GPUParticles2D`, Pixi JSON                                          |
 | Multi-Layer Parallax Vistas & Aerial Depth Haze   | `Parallax BG` (Screen 4L)              | `$0.00 Local` or BYOK / Bridge Stack       | Horizontal seamless band PNGs, Godot `Parallax2D` `.tscn`, Phaser/Pixi JSON                         |
+| Palette-Locked Bitmap Fonts & Damage Numerals     | `Bitmap Font` (Screen 4M)              | `$0.00 Local` (Worker PoT Packer)          | `<slug>.png`, AngelCode `.fnt` + `.xml`, `<slug>.recipe.json`                                       |
 
 ---
 
@@ -486,6 +488,22 @@ Once a sprite is inside **Post-Process & Export Inspector** (`Screen 4`), switch
 
 ---
 
+### 2.18 Export Palette-Locked Bitmap Fonts & Damage Numerals (Screen 4M)
+
+**When to use it:** System fonts immediately clash with stylized 2D sprites and pixel-art HUDs—especially on floating combat numbers (`-42`, `CRIT 128!`) and status popups. Screen 4M deterministically styles either built-in crisp pixel glyphs or uploaded `.ttf`/`.otf`/`.woff2` faces through your active **Art Bible** palette, luminance-aware OKLab Sel-Out outlines, and hard-pixel drop shadows before packing a Power-of-Two sheet plus AngelCode `.fnt` and `.xml` descriptors.
+
+**Click-by-Click:**
+
+1. Open **`Bitmap Font`** in Screen 4 (primary tab under **`Class` → `UI Panel`**, or inside **`+ Tools`** / `Cmd/Ctrl+K`).
+2. Under **Glyph Source**, pick **`5×7 Pixel`** for built-in pure-TS pixel bitmaps or **`.TTF / System`** to choose a system font / upload a local font file and dial **`Raster Size`**, then pick **`Damage (23)`**, **`HUD Upper`**, **`ASCII (95)`**, or type a custom charset.
+3. Dial **`Integer Scale`** (`1×`–`4×`), choose **`OKLab Sel-Out Outline`** (`None` / `4-Way` / `8-Way`) + **`Sel-Out Darken`**, set **`Shadow X`** / **`Shadow Y`**, **`Spacing`**, **`Padding`**, click **`Top`** / **`Bottom`** gradient stops (or click **Art Bible** swatches), and keep **`Snap Fill to Art Bible Palette`** checked.
+4. Audition readability over game biomes in **`Live Combat`**, edit **`Preview String`**, click **`Spawn Crit Pop`** to preview animated damage arcs, or switch to **`Packed Atlas`** to inspect the Power-of-Two sheet.
+5. Inspect **`Godot 4 (.fnt)`** or **`Phaser / Pixi (.xml)`**, click **`Save Font to Project`** to store the recipe in IndexedDB, and click **`Download BMFont ZIP`** for `<slug>.png`, `<slug>.fnt`, `<slug>.xml`, and `<slug>.recipe.json`.
+
+![Screen 4M — Bitmap Font & Damage Numeral Workshop](docs/demo/23-bitmap-font-workshop.png)
+
+---
+
 ## Part 3 — Engine Drop-In Integration Examples
 
 ### Godot 4 (`4.2+`)
@@ -515,6 +533,8 @@ Nibgrid exports Godot-native `.tres` resources (`AtlasTexture` / `SpriteFrames`,
 5. **Blob-47 / Wang-16 Terrain (`<slug>_tileset.tres`), `Marker2D` Sockets, `GPUParticles2D` VFX & `Parallax2D` Vistas:**
    - Drop `<slug>_autotile_blob-47.png` + `<slug>_tileset.tres` into `TileMapLayer.tile_set` to paint terrain transitions immediately with pre-bound `terrains_peering_bit/*` rules.
    - Paste exported `[node name="..." type="Marker2D" parent="."]` blocks under your centered `Sprite2D` / `AnimatedSprite2D`, load `<slug>_vfx_godot.tscn` + `<slug>_vfx_godot.tres` for flipbook `GPUParticles2D` bursts, or open `<slug>_parallax.tscn` (Godot 4.3+ `Parallax2D` nodes with baked `scroll_scale`, `repeat_size`, and `texture_filter = 1`) alongside your exported layer PNGs.
+6. **Bitmap Fonts & Floating Damage Numerals (`<slug>.fnt` + `<slug>.png`):**
+   - Drop `<slug>.fnt` and `<slug>.png` into `res://fonts/`. Godot 4 imports `<slug>.fnt` natively as a `FontFile` (set `Antialiasing = None` and `Texture Filter = Nearest`), ready to assign directly to `Label` / `RichTextLabel` → `Theme Overrides` → `Fonts`.
 
 ### Phaser 3 (`3.60+`) + Matter.js
 
@@ -550,12 +570,16 @@ const bgSprites = parallax.layers.map(
       .setOrigin(0, 0)
       .setScrollFactor(layer.phaser.scrollFactorX, 0),
 );
+
+// 4. Load AngelCode XML bitmap font for floating damage numerals
+this.load.bitmapFont('crit_nums', 'assets/nibgrid-damage.png', 'assets/nibgrid-damage.xml');
+this.add.bitmapText(hero.x, hero.y - 24, 'crit_nums', 'CRIT 128!').setOrigin(0.5);
 ```
 
 ### PixiJS v8
 
 ```ts
-import { Assets, AnimatedSprite, NineSliceSprite, Texture, Rectangle } from 'pixi.js';
+import { Assets, AnimatedSprite, BitmapText, NineSliceSprite, Texture, Rectangle } from 'pixi.js';
 import { createPaletteSwapFilter } from './cat_warrior_lut_pixi';
 
 // 1. Load packed PixiJS v8 JSON Hash atlas + animations
@@ -596,6 +620,13 @@ const panel = new NineSliceSprite({
   width: 320,
   height: 120,
 });
+
+// 5. Render pixel-crisp AngelCode bitmap font (`<slug>.fnt` or `.xml`)
+await Assets.load('assets/nibgrid-damage.fnt');
+const pop = new BitmapText({
+  text: 'CRIT 128!',
+  style: { fontFamily: 'nibgrid_damage' },
+});
 ```
 
 ---
@@ -619,6 +650,7 @@ const panel = new NineSliceSprite({
 - **Named Attachment Sockets & Per-Frame Mesh Tracking (Screen 4J):** Bind named sockets (`hand_r`, `hand_l`, `muzzle`, `exhaust`, `head`, `center`, or custom IDs) via barycentric triangle weights onto M9 Moving Least Squares meshes (`attachmentSockets.ts`), drag markers & scrub frame deformation in the zero-WebGL2 Canvas2D/SVG workshop (`SocketEditor.tsx`), preview Godot 4 `Marker2D` `.tscn` / Phaser 3 / PixiJS snippets (`socketExporters.ts`), and bundle `<slug>_sockets.json` + `sockets[]` `.recipe.json` manifests inside sprite ZIPs (`zipPackager.ts`).
 - **2D VFX Flipbook & Particle Sheet Baker (Screen 4K):** Synthesize deterministic `4×4`, `8×2`, or `4×2` spark bursts, dust puffs, smoke plumes, shockwave hit rings, and FBM noise-dissolve sheets off-thread in Worker threads (`vfxFlipbook.ts`, `postprocess.worker.ts`) with Art Bible palette snapping, audition loops in a visibility-aware Canvas2D player (`VfxBaker.tsx`), and export Godot 4 `CanvasItemMaterial` `.tres` + `GPUParticles2D` `.tscn`, PixiJS flipbook JSON, and Zod-valid `.recipe.json` ZIPs (`vfxExporters.ts`).
 - **Parallax Background Layer Compositor, Atmospheric Tinter & Matched-Stack Generator (Screen 4L):** Orchestrate 2-stage AI blueprints (`parallaxBlueprint.ts`), optional Master Keyframe anchoring, `#FF00FF` chroma-isolated band streaming (`parallaxGenerator.ts`), or `$0.00` Offline Mock bands; execute Worker-isolated smoothstep horizontal seam-wrapping and contrast-dampening horizon scatter tinting (`parallaxCompositor.ts`, `PROCESS_PARALLAX_LAYER`); preview live 60 FPS Canvas2D scroll ratios with `1×` foreground contrast checks (`ParallaxWorkshop.tsx`); and export Godot 4.3+ `Parallax2D` `.tscn`, Phaser 3 `TileSprite` / PixiJS `TilingSprite` manifests (`parallaxExporters.ts`), and orphan-blob-safe Dexie ZIPs.
+- **Bitmap Font & Damage Numeral Exporter (Screen 4M):** Rasterize pure-TS `5×7` monochrome bitmaps (`pixelGlyphTable.ts`) or `.ttf`/`.otf`/`.woff2` / system font faces (`fontRasterizer.ts`), bake vertical 2-stop palette-snapped gradients + 4-/8-way OKLab Sel-Out outlines + hard drop shadows into Power-of-Two shelf atlases off-thread (`bitmapFont.ts`, `BAKE_BITMAP_FONT`), audition animated floating Crit Pops over game biomes (`BitmapFontWorkshop.tsx`), and export Godot 4 `.fnt`, Phaser 3 / PixiJS `.xml`, `<slug>.png`, and Zod-validated `<slug>.recipe.json` ZIPs (`bmfontExporter.ts`, `zipPackager.ts`).
 
 ---
 

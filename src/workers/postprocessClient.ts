@@ -1,14 +1,18 @@
 import type { PostProcessConfig } from '../domain/schemas';
 import type { AutoTileOptions } from '../processing/autoTile';
+import type { BitmapFontStyleOptions, GlyphMask } from '../processing/bitmapFont';
 import type { RgbTuple } from '../processing/parallaxCompositor';
 import type { TurnaroundSliceOptions } from '../processing/turnaroundSlicer';
 import type { VfxFlipbookOptions } from '../processing/vfxFlipbook';
 import {
+  executeBakeBitmapFontJob,
   executeBakeVfxFlipbookJob,
   executeComposeAutoTileJob,
   executePostProcessJob,
   executeProcessParallaxLayerJob,
   executeSliceTurnaroundJob,
+  type BakeBitmapFontWorkerRequest,
+  type BakeBitmapFontWorkerSuccess,
   type BakeVfxFlipbookWorkerRequest,
   type BakeVfxFlipbookWorkerSuccess,
   type ComposeAutoTileWorkerRequest,
@@ -32,7 +36,8 @@ interface PendingJob {
       | SliceTurnaroundWorkerSuccess
       | ComposeAutoTileWorkerSuccess
       | BakeVfxFlipbookWorkerSuccess
-      | ProcessParallaxLayerWorkerSuccess,
+      | ProcessParallaxLayerWorkerSuccess
+      | BakeBitmapFontWorkerSuccess,
   ) => void;
   reject: (reason: Error) => void;
   onProgress?: (phase: string, progress: number) => void;
@@ -316,6 +321,70 @@ export async function processParallaxLayerInWorker(
       reject,
     });
     worker.postMessage(request, [copy.buffer]);
+  });
+}
+
+export interface RunBakeBitmapFontInput {
+  readonly masks: readonly GlyphMask[];
+  readonly options: BitmapFontStyleOptions;
+}
+
+export async function bakeBitmapFontInWorker(
+  input: RunBakeBitmapFontInput,
+): Promise<BakeBitmapFontWorkerSuccess> {
+  const id = nextRequestId++;
+  const clonedMasks: GlyphMask[] = input.masks.map((m) => ({
+    ...m,
+    alpha: new Uint8Array(m.alpha),
+  }));
+
+  const request: BakeBitmapFontWorkerRequest = {
+    type: 'BAKE_BITMAP_FONT',
+    id,
+    masks: clonedMasks,
+    options: {
+      ...input.options,
+      topRgb: [input.options.topRgb[0], input.options.topRgb[1], input.options.topRgb[2]],
+      bottomRgb: [
+        input.options.bottomRgb[0],
+        input.options.bottomRgb[1],
+        input.options.bottomRgb[2],
+      ],
+      shadowRgb: [
+        input.options.shadowRgb[0],
+        input.options.shadowRgb[1],
+        input.options.shadowRgb[2],
+      ],
+      ...(input.options.outlineRgb
+        ? {
+            outlineRgb: [
+              input.options.outlineRgb[0],
+              input.options.outlineRgb[1],
+              input.options.outlineRgb[2],
+            ],
+          }
+        : {}),
+      ...(input.options.paletteHex ? { paletteHex: [...input.options.paletteHex] } : {}),
+    },
+  };
+
+  const worker = getWorker();
+  if (!worker) {
+    return executeBakeBitmapFontJob(request);
+  }
+
+  return new Promise<BakeBitmapFontWorkerSuccess>((resolve, reject) => {
+    pending.set(id, {
+      resolve: (value) => resolve(value as BakeBitmapFontWorkerSuccess),
+      reject,
+    });
+    const transfers = new Set<Transferable>();
+    for (const m of clonedMasks) {
+      if (m.alpha.buffer instanceof ArrayBuffer) {
+        transfers.add(m.alpha.buffer);
+      }
+    }
+    worker.postMessage(request, [...transfers]);
   });
 }
 

@@ -63,6 +63,12 @@ export const INSPECTOR_TAB_META: Record<InspectorTab, InspectorTabMeta> = {
     shortLabel: 'Parallax',
     testId: 'inspector-tab-parallax',
   },
+  bmfont: {
+    id: 'bmfont',
+    label: 'Bitmap Font',
+    shortLabel: 'BMFont',
+    testId: 'inspector-tab-bmfont',
+  },
   'palette-lut': {
     id: 'palette-lut',
     label: 'Palette-Swap & LUT',
@@ -92,6 +98,7 @@ export const ALL_INSPECTOR_TABS: readonly InspectorTab[] = [
   'tile-slice',
   'autotile',
   'parallax',
+  'bmfont',
   'palette-lut',
   'collider',
   'sandbox',
@@ -128,7 +135,7 @@ export function resolveInspectorTabs(
       primary = ['postprocess', 'tile-slice', 'autotile', 'parallax', 'normal', 'palette-lut'];
       break;
     case 'ui-panel':
-      primary = ['postprocess', 'tile-slice', 'palette-lut'];
+      primary = ['postprocess', 'tile-slice', 'bmfont', 'palette-lut'];
       break;
     case 'vfx':
       primary = ['postprocess', 'vfx-baker', 'puppet', 'sockets', 'palette-lut', 'sandbox'];

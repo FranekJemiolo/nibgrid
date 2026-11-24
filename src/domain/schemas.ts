@@ -562,6 +562,49 @@ export function createDefaultParallaxSceneConfig(): ParallaxSceneConfig {
   return ParallaxSceneConfigSchema.parse({});
 }
 
+export const BitmapFontSourceKindSchema = z.enum(['builtin-5x7', 'custom-font']);
+export type BitmapFontSourceKind = z.infer<typeof BitmapFontSourceKindSchema>;
+
+export const BitmapFontCharsetPresetSchema = z.enum([
+  'damage-numerals',
+  'hud-upper',
+  'ascii-basic',
+  'custom',
+]);
+export type BitmapFontCharsetPreset = z.infer<typeof BitmapFontCharsetPresetSchema>;
+
+export const BitmapFontOutlineModeSchema = z.union([z.literal(0), z.literal(1), z.literal(2)]);
+export type BitmapFontOutlineMode = z.infer<typeof BitmapFontOutlineModeSchema>;
+
+export const BitmapFontConfigSchema = z.object({
+  fontName: z.string().trim().min(1).max(64).default('nibgrid_damage'),
+  sourceKind: BitmapFontSourceKindSchema.default('builtin-5x7'),
+  customFontFamily: z.string().max(120).default('monospace'),
+  rasterSizePx: z.number().int().min(10).max(48).default(16),
+  charsetPreset: BitmapFontCharsetPresetSchema.default('damage-numerals'),
+  customCharset: z.string().min(1).max(256).default('0123456789+-!%x.,CRITMS'),
+  scale: z.number().int().min(1).max(4).default(2),
+  topHex: HexColorSchema.default('#FFCD75'),
+  bottomHex: HexColorSchema.default('#EF7D57'),
+  snapToPalette: z.boolean().default(true),
+  outlineMode: BitmapFontOutlineModeSchema.default(1),
+  selOutDarken: z.number().min(0.1).max(0.9).default(0.55),
+  useCustomOutline: z.boolean().default(false),
+  outlineHex: HexColorSchema.default('#1A1C2C'),
+  shadowOffsetX: z.number().int().min(-8).max(8).default(0),
+  shadowOffsetY: z.number().int().min(-8).max(8).default(1),
+  shadowHex: HexColorSchema.default('#1A1C2C'),
+  shadowAlpha: z.number().int().min(0).max(255).default(180),
+  letterSpacingPx: z.number().int().min(-4).max(16).default(1),
+  paddingPx: z.number().int().min(1).max(16).default(2),
+  previewText: z.string().max(160).default('-42  CRIT 128!  +15 HP'),
+});
+export type BitmapFontConfig = z.infer<typeof BitmapFontConfigSchema>;
+
+export function createDefaultBitmapFontConfig(): BitmapFontConfig {
+  return BitmapFontConfigSchema.parse({});
+}
+
 export const SpriteNodeSchema = z.object({
   id: z.string().min(1),
   projectId: z.string().min(1),
@@ -572,6 +615,7 @@ export const SpriteNodeSchema = z.object({
   sockets: z.array(SocketDefinitionSchema).optional(),
   vfxFlipbook: VfxFlipbookConfigSchema.optional(),
   parallaxScene: ParallaxSceneConfigSchema.optional(),
+  bitmapFont: BitmapFontConfigSchema.optional(),
   imageBlobId: z.string().min(1),
   maskBlobId: z.string().min(1).optional(),
   processedBlobId: z.string().min(1).optional(),

@@ -5,6 +5,12 @@ import {
   type AutoTileSheetResult,
 } from '../processing/autoTile';
 import { removeBackgroundColorKey } from '../processing/backgroundKey';
+import {
+  bakeBitmapFontAtlas,
+  type BakedBitmapFont,
+  type BitmapFontStyleOptions,
+  type GlyphMask,
+} from '../processing/bitmapFont';
 import type { DetectedGrid } from '../processing/demixel';
 import { sha256Bytes } from '../processing/hash';
 import { processSingleParallaxLayer, type RgbTuple } from '../processing/parallaxCompositor';
@@ -90,12 +96,20 @@ export interface ProcessParallaxLayerWorkerRequest {
   snapToPalette?: boolean;
 }
 
+export interface BakeBitmapFontWorkerRequest {
+  type: 'BAKE_BITMAP_FONT';
+  id: number;
+  masks: GlyphMask[];
+  options: BitmapFontStyleOptions;
+}
+
 export type AnyPostProcessWorkerRequest =
   | PostProcessWorkerRequest
   | SliceTurnaroundWorkerRequest
   | ComposeAutoTileWorkerRequest
   | BakeVfxFlipbookWorkerRequest
-  | ProcessParallaxLayerWorkerRequest;
+  | ProcessParallaxLayerWorkerRequest
+  | BakeBitmapFontWorkerRequest;
 
 export interface PostProcessWorkerProgress {
   id: number;
@@ -154,9 +168,22 @@ export interface ProcessParallaxLayerWorkerSuccess {
   height: number;
 }
 
+export interface BakeBitmapFontWorkerSuccess {
+  id: number;
+  type: 'bmfont-result';
+  ok: true;
+  result: BakedBitmapFont;
+}
+
 export interface PostProcessWorkerFailure {
   id: number;
-  type: 'result' | 'slice-result' | 'autotile-result' | 'vfx-result' | 'parallax-result';
+  type:
+    | 'result'
+    | 'slice-result'
+    | 'autotile-result'
+    | 'vfx-result'
+    | 'parallax-result'
+    | 'bmfont-result';
   ok: false;
   error: string;
 }
@@ -168,6 +195,7 @@ export type PostProcessWorkerMessage =
   | ComposeAutoTileWorkerSuccess
   | BakeVfxFlipbookWorkerSuccess
   | ProcessParallaxLayerWorkerSuccess
+  | BakeBitmapFontWorkerSuccess
   | PostProcessWorkerFailure;
 
 type ProgressReporter = (phase: string, progress: number) => void;
@@ -404,6 +432,18 @@ export function executeProcessParallaxLayerJob(
   };
 }
 
+export function executeBakeBitmapFontJob(
+  req: BakeBitmapFontWorkerRequest,
+): BakeBitmapFontWorkerSuccess {
+  const result = bakeBitmapFontAtlas(req.masks, req.options);
+  return {
+    id: req.id,
+    type: 'bmfont-result',
+    ok: true,
+    result,
+  };
+}
+
 interface WorkerPostScope {
   onmessage: ((event: MessageEvent<AnyPostProcessWorkerRequest>) => void) | null;
   postMessage: (message: PostProcessWorkerMessage, transfer?: Transferable[]) => void;
@@ -417,6 +457,25 @@ if (
   const workerSelf = self as unknown as WorkerPostScope;
   workerSelf.onmessage = async (event: MessageEvent<AnyPostProcessWorkerRequest>) => {
     const req = event.data;
+    if (req.type === 'BAKE_BITMAP_FONT') {
+      try {
+        const res = executeBakeBitmapFontJob(req);
+        const transfers = new Set<Transferable>();
+        if (res.result.atlas.data.buffer instanceof ArrayBuffer) {
+          transfers.add(res.result.atlas.data.buffer);
+        }
+        workerSelf.postMessage(res, [...transfers]);
+      } catch (error) {
+        workerSelf.postMessage({
+          id: req.id,
+          type: 'bmfont-result',
+          ok: false,
+          error: error instanceof Error ? error.message : 'Bitmap font bake failed',
+        });
+      }
+      return;
+    }
+
     if (req.type === 'PROCESS_PARALLAX_LAYER') {
       try {
         const res = executeProcessParallaxLayerJob(req);

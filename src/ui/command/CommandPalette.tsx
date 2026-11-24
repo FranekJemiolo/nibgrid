@@ -166,6 +166,20 @@ export function CommandPalette({ open, onOpenChange }: CommandPaletteProps) {
             }),
         },
         {
+          id: 'act-bmfont',
+          title: 'Open Bitmap Font & Damage Numeral Exporter',
+          subtitle: 'Art Bible pixel numerals, OKLab Sel-Out, AngelCode .fnt/.xml & crit preview',
+          category: 'action',
+          keywords: ['font', 'bmfont', 'damage', 'numerals', 'fnt', 'xml', 'hud', 'crit'],
+          execute: () =>
+            navigate({
+              screen: 'inspector',
+              projectId: projId,
+              nodeId: targetId,
+              initialTab: 'bmfont',
+            }),
+        },
+        {
           id: 'act-palette-lut',
           title: 'Open Palette-Swap & LUT Workshop',
           subtitle: 'OKLCH faction variants and GPU lookup strip',

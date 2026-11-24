@@ -27,6 +27,7 @@ import { strToU8 } from 'fflate';
 import { repository } from '../../db/database';
 import {
   createDefaultAutoTileConfig,
+  createDefaultBitmapFontConfig,
   createDefaultNineSliceConfig,
   createDefaultNormalMapConfig,
   createDefaultPaletteLutConfig,
@@ -38,6 +39,7 @@ import {
   type AssetClass,
   type AutoTileConfig,
   type BackgroundRemovalMode,
+  type BitmapFontConfig,
   type CollisionLayerShape,
   type DemixelMode,
   type ErosionConnectivity,
@@ -81,6 +83,7 @@ import {
   runPostProcessInWorker,
 } from '../../workers/postprocessClient';
 import { AutoTileWorkshop } from './AutoTileWorkshop';
+import { BitmapFontWorkshop } from './BitmapFontWorkshop';
 import { ColliderEditor } from './ColliderEditor';
 import { GameSandbox } from './GameSandbox';
 import { NormalMapPreview } from './NormalMapPreview';
@@ -248,6 +251,9 @@ export function PostProcessInspector({
   const [parallaxSceneConfig, setParallaxSceneConfig] = useState<ParallaxSceneConfig>(
     () => targetNode?.parallaxScene ?? createDefaultParallaxSceneConfig(),
   );
+  const [bitmapFontConfig, setBitmapFontConfig] = useState<BitmapFontConfig>(
+    () => targetNode?.bitmapFont ?? createDefaultBitmapFontConfig(),
+  );
   const [activeSpriteBuffer, setActiveSpriteBuffer] = useState<RgbaBuffer | null>(null);
   const bakedNormalRef = useRef<{ buffer: RgbaBuffer; key: string } | null>(null);
   const [foundryStats, setFoundryStats] = useState<{
@@ -314,6 +320,8 @@ export function PostProcessInspector({
   latestVfxFlipbookRef.current = vfxFlipbookConfig;
   const latestParallaxSceneRef = useRef(parallaxSceneConfig);
   latestParallaxSceneRef.current = parallaxSceneConfig;
+  const latestBitmapFontRef = useRef(bitmapFontConfig);
+  latestBitmapFontRef.current = bitmapFontConfig;
 
   useEffect(() => {
     if (!overflowOpen) return;
@@ -341,7 +349,7 @@ export function PostProcessInspector({
     }
   }, [initialTab, targetNodeId]);
 
-  // Sync initial assetClass, autoTileConfig, sockets, vfxFlipbook & parallaxScene ONLY when targetNodeId changes
+  // Sync initial assetClass, autoTileConfig, sockets, vfxFlipbook, parallaxScene & bitmapFont ONLY when targetNodeId changes
   useEffect(() => {
     const node = latestNodeRef.current;
     if (!targetNodeId || !node) return;
@@ -350,6 +358,7 @@ export function PostProcessInspector({
     setSockets(node.sockets ?? []);
     setVfxFlipbookConfig(node.vfxFlipbook ?? createDefaultVfxFlipbookConfig());
     setParallaxSceneConfig(node.parallaxScene ?? createDefaultParallaxSceneConfig());
+    setBitmapFontConfig(node.bitmapFont ?? createDefaultBitmapFontConfig());
   }, [targetNodeId]);
 
   // Auto-infer tile / ui-panel when enabling Seamless Tile or 9-Slice on unclassified sprite
@@ -426,6 +435,7 @@ export function PostProcessInspector({
           ...(currentNode.autoTile ? { autoTile: latestAutoTileRef.current } : {}),
           ...(currentNode.vfxFlipbook ? { vfxFlipbook: latestVfxFlipbookRef.current } : {}),
           ...(currentNode.parallaxScene ? { parallaxScene: latestParallaxSceneRef.current } : {}),
+          ...(currentNode.bitmapFont ? { bitmapFont: latestBitmapFontRef.current } : {}),
         })
         .then(() => refreshSpriteNodes(activeProject.id));
     }, 120);
@@ -574,6 +584,7 @@ export function PostProcessInspector({
             ...(nodeSnapshot.parallaxScene
               ? { parallaxScene: latestParallaxSceneRef.current }
               : {}),
+            ...(nodeSnapshot.bitmapFont ? { bitmapFont: latestBitmapFontRef.current } : {}),
           });
           await repository.cleanupOrphanedBlobs();
           if (
@@ -880,6 +891,7 @@ export function PostProcessInspector({
       ...(targetNode.autoTile ? { autoTile: autoTileConfig } : {}),
       ...(targetNode.vfxFlipbook ? { vfxFlipbook: vfxFlipbookConfig } : {}),
       ...(targetNode.parallaxScene ? { parallaxScene: parallaxSceneConfig } : {}),
+      ...(targetNode.bitmapFont ? { bitmapFont: bitmapFontConfig } : {}),
       recipeArtBibleHash: computeArtBibleHash(activeProject.artBible),
       assetClass,
     });
@@ -1058,6 +1070,22 @@ export function PostProcessInspector({
         parallaxScene: savedConfig,
       });
       await repository.cleanupOrphanedBlobs();
+      await refreshSpriteNodes(activeProject.id);
+    },
+    [activeProject, refreshSpriteNodes],
+  );
+
+  const handleSaveBitmapFont = useCallback(
+    async (savedConfig: BitmapFontConfig) => {
+      setBitmapFontConfig(savedConfig);
+      latestBitmapFontRef.current = savedConfig;
+      const current = latestNodeRef.current;
+      if (!activeProject || !current) return;
+      await repository.saveSpriteNode({
+        ...current,
+        assetClass: latestAssetClassRef.current,
+        bitmapFont: savedConfig,
+      });
       await refreshSpriteNodes(activeProject.id);
     },
     [activeProject, refreshSpriteNodes],
@@ -1442,6 +1470,19 @@ export function PostProcessInspector({
             parallaxConfig={parallaxSceneConfig}
             onChangeConfig={setParallaxSceneConfig}
             onSaveToProject={handleSaveParallaxScene}
+          />
+        ) : inspectorTab === 'bmfont' && activeSpriteBuffer ? (
+          <BitmapFontWorkshop
+            sprite={activeSpriteBuffer}
+            artMode={activeProject.artBible.artMode}
+            project={activeProject}
+            targetNode={targetNode}
+            postProcessConfig={config}
+            rawWidth={rawSize.width}
+            rawHeight={rawSize.height}
+            bitmapConfig={bitmapFontConfig}
+            onChangeConfig={setBitmapFontConfig}
+            onSaveToProject={handleSaveBitmapFont}
           />
         ) : inspectorTab === 'palette-lut' && activeSpriteBuffer ? (
           <PaletteLutWorkshop

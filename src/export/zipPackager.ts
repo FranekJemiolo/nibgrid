@@ -1,5 +1,7 @@
 import { strToU8, zipSync } from 'fflate';
 import type { EvaluatedSocketFrame } from '../processing/attachmentSockets';
+import type { BakedBitmapFont } from '../processing/bitmapFont';
+import { buildBmFontExportFiles } from './bmfontExporter';
 import {
   buildParallaxExportFiles,
   type ParallaxExportLayer,
@@ -34,6 +36,10 @@ export interface PackageSpriteZipInput {
   parallaxBundle?: {
     readonly layers: readonly ParallaxExportLayer[];
     readonly opts: ParallaxExportOptions;
+  };
+  bitmapFontBundle?: {
+    readonly font: BakedBitmapFont;
+    readonly paddingPx?: number;
   };
 }
 
@@ -99,10 +105,12 @@ export function packageSpriteZip(input: PackageSpriteZipInput): Uint8Array {
     );
   }
 
-  if (input.parallaxBundle && input.parallaxBundle.layers.length > 0) {
+  if (input.bitmapFontBundle) {
     Object.assign(
       files,
-      buildParallaxExportFiles(input.slug, input.parallaxBundle.layers, input.parallaxBundle.opts),
+      buildBmFontExportFiles(`${input.slug}_font`, input.bitmapFontBundle.font, {
+        paddingPx: input.bitmapFontBundle.paddingPx,
+      }),
     );
   }
 

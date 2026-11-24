@@ -432,7 +432,8 @@ test.describe('M23C: Parallax Background Compositor, Depth Tinter & GenAI Worksh
             refs.add(n.imageBlobId);
             if (n.maskBlobId) refs.add(n.maskBlobId);
             if (n.processedBlobId) refs.add(n.processedBlobId);
-            if (n.parallaxScene?.masterKeyframeBlobId) refs.add(n.parallaxScene.masterKeyframeBlobId);
+            if (n.parallaxScene?.masterKeyframeBlobId)
+              refs.add(n.parallaxScene.masterKeyframeBlobId);
             for (const l of n.parallaxScene?.layers ?? []) {
               if (l.blobId) refs.add(l.blobId);
             }

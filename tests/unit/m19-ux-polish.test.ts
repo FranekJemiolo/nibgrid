@@ -110,10 +110,10 @@ describe('M19B: Asset-type-aware inspector tab resolution', () => {
     }
   });
 
-  it('collapses ui-panel strictly to 3 primary tabs and promotes turnaround for sheets', () => {
+  it('collapses ui-panel to primary UI/font tabs and promotes turnaround for sheets', () => {
     const uiTabs = resolveInspectorTabs('ui-panel', false);
-    expect(uiTabs.primary).toEqual(['postprocess', 'tile-slice', 'palette-lut']);
-    expect(uiTabs.overflow.length).toBe(ALL_INSPECTOR_TABS.length - 3);
+    expect(uiTabs.primary).toEqual(['postprocess', 'tile-slice', 'bmfont', 'palette-lut']);
+    expect(uiTabs.overflow.length).toBe(ALL_INSPECTOR_TABS.length - 4);
 
     const sheetTabs = resolveInspectorTabs('character', true);
     expect(sheetTabs.primary[0]).toBe('postprocess');
