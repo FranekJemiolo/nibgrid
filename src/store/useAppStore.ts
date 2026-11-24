@@ -18,6 +18,7 @@ export type InspectorTab =
   | 'vfx-baker'
   | 'tile-slice'
   | 'autotile'
+  | 'parallax'
   | 'palette-lut'
   | 'collider'
   | 'sandbox'
@@ -40,6 +41,7 @@ const VALID_INSPECTOR_TABS = new Set<InspectorTab>([
   'vfx-baker',
   'tile-slice',
   'autotile',
+  'parallax',
   'palette-lut',
   'collider',
   'sandbox',

@@ -1,11 +1,13 @@
 import type { PostProcessConfig } from '../domain/schemas';
 import type { AutoTileOptions } from '../processing/autoTile';
+import type { RgbTuple } from '../processing/parallaxCompositor';
 import type { TurnaroundSliceOptions } from '../processing/turnaroundSlicer';
 import type { VfxFlipbookOptions } from '../processing/vfxFlipbook';
 import {
   executeBakeVfxFlipbookJob,
   executeComposeAutoTileJob,
   executePostProcessJob,
+  executeProcessParallaxLayerJob,
   executeSliceTurnaroundJob,
   type BakeVfxFlipbookWorkerRequest,
   type BakeVfxFlipbookWorkerSuccess,
@@ -14,6 +16,8 @@ import {
   type PostProcessWorkerMessage,
   type PostProcessWorkerRequest,
   type PostProcessWorkerSuccess,
+  type ProcessParallaxLayerWorkerRequest,
+  type ProcessParallaxLayerWorkerSuccess,
   type SliceTurnaroundWorkerRequest,
   type SliceTurnaroundWorkerSuccess,
 } from './postprocess.worker';
@@ -27,7 +31,8 @@ interface PendingJob {
       | PostProcessWorkerSuccess
       | SliceTurnaroundWorkerSuccess
       | ComposeAutoTileWorkerSuccess
-      | BakeVfxFlipbookWorkerSuccess,
+      | BakeVfxFlipbookWorkerSuccess
+      | ProcessParallaxLayerWorkerSuccess,
   ) => void;
   reject: (reason: Error) => void;
   onProgress?: (phase: string, progress: number) => void;
@@ -251,6 +256,66 @@ export async function bakeVfxFlipbookInWorker(
     const transfers: Transferable[] = [];
     if (sourceCopy) transfers.push(sourceCopy.buffer);
     worker.postMessage(request, transfers);
+  });
+}
+
+export interface RunProcessParallaxLayerInput {
+  readonly layerId: string;
+  readonly layerName: string;
+  readonly rgba: Uint8ClampedArray;
+  readonly width: number;
+  readonly height: number;
+  readonly scrollRatioX: number;
+  readonly yOffsetPx: number;
+  readonly seamBlendPx: number;
+  readonly depthHaze: number;
+  readonly visible: boolean;
+  readonly horizonRgb: RgbTuple;
+  readonly contrastDampening: number;
+  readonly stripChromaKey?: boolean;
+  readonly chromaTolerance?: number;
+  readonly paletteHex?: readonly string[];
+  readonly snapToPalette?: boolean;
+}
+
+export async function processParallaxLayerInWorker(
+  input: RunProcessParallaxLayerInput,
+): Promise<ProcessParallaxLayerWorkerSuccess> {
+  const id = nextRequestId++;
+  const copy = new Uint8ClampedArray(input.rgba);
+
+  const request: ProcessParallaxLayerWorkerRequest = {
+    type: 'PROCESS_PARALLAX_LAYER',
+    id,
+    layerId: input.layerId,
+    layerName: input.layerName,
+    rgba: copy,
+    width: input.width,
+    height: input.height,
+    scrollRatioX: input.scrollRatioX,
+    yOffsetPx: input.yOffsetPx,
+    seamBlendPx: input.seamBlendPx,
+    depthHaze: input.depthHaze,
+    visible: input.visible,
+    horizonRgb: [input.horizonRgb[0], input.horizonRgb[1], input.horizonRgb[2]],
+    contrastDampening: input.contrastDampening,
+    stripChromaKey: input.stripChromaKey,
+    chromaTolerance: input.chromaTolerance,
+    ...(input.paletteHex ? { paletteHex: [...input.paletteHex] } : {}),
+    snapToPalette: input.snapToPalette,
+  };
+
+  const worker = getWorker();
+  if (!worker) {
+    return executeProcessParallaxLayerJob(request);
+  }
+
+  return new Promise<ProcessParallaxLayerWorkerSuccess>((resolve, reject) => {
+    pending.set(id, {
+      resolve: (value) => resolve(value as ProcessParallaxLayerWorkerSuccess),
+      reject,
+    });
+    worker.postMessage(request, [copy.buffer]);
   });
 }
 

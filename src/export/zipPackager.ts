@@ -1,5 +1,10 @@
 import { strToU8, zipSync } from 'fflate';
 import type { EvaluatedSocketFrame } from '../processing/attachmentSockets';
+import {
+  buildParallaxExportFiles,
+  type ParallaxExportLayer,
+  type ParallaxExportOptions,
+} from './parallaxExporters';
 import type { AssetRecipe } from './recipeBuilder';
 import { buildSocketExportFiles } from './socketExporters';
 import { buildVfxExportFiles, type VfxExportMetaOpts } from './vfxExporters';
@@ -25,6 +30,10 @@ export interface PackageSpriteZipInput {
     readonly sheetPngBytes: Uint8Array;
     readonly opts: VfxExportMetaOpts;
     readonly fps?: number;
+  };
+  parallaxBundle?: {
+    readonly layers: readonly ParallaxExportLayer[];
+    readonly opts: ParallaxExportOptions;
   };
 }
 
@@ -80,6 +89,20 @@ export function packageSpriteZip(input: PackageSpriteZipInput): Uint8Array {
         input.vfxFlipbookBundle.opts,
         input.vfxFlipbookBundle.fps ?? 16,
       ),
+    );
+  }
+
+  if (input.parallaxBundle && input.parallaxBundle.layers.length > 0) {
+    Object.assign(
+      files,
+      buildParallaxExportFiles(input.slug, input.parallaxBundle.layers, input.parallaxBundle.opts),
+    );
+  }
+
+  if (input.parallaxBundle && input.parallaxBundle.layers.length > 0) {
+    Object.assign(
+      files,
+      buildParallaxExportFiles(input.slug, input.parallaxBundle.layers, input.parallaxBundle.opts),
     );
   }
 

@@ -1,6 +1,6 @@
 # Nibgrid
 
-Local-first, zero-server Bring-Your-Own-Key / Bring-Your-Own-Model (BYOK/BYOM) Progressive Web App for turning hand-drawn sketches and vocal hums into style-locked, engine-ready 2D game sprites, 4-view turnarounds, normal maps, animations, auto-tiles, mesh-tracked sockets, VFX flipbooks, colliders, UI panels, and audio.
+Local-first, zero-server Bring-Your-Own-Key / Bring-Your-Own-Model (BYOK/BYOM) Progressive Web App for turning hand-drawn sketches and vocal hums into style-locked, engine-ready 2D game sprites, 4-view turnarounds, normal maps, animations, auto-tiles, mesh-tracked sockets, VFX flipbooks, parallax backgrounds, colliders, UI panels, and audio.
 
 **Live App (GitHub Pages):** https://franekjemiolo.github.io/nibgrid/
 
@@ -33,6 +33,7 @@ Local-first, zero-server Bring-Your-Own-Key / Bring-Your-Own-Model (BYOK/BYOM) P
   - [2.14 Paint & Export Blob-47 / Wang-16 Auto-Tile Terrain Sets (Screen 4I)](#214-paint--export-blob-47--wang-16-auto-tile-terrain-sets-screen-4i)
   - [2.15 Bind Mesh-Tracked Attachment Sockets onto Sprites & Rigs (Screen 4J)](#215-bind-mesh-tracked-attachment-sockets-onto-sprites--rigs-screen-4j)
   - [2.16 Bake Procedural 2D VFX Flipbooks & Particle Sheets (Screen 4K)](#216-bake-procedural-2d-vfx-flipbooks--particle-sheets-screen-4k)
+  - [2.17 Compose Seamless Parallax Backgrounds & Depth Tinting (Screen 4L)](#217-compose-seamless-parallax-backgrounds--depth-tinting-screen-4l)
 - [Part 3 — Engine Drop-In Integration Examples](#part-3--engine-drop-in-integration-examples)
 - [Architecture Summary](#architecture-summary)
 - [Development & Verification](#development--verification)
@@ -62,6 +63,7 @@ Local-first, zero-server Bring-Your-Own-Key / Bring-Your-Own-Model (BYOK/BYOM) P
 | Blob-47 & Wang-16 Terrain Tilemaps                | `Auto-Tile` (Screen 4I)                | `$0.00 Local` (Worker SDF Compositor)      | Packed sheet PNG, Godot `_tileset.tres`, Tiled `.tsx`                                               |
 | Deforming Weapon, Muzzle & Exhaust Sockets        | `Attachment Sockets` (Screen 4J)       | `$0.00 Local` (Barycentric MLS Binding)    | `_sockets.json`, Godot `Marker2D` `.tscn`, Phaser/Pixi JSON                                         |
 | Procedural Sparks, Smoke, Rings & Dissolve VFX    | `VFX Baker` (Screen 4K)                | `$0.00 Local` (Worker FBM Synthesizer)     | Packed `_vfx_sheet.png`, Godot `GPUParticles2D`, Pixi JSON                                          |
+| Multi-Layer Parallax Vistas & Aerial Depth Haze   | `Parallax BG` (Screen 4L)              | `$0.00 Local` or BYOK / Bridge Stack       | Horizontal seamless band PNGs, Godot `Parallax2D` `.tscn`, Phaser/Pixi JSON                         |
 
 ---
 
@@ -468,6 +470,22 @@ Once a sprite is inside **Post-Process & Export Inspector** (`Screen 4`), switch
 
 ---
 
+### 2.17 Compose Seamless Parallax Backgrounds & Depth Tinting (Screen 4L)
+
+**When to use it:** Side-scrollers look flat when background hills fight your foreground character for contrast or show hard vertical seams every few hundred pixels. Screen 4L generates style-matched 3–4 band depth stacks (via Gemini BYOK, Antigravity Bridge, or `$0.00` Offline Mock) or imports your own PNGs, strips `#FF00FF` chroma backgrounds, heals horizontal wrap seams in pure TS/Web Worker threads, applies atmospheric aerial haze toward the horizon, and previews 60 FPS scroll ratios beside a `1×` foreground character check.
+
+**Click-by-Click:**
+
+1. Open **`Parallax BG`** in Screen 4 (primary tab under **`Class` → `Tile / Terrain`**, or inside **`+ Tools`** / `Cmd/Ctrl+K`).
+2. In the right **Generate Matched Stack (AI)** panel, pick your **Provider** (`Offline Mock` `$0.00`, **Gemini Multimodal BYOK**, or **Antigravity Loopback Bridge**), click a **Biome Preset** (**`Masovian Dusk Forest`**, **`Cyberpunk Rooftops`**, **`Volcanic Cavern`**, or **`Pixel Meadow`**), select **`3 Bands`** or **`4 Bands`**, keep **`Master Ref`** checked for cross-layer style anchoring, and click **`Generate Matched Stack`**.
+3. Click **`↻`** on any individual row in **Bands (Back → Front)** to surgically reroll only that depth plane, or click **`+ Current Sprite`** / **`Upload PNG`** to mix custom layers (reorder with ↑ / ↓ or toggle visibility).
+4. Select any band to dial **`Scroll Ratio`**, **`Depth Haze`**, **`Seam Blend Width`**, and **`Y-Offset`** with `ScrubInput`, tune **`Contrast Dampening`** & **`Sky Top` / `Horizon Scatter`** colors (or click any **Art Bible** swatch), and toggle **`1× Sprite Contrast`** to test foreground silhouette separation while scrolling.
+5. Inspect the live **`Godot 4 Parallax2D (.tscn)`** or **`Phaser TileSprite / PixiJS JSON`** tab, click **`Save Parallax Scene`** to store band blobs in IndexedDB, and click **`Download Parallax Bundle (.zip)`** for wrap-seamless band PNGs, `.tscn`, `.json`, and `<slug>.recipe.json`.
+
+![Screen 4L — Parallax Background Compositor & Atmospheric Depth Tinter](docs/demo/22-parallax-background-workshop.png)
+
+---
+
 ## Part 3 — Engine Drop-In Integration Examples
 
 ### Godot 4 (`4.2+`)
@@ -494,9 +512,9 @@ Nibgrid exports Godot-native `.tres` resources (`AtlasTexture` / `SpriteFrames`,
    ```
 4. **9-Slice UI Panel (`<slug>_stylebox.tres`):**
    - Drop `<slug>.png` and `<slug>_stylebox.tres` into the same `res://ui/` folder and assign `<slug>_stylebox.tres` directly to `PanelContainer` or `Button` → `Theme Overrides` → `Styles` → `Panel` / `Normal`.
-5. **Blob-47 / Wang-16 Terrain (`<slug>_tileset.tres`), `Marker2D` Sockets & `GPUParticles2D` VFX:**
+5. **Blob-47 / Wang-16 Terrain (`<slug>_tileset.tres`), `Marker2D` Sockets, `GPUParticles2D` VFX & `Parallax2D` Vistas:**
    - Drop `<slug>_autotile_blob-47.png` + `<slug>_tileset.tres` into `TileMapLayer.tile_set` to paint terrain transitions immediately with pre-bound `terrains_peering_bit/*` rules.
-   - Paste the exported `[node name="..." type="Marker2D" parent="."]` blocks into your character `.tscn` under the centered `Sprite2D` / `AnimatedSprite2D`, or load `<slug>_vfx_godot.tscn` + `<slug>_vfx_godot.tres` directly for one-shot flipbook `GPUParticles2D` bursts.
+   - Paste exported `[node name="..." type="Marker2D" parent="."]` blocks under your centered `Sprite2D` / `AnimatedSprite2D`, load `<slug>_vfx_godot.tscn` + `<slug>_vfx_godot.tres` for flipbook `GPUParticles2D` bursts, or open `<slug>_parallax.tscn` (Godot 4.3+ `Parallax2D` nodes with baked `scroll_scale`, `repeat_size`, and `texture_filter = 1`) alongside your exported layer PNGs.
 
 ### Phaser 3 (`3.60+`) + Matter.js
 
@@ -516,6 +534,22 @@ const hero = this.matter.add.sprite(240, 180, 'hero_atlas', 'cat_warrior_0', {
 const frame0Muzzle = sockets.muzzle.frames[0];
 const muzzleWorldX = hero.x + frame0Muzzle.x;
 const muzzleWorldY = hero.y + frame0Muzzle.y;
+
+// 3. Spawn horizontal-wrapping TileSprite bands from <slug>_parallax.json
+const parallax = await (await fetch('assets/dusk-vista_parallax.json')).json();
+const bgSprites = parallax.layers.map(
+  (layer: {
+    filename: string;
+    width: number;
+    height: number;
+    yOffsetPx: number;
+    phaser: { scrollFactorX: number };
+  }) =>
+    this.add
+      .tileSprite(0, layer.yOffsetPx, this.scale.width, layer.height, layer.filename)
+      .setOrigin(0, 0)
+      .setScrollFactor(layer.phaser.scrollFactorX, 0),
+);
 ```
 
 ### PixiJS v8
@@ -584,6 +618,7 @@ const panel = new NineSliceSprite({
 - **Blob-47 & Wang-16 Auto-Tile Terrain Generator (Screen 4I):** Strip redundant diagonals (`gateBlobMask()`, `autoTile.ts`) and compose `8×6` (`blob-47`) or `4×4` (`wang-16`) SDF terrain sheets in Worker threads over optional underlay sprites, test live transitions on an interactive `12×8` paint-test canvas (`AutoTileWorkshop.tsx`), and export Godot 4 `TileSet` `.tres`, Tiled `.tsx` (`<wangsets>`), and `.recipe.json` ZIP bundles (`autoTileExporters.ts`).
 - **Named Attachment Sockets & Per-Frame Mesh Tracking (Screen 4J):** Bind named sockets (`hand_r`, `hand_l`, `muzzle`, `exhaust`, `head`, `center`, or custom IDs) via barycentric triangle weights onto M9 Moving Least Squares meshes (`attachmentSockets.ts`), drag markers & scrub frame deformation in the zero-WebGL2 Canvas2D/SVG workshop (`SocketEditor.tsx`), preview Godot 4 `Marker2D` `.tscn` / Phaser 3 / PixiJS snippets (`socketExporters.ts`), and bundle `<slug>_sockets.json` + `sockets[]` `.recipe.json` manifests inside sprite ZIPs (`zipPackager.ts`).
 - **2D VFX Flipbook & Particle Sheet Baker (Screen 4K):** Synthesize deterministic `4×4`, `8×2`, or `4×2` spark bursts, dust puffs, smoke plumes, shockwave hit rings, and FBM noise-dissolve sheets off-thread in Worker threads (`vfxFlipbook.ts`, `postprocess.worker.ts`) with Art Bible palette snapping, audition loops in a visibility-aware Canvas2D player (`VfxBaker.tsx`), and export Godot 4 `CanvasItemMaterial` `.tres` + `GPUParticles2D` `.tscn`, PixiJS flipbook JSON, and Zod-valid `.recipe.json` ZIPs (`vfxExporters.ts`).
+- **Parallax Background Layer Compositor, Atmospheric Tinter & Matched-Stack Generator (Screen 4L):** Orchestrate 2-stage AI blueprints (`parallaxBlueprint.ts`), optional Master Keyframe anchoring, `#FF00FF` chroma-isolated band streaming (`parallaxGenerator.ts`), or `$0.00` Offline Mock bands; execute Worker-isolated smoothstep horizontal seam-wrapping and contrast-dampening horizon scatter tinting (`parallaxCompositor.ts`, `PROCESS_PARALLAX_LAYER`); preview live 60 FPS Canvas2D scroll ratios with `1×` foreground contrast checks (`ParallaxWorkshop.tsx`); and export Godot 4.3+ `Parallax2D` `.tscn`, Phaser 3 `TileSprite` / PixiJS `TilingSprite` manifests (`parallaxExporters.ts`), and orphan-blob-safe Dexie ZIPs.
 
 ---
 

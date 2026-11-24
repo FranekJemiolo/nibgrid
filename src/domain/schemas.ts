@@ -1,5 +1,22 @@
 import { z } from 'zod';
 import { ContourTimbrePatchSchema } from '../audio/contourPatchSchema';
+import {
+  ParallaxBandBlueprintSchema,
+  ParallaxBandRoleSchema,
+  ParallaxSceneBlueprintSchema,
+  type ParallaxBandBlueprint,
+  type ParallaxBandRole,
+  type ParallaxSceneBlueprint,
+} from '../processing/parallaxBlueprint';
+
+export {
+  ParallaxBandBlueprintSchema,
+  ParallaxBandRoleSchema,
+  ParallaxSceneBlueprintSchema,
+  type ParallaxBandBlueprint,
+  type ParallaxBandRole,
+  type ParallaxSceneBlueprint,
+};
 
 export const DEFAULT_NEGATIVE_PROMPT = 'drop shadow, floor plane, busy background, text, watermark';
 
@@ -506,6 +523,45 @@ export function createDefaultVfxFlipbookConfig(): VfxFlipbookConfig {
   return VfxFlipbookConfigSchema.parse({});
 }
 
+export const ParallaxLayerSourceKindSchema = z.enum(['node', 'blob', 'ai-band']);
+export type ParallaxLayerSourceKind = z.infer<typeof ParallaxLayerSourceKindSchema>;
+
+export const ParallaxLayerConfigSchema = z.object({
+  id: z.string().min(1),
+  name: z.string().trim().min(1).max(80),
+  role: ParallaxBandRoleSchema.optional(),
+  sourceKind: ParallaxLayerSourceKindSchema,
+  sourceNodeId: z.string().min(1).optional(),
+  blobId: z.string().min(1).optional(),
+  scrollRatioX: z.number().min(0.05).max(1.25).default(0.5),
+  yOffsetPx: z.number().int().min(-512).max(512).default(0),
+  seamBlendPx: z.number().int().min(0).max(64).default(24),
+  depthHaze: z.number().min(0).max(1).default(0.25),
+  visible: z.boolean().default(true),
+  stripChromaKey: z.boolean().default(true),
+  subjectPrompt: z.string().optional(),
+});
+export type ParallaxLayerConfig = z.infer<typeof ParallaxLayerConfigSchema>;
+
+export const ParallaxSceneConfigSchema = z.object({
+  viewportWidth: z.number().int().min(64).max(1024).default(320),
+  viewportHeight: z.number().int().min(64).max(1024).default(180),
+  skyTopHex: HexColorSchema.default('#1A1C2C'),
+  horizonHex: HexColorSchema.default('#5D275D'),
+  contrastDampening: z.number().min(0).max(1).default(0.35),
+  cameraSpeedPxPerSec: z.number().min(-400).max(400).default(72),
+  snapToPalette: z.boolean().default(false),
+  showForegroundDummy: z.boolean().default(false),
+  masterKeyframeBlobId: z.string().min(1).optional(),
+  blueprint: ParallaxSceneBlueprintSchema.optional(),
+  layers: z.array(ParallaxLayerConfigSchema).max(6).default([]),
+});
+export type ParallaxSceneConfig = z.infer<typeof ParallaxSceneConfigSchema>;
+
+export function createDefaultParallaxSceneConfig(): ParallaxSceneConfig {
+  return ParallaxSceneConfigSchema.parse({});
+}
+
 export const SpriteNodeSchema = z.object({
   id: z.string().min(1),
   projectId: z.string().min(1),
@@ -515,6 +571,7 @@ export const SpriteNodeSchema = z.object({
   autoTile: AutoTileConfigSchema.optional(),
   sockets: z.array(SocketDefinitionSchema).optional(),
   vfxFlipbook: VfxFlipbookConfigSchema.optional(),
+  parallaxScene: ParallaxSceneConfigSchema.optional(),
   imageBlobId: z.string().min(1),
   maskBlobId: z.string().min(1).optional(),
   processedBlobId: z.string().min(1).optional(),

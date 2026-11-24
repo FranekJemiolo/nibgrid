@@ -120,6 +120,52 @@ export function CommandPalette({ open, onOpenChange }: CommandPaletteProps) {
             }),
         },
         {
+          id: 'act-parallax',
+          title: 'Open Parallax Background Compositor',
+          subtitle: 'Seamless horizontal bands, aerial depth tinting, AI stack & Godot Parallax2D',
+          category: 'action',
+          keywords: [
+            'parallax',
+            'background',
+            'scroll',
+            'horizon',
+            'depth',
+            'aerial',
+            'tilesprite',
+            'godot',
+          ],
+          execute: () =>
+            navigate({
+              screen: 'inspector',
+              projectId: projId,
+              nodeId: targetId,
+              initialTab: 'parallax',
+            }),
+        },
+        {
+          id: 'act-parallax',
+          title: 'Open Parallax Background Compositor',
+          subtitle: 'Seamless horizontal bands, aerial depth tinting, AI stack & Godot Parallax2D',
+          category: 'action',
+          keywords: [
+            'parallax',
+            'background',
+            'scroll',
+            'horizon',
+            'depth',
+            'aerial',
+            'tilesprite',
+            'godot',
+          ],
+          execute: () =>
+            navigate({
+              screen: 'inspector',
+              projectId: projId,
+              nodeId: targetId,
+              initialTab: 'parallax',
+            }),
+        },
+        {
           id: 'act-palette-lut',
           title: 'Open Palette-Swap & LUT Workshop',
           subtitle: 'OKLCH faction variants and GPU lookup strip',

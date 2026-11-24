@@ -89,7 +89,7 @@ export function selectStatefulInteractionChain(
   };
 }
 
-function resolveBridgeBaseUrl(endpointUrl: string): string {
+export function resolveBridgeBaseUrl(endpointUrl: string): string {
   const trimmed = endpointUrl.trim().replace(/\/+$/, '');
   return trimmed.length > 0 ? trimmed : DEFAULT_ANTIGRAVITY_BRIDGE_URL;
 }

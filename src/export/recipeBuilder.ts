@@ -14,6 +14,7 @@ import {
   NineSliceConfigSchema,
   NormalConventionSchema,
   PaletteLutConfigSchema,
+  ParallaxSceneConfigSchema,
   PivotNormSchema,
   PostProcessConfigSchema,
   ProjectionSchema,
@@ -28,6 +29,7 @@ import {
   type NineSliceConfig,
   type NormalMapConfig,
   type PaletteLutConfig,
+  type ParallaxSceneConfig,
   type PostProcessConfig,
   type Project,
   type PuppetAnimConfig,
@@ -123,6 +125,7 @@ export const AssetRecipeSchema = z.object({
   autoTile: AutoTileConfigSchema.optional(),
   sockets: z.array(SocketDefinitionSchema).optional(),
   vfxFlipbook: VfxFlipbookConfigSchema.optional(),
+  parallaxScene: ParallaxSceneConfigSchema.optional(),
 });
 
 export type AssetRecipe = z.infer<typeof AssetRecipeSchema>;
@@ -160,12 +163,13 @@ export interface BuildAssetRecipeInput {
   autoTile?: AutoTileConfig;
   sockets?: readonly SocketDefinition[];
   vfxFlipbook?: VfxFlipbookConfig;
+  parallaxScene?: ParallaxSceneConfig;
 }
 
 const SENSITIVE_KEY_PATTERNS: readonly RegExp[] = [
-  /AIza[0-9A-Za-z_-]{8,}/,
-  /sk-[0-9A-Za-z_-]{12,}/,
-  /nbg_[0-9A-Za-z_-]{6,}/,
+  /(^|[^A-Za-z0-9_-])AIza[0-9A-Za-z_-]{8,}/,
+  /(^|[^A-Za-z0-9_-])sk-[0-9A-Za-z_-]{12,}/,
+  /(^|[^A-Za-z0-9_-])nbg_[0-9A-Za-z_-]{6,}/,
   /"apiKey"\s*:/i,
 ];
 
@@ -249,6 +253,9 @@ export function buildAssetRecipe(input: BuildAssetRecipeInput): AssetRecipe {
     ...((input.autoTile ?? node.autoTile) ? { autoTile: input.autoTile ?? node.autoTile } : {}),
     ...((input.vfxFlipbook ?? node.vfxFlipbook)
       ? { vfxFlipbook: input.vfxFlipbook ?? node.vfxFlipbook }
+      : {}),
+    ...((input.parallaxScene ?? node.parallaxScene)
+      ? { parallaxScene: input.parallaxScene ?? node.parallaxScene }
       : {}),
     ...(() => {
       const sockList = input.sockets ?? node.sockets;

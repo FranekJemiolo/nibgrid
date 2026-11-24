@@ -7,6 +7,7 @@ import {
 import { removeBackgroundColorKey } from '../processing/backgroundKey';
 import type { DetectedGrid } from '../processing/demixel';
 import { sha256Bytes } from '../processing/hash';
+import { processSingleParallaxLayer, type RgbTuple } from '../processing/parallaxCompositor';
 import { runPostProcessPipeline } from '../processing/pipeline';
 import { encodeRgbaToPngBytes } from '../processing/png';
 import {
@@ -68,11 +69,33 @@ export interface BakeVfxFlipbookWorkerRequest {
   } | null;
 }
 
+export interface ProcessParallaxLayerWorkerRequest {
+  type: 'PROCESS_PARALLAX_LAYER';
+  id: number;
+  layerId: string;
+  layerName: string;
+  rgba: Uint8ClampedArray;
+  width: number;
+  height: number;
+  scrollRatioX: number;
+  yOffsetPx: number;
+  seamBlendPx: number;
+  depthHaze: number;
+  visible: boolean;
+  horizonRgb: RgbTuple;
+  contrastDampening: number;
+  stripChromaKey?: boolean;
+  chromaTolerance?: number;
+  paletteHex?: readonly string[];
+  snapToPalette?: boolean;
+}
+
 export type AnyPostProcessWorkerRequest =
   | PostProcessWorkerRequest
   | SliceTurnaroundWorkerRequest
   | ComposeAutoTileWorkerRequest
-  | BakeVfxFlipbookWorkerRequest;
+  | BakeVfxFlipbookWorkerRequest
+  | ProcessParallaxLayerWorkerRequest;
 
 export interface PostProcessWorkerProgress {
   id: number;
@@ -121,9 +144,19 @@ export interface BakeVfxFlipbookWorkerSuccess {
   result: VfxFlipbookResult;
 }
 
+export interface ProcessParallaxLayerWorkerSuccess {
+  id: number;
+  type: 'parallax-result';
+  ok: true;
+  layerId: string;
+  rgba: Uint8ClampedArray;
+  width: number;
+  height: number;
+}
+
 export interface PostProcessWorkerFailure {
   id: number;
-  type: 'result' | 'slice-result' | 'autotile-result' | 'vfx-result';
+  type: 'result' | 'slice-result' | 'autotile-result' | 'vfx-result' | 'parallax-result';
   ok: false;
   error: string;
 }
@@ -134,6 +167,7 @@ export type PostProcessWorkerMessage =
   | SliceTurnaroundWorkerSuccess
   | ComposeAutoTileWorkerSuccess
   | BakeVfxFlipbookWorkerSuccess
+  | ProcessParallaxLayerWorkerSuccess
   | PostProcessWorkerFailure;
 
 type ProgressReporter = (phase: string, progress: number) => void;
@@ -336,6 +370,40 @@ export function executeBakeVfxFlipbookJob(
   };
 }
 
+export function executeProcessParallaxLayerJob(
+  req: ProcessParallaxLayerWorkerRequest,
+): ProcessParallaxLayerWorkerSuccess {
+  const processed = processSingleParallaxLayer(
+    {
+      id: req.layerId,
+      name: req.layerName,
+      source: { width: req.width, height: req.height, data: req.rgba },
+      scrollRatioX: req.scrollRatioX,
+      yOffsetPx: req.yOffsetPx,
+      seamBlendPx: req.seamBlendPx,
+      depthHaze: req.depthHaze,
+      visible: req.visible,
+      stripChromaKey: req.stripChromaKey,
+      chromaTolerance: req.chromaTolerance,
+    },
+    {
+      horizonRgb: req.horizonRgb,
+      contrastDampening: req.contrastDampening,
+      paletteHex: req.paletteHex,
+      snapToPalette: req.snapToPalette,
+    },
+  );
+  return {
+    id: req.id,
+    type: 'parallax-result',
+    ok: true,
+    layerId: req.layerId,
+    rgba: processed.buffer.data,
+    width: processed.buffer.width,
+    height: processed.buffer.height,
+  };
+}
+
 interface WorkerPostScope {
   onmessage: ((event: MessageEvent<AnyPostProcessWorkerRequest>) => void) | null;
   postMessage: (message: PostProcessWorkerMessage, transfer?: Transferable[]) => void;
@@ -349,6 +417,25 @@ if (
   const workerSelf = self as unknown as WorkerPostScope;
   workerSelf.onmessage = async (event: MessageEvent<AnyPostProcessWorkerRequest>) => {
     const req = event.data;
+    if (req.type === 'PROCESS_PARALLAX_LAYER') {
+      try {
+        const res = executeProcessParallaxLayerJob(req);
+        const transfers = new Set<Transferable>();
+        if (res.rgba.buffer instanceof ArrayBuffer) {
+          transfers.add(res.rgba.buffer);
+        }
+        workerSelf.postMessage(res, [...transfers]);
+      } catch (error) {
+        workerSelf.postMessage({
+          id: req.id,
+          type: 'parallax-result',
+          ok: false,
+          error: error instanceof Error ? error.message : 'Parallax layer processing failed',
+        });
+      }
+      return;
+    }
+
     if (req.type === 'BAKE_VFX_FLIPBOOK') {
       try {
         const res = executeBakeVfxFlipbookJob(req);

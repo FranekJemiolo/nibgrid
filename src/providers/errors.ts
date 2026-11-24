@@ -75,9 +75,9 @@ export function redactSecrets(
   }
 
   sanitized = sanitized
-    .replace(/AIza[0-9A-Za-z_-]{6,}/g, '[REDACTED_KEY]')
-    .replace(/sk-[0-9A-Za-z_-]{10,}/g, '[REDACTED_KEY]')
-    .replace(/nbg_[0-9A-Za-z_-]{4,}/g, '[REDACTED_KEY]')
+    .replace(/(^|[^A-Za-z0-9_-])AIza[0-9A-Za-z_-]{6,}/g, '$1[REDACTED_KEY]')
+    .replace(/(^|[^A-Za-z0-9_-])sk-[0-9A-Za-z_-]{10,}/g, '$1[REDACTED_KEY]')
+    .replace(/(^|[^A-Za-z0-9_-])nbg_[0-9A-Za-z_-]{4,}/g, '$1[REDACTED_KEY]')
     .replace(/([?&](?:key|api_key|token)=)[^&\s"']+/gi, '$1[REDACTED_KEY]');
 
   return sanitized;

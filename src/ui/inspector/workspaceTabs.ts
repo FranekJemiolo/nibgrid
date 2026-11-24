@@ -57,6 +57,12 @@ export const INSPECTOR_TAB_META: Record<InspectorTab, InspectorTabMeta> = {
     shortLabel: 'Auto-Tile',
     testId: 'inspector-tab-autotile',
   },
+  parallax: {
+    id: 'parallax',
+    label: 'Parallax BG',
+    shortLabel: 'Parallax',
+    testId: 'inspector-tab-parallax',
+  },
   'palette-lut': {
     id: 'palette-lut',
     label: 'Palette-Swap & LUT',
@@ -85,6 +91,7 @@ export const ALL_INSPECTOR_TABS: readonly InspectorTab[] = [
   'vfx-baker',
   'tile-slice',
   'autotile',
+  'parallax',
   'palette-lut',
   'collider',
   'sandbox',
@@ -118,7 +125,7 @@ export function resolveInspectorTabs(
       primary = ['postprocess', 'normal', 'sockets', 'collider', 'palette-lut', 'sandbox'];
       break;
     case 'tile':
-      primary = ['postprocess', 'tile-slice', 'autotile', 'normal', 'palette-lut'];
+      primary = ['postprocess', 'tile-slice', 'autotile', 'parallax', 'normal', 'palette-lut'];
       break;
     case 'ui-panel':
       primary = ['postprocess', 'tile-slice', 'palette-lut'];

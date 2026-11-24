@@ -54,12 +54,12 @@ interface GeminiResponseCandidate {
   };
 }
 
-interface GeminiGenerateContentResponse {
+export interface GeminiGenerateContentResponse {
   candidates?: GeminiResponseCandidate[];
   error?: { message?: string };
 }
 
-function resolveGeminiBaseUrl(endpointUrl: string): string {
+export function resolveGeminiBaseUrl(endpointUrl: string): string {
   const trimmed = endpointUrl.trim().replace(/\/+$/, '');
   return trimmed.length > 0 ? trimmed : DEFAULT_GEMINI_BASE_URL;
 }
@@ -170,7 +170,7 @@ export function buildGeminiInpaintPayload(
   };
 }
 
-function extractImageBase64FromGeminiResponse(json: GeminiGenerateContentResponse): {
+export function extractImageBase64FromGeminiResponse(json: GeminiGenerateContentResponse): {
   base64: string;
   mimeType: string;
 } {

@@ -30,6 +30,7 @@ import {
   createDefaultNineSliceConfig,
   createDefaultNormalMapConfig,
   createDefaultPaletteLutConfig,
+  createDefaultParallaxSceneConfig,
   createDefaultPostProcessConfig,
   createDefaultPuppetAnimConfig,
   createDefaultSeamlessTileConfig,
@@ -44,6 +45,7 @@ import {
   type NineSliceConfig,
   type NormalMapConfig,
   type PaletteLutConfig,
+  type ParallaxSceneConfig,
   type PostProcessConfig,
   type PuppetAnimConfig,
   type ResampleMode,
@@ -83,6 +85,7 @@ import { ColliderEditor } from './ColliderEditor';
 import { GameSandbox } from './GameSandbox';
 import { NormalMapPreview } from './NormalMapPreview';
 import { PaletteLutWorkshop } from './PaletteLutWorkshop';
+import { ParallaxWorkshop } from './ParallaxWorkshop';
 import { PipBiomePreview } from './PipBiomePreview';
 import { PuppetWarpEditor } from './PuppetWarpEditor';
 import { SocketEditor } from './SocketEditor';
@@ -182,7 +185,7 @@ export function PostProcessInspector({
   nodeId: string;
   initialTab?: InspectorTab;
 }) {
-  const { activeProject, spriteNodes, refreshSpriteNodes, navigate } = useAppStore();
+  const { activeProject, spriteNodes, providers, refreshSpriteNodes, navigate } = useAppStore();
 
   const targetNode: SpriteNode | undefined =
     spriteNodes.find((n) => n.id === nodeId) ?? spriteNodes[spriteNodes.length - 1];
@@ -241,6 +244,9 @@ export function PostProcessInspector({
   const [sockets, setSockets] = useState<SocketDefinition[]>(() => targetNode?.sockets ?? []);
   const [vfxFlipbookConfig, setVfxFlipbookConfig] = useState<VfxFlipbookConfig>(
     () => targetNode?.vfxFlipbook ?? createDefaultVfxFlipbookConfig(),
+  );
+  const [parallaxSceneConfig, setParallaxSceneConfig] = useState<ParallaxSceneConfig>(
+    () => targetNode?.parallaxScene ?? createDefaultParallaxSceneConfig(),
   );
   const [activeSpriteBuffer, setActiveSpriteBuffer] = useState<RgbaBuffer | null>(null);
   const bakedNormalRef = useRef<{ buffer: RgbaBuffer; key: string } | null>(null);
@@ -306,6 +312,8 @@ export function PostProcessInspector({
   latestAutoTileRef.current = autoTileConfig;
   const latestVfxFlipbookRef = useRef(vfxFlipbookConfig);
   latestVfxFlipbookRef.current = vfxFlipbookConfig;
+  const latestParallaxSceneRef = useRef(parallaxSceneConfig);
+  latestParallaxSceneRef.current = parallaxSceneConfig;
 
   useEffect(() => {
     if (!overflowOpen) return;
@@ -333,7 +341,7 @@ export function PostProcessInspector({
     }
   }, [initialTab, targetNodeId]);
 
-  // Sync initial assetClass, autoTileConfig, sockets & vfxFlipbook ONLY when targetNodeId changes
+  // Sync initial assetClass, autoTileConfig, sockets, vfxFlipbook & parallaxScene ONLY when targetNodeId changes
   useEffect(() => {
     const node = latestNodeRef.current;
     if (!targetNodeId || !node) return;
@@ -341,6 +349,7 @@ export function PostProcessInspector({
     setAutoTileConfig(node.autoTile ?? createDefaultAutoTileConfig());
     setSockets(node.sockets ?? []);
     setVfxFlipbookConfig(node.vfxFlipbook ?? createDefaultVfxFlipbookConfig());
+    setParallaxSceneConfig(node.parallaxScene ?? createDefaultParallaxSceneConfig());
   }, [targetNodeId]);
 
   // Auto-infer tile / ui-panel when enabling Seamless Tile or 9-Slice on unclassified sprite
@@ -416,6 +425,7 @@ export function PostProcessInspector({
             : { sockets: [] }),
           ...(currentNode.autoTile ? { autoTile: latestAutoTileRef.current } : {}),
           ...(currentNode.vfxFlipbook ? { vfxFlipbook: latestVfxFlipbookRef.current } : {}),
+          ...(currentNode.parallaxScene ? { parallaxScene: latestParallaxSceneRef.current } : {}),
         })
         .then(() => refreshSpriteNodes(activeProject.id));
     }, 120);
@@ -561,6 +571,9 @@ export function PostProcessInspector({
             ...(latestSocketsRef.current.length > 0 ? { sockets: latestSocketsRef.current } : {}),
             ...(nodeSnapshot.autoTile ? { autoTile: latestAutoTileRef.current } : {}),
             ...(nodeSnapshot.vfxFlipbook ? { vfxFlipbook: latestVfxFlipbookRef.current } : {}),
+            ...(nodeSnapshot.parallaxScene
+              ? { parallaxScene: latestParallaxSceneRef.current }
+              : {}),
           });
           await repository.cleanupOrphanedBlobs();
           if (
@@ -866,6 +879,7 @@ export function PostProcessInspector({
       ...(sockets.length > 0 ? { sockets } : {}),
       ...(targetNode.autoTile ? { autoTile: autoTileConfig } : {}),
       ...(targetNode.vfxFlipbook ? { vfxFlipbook: vfxFlipbookConfig } : {}),
+      ...(targetNode.parallaxScene ? { parallaxScene: parallaxSceneConfig } : {}),
       recipeArtBibleHash: computeArtBibleHash(activeProject.artBible),
       assetClass,
     });
@@ -1027,6 +1041,23 @@ export function PostProcessInspector({
         assetClass: latestAssetClassRef.current,
         vfxFlipbook: savedConfig,
       });
+      await refreshSpriteNodes(activeProject.id);
+    },
+    [activeProject, refreshSpriteNodes],
+  );
+
+  const handleSaveParallaxScene = useCallback(
+    async (savedConfig: ParallaxSceneConfig) => {
+      setParallaxSceneConfig(savedConfig);
+      latestParallaxSceneRef.current = savedConfig;
+      const current = latestNodeRef.current;
+      if (!activeProject || !current) return;
+      await repository.saveSpriteNode({
+        ...current,
+        assetClass: latestAssetClassRef.current,
+        parallaxScene: savedConfig,
+      });
+      await repository.cleanupOrphanedBlobs();
       await refreshSpriteNodes(activeProject.id);
     },
     [activeProject, refreshSpriteNodes],
@@ -1396,6 +1427,21 @@ export function PostProcessInspector({
             autoTileConfig={autoTileConfig}
             onChangeConfig={setAutoTileConfig}
             onSaveToProject={handleSaveAutoTile}
+          />
+        ) : inspectorTab === 'parallax' && activeSpriteBuffer ? (
+          <ParallaxWorkshop
+            sprite={activeSpriteBuffer}
+            artMode={activeProject.artBible.artMode}
+            project={activeProject}
+            targetNode={targetNode}
+            spriteNodes={spriteNodes}
+            providers={providers}
+            postProcessConfig={config}
+            rawWidth={rawSize.width}
+            rawHeight={rawSize.height}
+            parallaxConfig={parallaxSceneConfig}
+            onChangeConfig={setParallaxSceneConfig}
+            onSaveToProject={handleSaveParallaxScene}
           />
         ) : inspectorTab === 'palette-lut' && activeSpriteBuffer ? (
           <PaletteLutWorkshop

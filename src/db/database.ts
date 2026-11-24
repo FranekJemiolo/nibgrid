@@ -424,6 +424,14 @@ export async function findOrphanBlobIds(database: NibgridDatabase = db): Promise
     if (node.processedBlobId) {
       referencedBlobIds.add(node.processedBlobId);
     }
+    if (node.parallaxScene?.masterKeyframeBlobId) {
+      referencedBlobIds.add(node.parallaxScene.masterKeyframeBlobId);
+    }
+    for (const layer of node.parallaxScene?.layers ?? []) {
+      if (layer.blobId) {
+        referencedBlobIds.add(layer.blobId);
+      }
+    }
   }
 
   const allAudio = await database.audioAssets.toArray();
