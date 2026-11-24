@@ -1,10 +1,27 @@
 import type { PostProcessConfig } from '../domain/schemas';
+import {
+  composeAutoTileSheet,
+  type AutoTileOptions,
+  type AutoTileSheetResult,
+} from '../processing/autoTile';
+import { removeBackgroundColorKey } from '../processing/backgroundKey';
 import type { DetectedGrid } from '../processing/demixel';
 import { sha256Bytes } from '../processing/hash';
 import { runPostProcessPipeline } from '../processing/pipeline';
 import { encodeRgbaToPngBytes } from '../processing/png';
+import {
+  sliceAndAlignTurnaround,
+  type TurnaroundSliceOptions,
+  type TurnaroundSliceResult,
+} from '../processing/turnaroundSlicer';
+import {
+  bakeVfxFlipbook,
+  type VfxFlipbookOptions,
+  type VfxFlipbookResult,
+} from '../processing/vfxFlipbook';
 
 export interface PostProcessWorkerRequest {
+  type?: 'POST_PROCESS';
   id: number;
   rgba: Uint8ClampedArray;
   width: number;
@@ -12,6 +29,50 @@ export interface PostProcessWorkerRequest {
   config: PostProcessConfig;
   paletteHex: readonly string[];
 }
+
+export interface SliceTurnaroundWorkerRequest {
+  type: 'SLICE_TURNAROUND_SHEET';
+  id: number;
+  rgba: Uint8ClampedArray;
+  width: number;
+  height: number;
+  removeBackground?: boolean;
+  bgTolerance?: number;
+  options: TurnaroundSliceOptions;
+}
+
+export interface ComposeAutoTileWorkerRequest {
+  type: 'COMPOSE_AUTO_TILE_SHEET';
+  id: number;
+  fill: {
+    rgba: Uint8ClampedArray;
+    width: number;
+    height: number;
+  };
+  underlay: {
+    rgba: Uint8ClampedArray;
+    width: number;
+    height: number;
+  } | null;
+  options: AutoTileOptions;
+}
+
+export interface BakeVfxFlipbookWorkerRequest {
+  type: 'BAKE_VFX_FLIPBOOK';
+  id: number;
+  options: Omit<VfxFlipbookOptions, 'sourceSprite'>;
+  sourceSprite: {
+    rgba: Uint8ClampedArray;
+    width: number;
+    height: number;
+  } | null;
+}
+
+export type AnyPostProcessWorkerRequest =
+  | PostProcessWorkerRequest
+  | SliceTurnaroundWorkerRequest
+  | ComposeAutoTileWorkerRequest
+  | BakeVfxFlipbookWorkerRequest;
 
 export interface PostProcessWorkerProgress {
   id: number;
@@ -36,15 +97,44 @@ export interface PostProcessWorkerSuccess {
   };
 }
 
+export interface SliceTurnaroundWorkerSuccess {
+  id: number;
+  type: 'slice-result';
+  ok: true;
+  cleanedSheetRgba: Uint8ClampedArray;
+  sheetWidth: number;
+  sheetHeight: number;
+  result: TurnaroundSliceResult;
+}
+
+export interface ComposeAutoTileWorkerSuccess {
+  id: number;
+  type: 'autotile-result';
+  ok: true;
+  result: AutoTileSheetResult;
+}
+
+export interface BakeVfxFlipbookWorkerSuccess {
+  id: number;
+  type: 'vfx-result';
+  ok: true;
+  result: VfxFlipbookResult;
+}
+
 export interface PostProcessWorkerFailure {
   id: number;
-  type: 'result';
+  type: 'result' | 'slice-result' | 'autotile-result' | 'vfx-result';
   ok: false;
   error: string;
 }
 
 export type PostProcessWorkerMessage =
-  PostProcessWorkerProgress | PostProcessWorkerSuccess | PostProcessWorkerFailure;
+  | PostProcessWorkerProgress
+  | PostProcessWorkerSuccess
+  | SliceTurnaroundWorkerSuccess
+  | ComposeAutoTileWorkerSuccess
+  | BakeVfxFlipbookWorkerSuccess
+  | PostProcessWorkerFailure;
 
 type ProgressReporter = (phase: string, progress: number) => void;
 
@@ -179,8 +269,75 @@ export async function executePostProcessJob(
   };
 }
 
+export function executeSliceTurnaroundJob(
+  req: SliceTurnaroundWorkerRequest,
+): SliceTurnaroundWorkerSuccess {
+  const cornerAlpha = req.rgba[3] ?? 0;
+  const shouldKeyBg = req.removeBackground !== false && cornerAlpha >= 128;
+  const cleanedSheetRgba = shouldKeyBg
+    ? removeBackgroundColorKey(req.rgba, req.width, req.height, {
+        tolerance: req.bgTolerance ?? 20,
+        contiguous: true,
+      })
+    : new Uint8ClampedArray(req.rgba);
+
+  const result = sliceAndAlignTurnaround(
+    { width: req.width, height: req.height, data: cleanedSheetRgba },
+    req.options,
+  );
+
+  return {
+    id: req.id,
+    type: 'slice-result',
+    ok: true,
+    cleanedSheetRgba,
+    sheetWidth: req.width,
+    sheetHeight: req.height,
+    result,
+  };
+}
+
+export function executeComposeAutoTileJob(
+  req: ComposeAutoTileWorkerRequest,
+): ComposeAutoTileWorkerSuccess {
+  const result = composeAutoTileSheet(
+    { width: req.fill.width, height: req.fill.height, data: req.fill.rgba },
+    req.underlay
+      ? { width: req.underlay.width, height: req.underlay.height, data: req.underlay.rgba }
+      : null,
+    req.options,
+  );
+  return {
+    id: req.id,
+    type: 'autotile-result',
+    ok: true,
+    result,
+  };
+}
+
+export function executeBakeVfxFlipbookJob(
+  req: BakeVfxFlipbookWorkerRequest,
+): BakeVfxFlipbookWorkerSuccess {
+  const result = bakeVfxFlipbook({
+    ...req.options,
+    sourceSprite: req.sourceSprite
+      ? {
+          width: req.sourceSprite.width,
+          height: req.sourceSprite.height,
+          data: req.sourceSprite.rgba,
+        }
+      : null,
+  });
+  return {
+    id: req.id,
+    type: 'vfx-result',
+    ok: true,
+    result,
+  };
+}
+
 interface WorkerPostScope {
-  onmessage: ((event: MessageEvent<PostProcessWorkerRequest>) => void) | null;
+  onmessage: ((event: MessageEvent<AnyPostProcessWorkerRequest>) => void) | null;
   postMessage: (message: PostProcessWorkerMessage, transfer?: Transferable[]) => void;
 }
 
@@ -190,8 +347,75 @@ if (
   self instanceof WorkerGlobalScope
 ) {
   const workerSelf = self as unknown as WorkerPostScope;
-  workerSelf.onmessage = async (event: MessageEvent<PostProcessWorkerRequest>) => {
+  workerSelf.onmessage = async (event: MessageEvent<AnyPostProcessWorkerRequest>) => {
     const req = event.data;
+    if (req.type === 'BAKE_VFX_FLIPBOOK') {
+      try {
+        const res = executeBakeVfxFlipbookJob(req);
+        const transfers = new Set<Transferable>();
+        if (res.result.sheet.data.buffer instanceof ArrayBuffer) {
+          transfers.add(res.result.sheet.data.buffer);
+        }
+        for (const frame of res.result.frames) {
+          if (frame.data.buffer instanceof ArrayBuffer) {
+            transfers.add(frame.data.buffer);
+          }
+        }
+        workerSelf.postMessage(res, [...transfers]);
+      } catch (error) {
+        workerSelf.postMessage({
+          id: req.id,
+          type: 'vfx-result',
+          ok: false,
+          error: error instanceof Error ? error.message : 'VFX flipbook bake failed',
+        });
+      }
+      return;
+    }
+
+    if (req.type === 'COMPOSE_AUTO_TILE_SHEET') {
+      try {
+        const res = executeComposeAutoTileJob(req);
+        const transfers = new Set<Transferable>();
+        if (res.result.sheet.data.buffer instanceof ArrayBuffer) {
+          transfers.add(res.result.sheet.data.buffer);
+        }
+        workerSelf.postMessage(res, [...transfers]);
+      } catch (error) {
+        workerSelf.postMessage({
+          id: req.id,
+          type: 'autotile-result',
+          ok: false,
+          error: error instanceof Error ? error.message : 'Auto-tile composition failed',
+        });
+      }
+      return;
+    }
+
+    if (req.type === 'SLICE_TURNAROUND_SHEET') {
+      try {
+        const res = executeSliceTurnaroundJob(req);
+        const transfers = new Set<Transferable>();
+        if (res.cleanedSheetRgba.buffer instanceof ArrayBuffer) {
+          transfers.add(res.cleanedSheetRgba.buffer);
+        }
+        for (const frame of res.result.frames) {
+          if (frame.buffer.data.buffer instanceof ArrayBuffer) {
+            transfers.add(frame.buffer.data.buffer);
+          }
+        }
+        workerSelf.postMessage(res, [...transfers]);
+      } catch (error) {
+        workerSelf.postMessage({
+          id: req.id,
+          type: 'slice-result',
+          ok: false,
+          error: error instanceof Error ? error.message : 'Turnaround slicing failed',
+        });
+      }
+      return;
+    }
+
     try {
       const result = await executePostProcessJob(req, (phase, progress) => {
         workerSelf.postMessage({

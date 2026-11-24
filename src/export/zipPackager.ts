@@ -1,5 +1,8 @@
 import { strToU8, zipSync } from 'fflate';
+import type { EvaluatedSocketFrame } from '../processing/attachmentSockets';
 import type { AssetRecipe } from './recipeBuilder';
+import { buildSocketExportFiles } from './socketExporters';
+import { buildVfxExportFiles, type VfxExportMetaOpts } from './vfxExporters';
 
 export function toAssetSlug(name: string): string {
   const normalized = name
@@ -16,11 +19,18 @@ export interface PackageSpriteZipInput {
   recipe: AssetRecipe;
   normalPngBytes?: Uint8Array;
   extraFiles?: Record<string, Uint8Array>;
+  evaluatedSocketsByFrame?: readonly (readonly EvaluatedSocketFrame[])[];
+  socketFps?: number;
+  vfxFlipbookBundle?: {
+    readonly sheetPngBytes: Uint8Array;
+    readonly opts: VfxExportMetaOpts;
+    readonly fps?: number;
+  };
 }
 
 /**
  * Bundles `<slug>.png`, optional `<slug>_n.png`, extra strip/JSON artifacts,
- * and `<slug>.recipe.json` into a ZIP archive via `fflate`.
+ * optional `<slug>_sockets.json`, and `<slug>.recipe.json` into a ZIP archive via `fflate`.
  */
 export function packageSpriteZip(input: PackageSpriteZipInput): Uint8Array {
   const files: Record<string, Uint8Array> = {
@@ -34,6 +44,43 @@ export function packageSpriteZip(input: PackageSpriteZipInput): Uint8Array {
     for (const [name, bytes] of Object.entries(input.extraFiles)) {
       files[name] = bytes;
     }
+  }
+
+  const sockets = input.recipe.sockets ?? [];
+  const socketsFilename = `${input.slug}_sockets.json`;
+  if (sockets.length > 0 && !files[socketsFilename]) {
+    const pivotPx = input.recipe.output.pivotPx;
+    const evaluatedFrames =
+      input.evaluatedSocketsByFrame && input.evaluatedSocketsByFrame.length > 0
+        ? input.evaluatedSocketsByFrame
+        : [
+            sockets.map((socket) => ({
+              socketId: socket.id,
+              name: socket.name,
+              frameIndex: 0,
+              posPx: socket.restPosPx,
+              pivotRelativePx: {
+                x: Number((socket.restPosPx.x - pivotPx.x).toFixed(2)),
+                y: Number((socket.restPosPx.y - pivotPx.y).toFixed(2)),
+              },
+              angleDeg: socket.baseAngleDeg,
+              boundToMesh: false,
+            })),
+          ];
+    const fps = input.socketFps ?? input.recipe.puppetAnim?.fps ?? 12;
+    Object.assign(files, buildSocketExportFiles(input.slug, fps, sockets, evaluatedFrames));
+  }
+
+  if (input.vfxFlipbookBundle) {
+    Object.assign(
+      files,
+      buildVfxExportFiles(
+        input.slug,
+        input.vfxFlipbookBundle.sheetPngBytes,
+        input.vfxFlipbookBundle.opts,
+        input.vfxFlipbookBundle.fps ?? 16,
+      ),
+    );
   }
 
   return zipSync(files, { level: 6 });

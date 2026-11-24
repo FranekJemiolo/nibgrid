@@ -1,4 +1,10 @@
-import type { AdherenceLevel, ArtBible, ProviderConfig, SpriteNode } from '../domain/schemas';
+import type {
+  AdherenceLevel,
+  ArtBible,
+  ProviderConfig,
+  SpriteNode,
+  TurnaroundLayout,
+} from '../domain/schemas';
 
 export interface ProviderCapabilities {
   supportsInpaint: boolean;
@@ -35,6 +41,7 @@ export interface ProviderGenerateRequest {
   promptDelta: string;
   compiledPrompt: string;
   variantCount: number;
+  turnaroundLayout?: TurnaroundLayout;
   goldenReferenceImages?: readonly GoldenReferencePayload[];
   parentNode?: SpriteNode | null;
 }

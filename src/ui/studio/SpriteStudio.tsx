@@ -32,7 +32,7 @@ import {
   forkFromAncestor,
   getAncestorPath,
 } from '../../domain/dag';
-import { compilePrompt } from '../../domain/promptCompiler';
+import { compilePrompt, type PromptSheetLayout } from '../../domain/promptCompiler';
 import type { SpriteNode } from '../../domain/schemas';
 import {
   buildSpriteAnimationArtifacts,
@@ -243,6 +243,7 @@ export function SpriteStudio() {
   const [activeNodeId, setActiveNodeId] = useState<string | null>(null);
   const [forkParentId, setForkParentId] = useState<string | null>(null);
   const [promptDelta, setPromptDelta] = useState('');
+  const [sheetMode, setSheetMode] = useState<PromptSheetLayout>('single');
   const [seed, setSeed] = useState(1024);
   const [isGenerating, setIsGenerating] = useState(false);
   const [compareNodes, setCompareNodes] = useState<{ leftId: string; rightId: string } | null>(
@@ -844,7 +845,11 @@ export function SpriteStudio() {
 
       const ancestry = getAncestorPath(workingNodes, parentNode.id);
       const rootSketchSha = ancestry[0]?.sketchSha256 ?? parentNode.sketchSha256;
-      const compiled = compilePrompt(activeProject.artBible, { adherence, promptDelta });
+      const compiled = compilePrompt(activeProject.artBible, {
+        adherence,
+        promptDelta,
+        sheetLayout: sheetMode,
+      });
       const adapter = resolveProviderAdapter(providerConfig);
       const goldenReferenceImages = await loadGoldenReferencePayloads();
       if (providerConfig.kind === 'antigravity-bridge') {
@@ -873,6 +878,7 @@ export function SpriteStudio() {
           promptDelta,
           compiledPrompt: compiled.fullCompiledPrompt,
           variantCount,
+          ...(sheetMode !== 'single' ? { turnaroundLayout: sheetMode } : {}),
           goldenReferenceImages,
           parentNode,
         },
@@ -895,6 +901,14 @@ export function SpriteStudio() {
           kind: 'generation',
           imageBlobId: blobRecord.id,
           sketchSha256: rootSketchSha,
+          ...(sheetMode !== 'single'
+            ? {
+                turnaroundMeta: {
+                  isTurnaroundSheet: true,
+                  turnaroundLayout: sheetMode,
+                },
+              }
+            : {}),
           generationMeta: {
             providerId: providerConfig.id,
             modelId: providerConfig.modelId,
@@ -1159,7 +1173,11 @@ export function SpriteStudio() {
   const getAgentBriefText = useCallback((): string => {
     if (!activeProject) return '';
     const mode = maskPixelCount > 0 && activeViewportNode ? 'inpaint' : 'generate';
-    const compiled = compilePrompt(activeProject.artBible, { adherence, promptDelta });
+    const compiled = compilePrompt(activeProject.artBible, {
+      adherence,
+      promptDelta,
+      sheetLayout: mode === 'generate' ? sheetMode : 'single',
+    });
     return buildAntigravityPromptBrief({
       projectName: activeProject.name,
       artBible: activeProject.artBible,
@@ -1170,7 +1188,7 @@ export function SpriteStudio() {
       negativePrompt: compiled.negativePrompt,
       mode,
     });
-  }, [activeProject, maskPixelCount, activeViewportNode, adherence, promptDelta, seed]);
+  }, [activeProject, maskPixelCount, activeViewportNode, adherence, promptDelta, sheetMode, seed]);
 
   const handleCopyAgentBrief = async () => {
     if (!activeProject) return;
@@ -1217,7 +1235,10 @@ export function SpriteStudio() {
         return '';
       }
 
-      const normalizedBlob = rgbaToPngBlob(decoded.rgba, targetWidth, targetHeight);
+      const normalizedBlob =
+        sheetMode !== 'single' && !maskPixelCount
+          ? rgbaToPngBlob(decoded.sourceRgba, decoded.sourceWidth, decoded.sourceHeight)
+          : rgbaToPngBlob(decoded.rgba, targetWidth, targetHeight);
       const imageBlobRecord = await repository.storeBlob(normalizedBlob, 'image/png');
 
       const isInpaintImport = maskPixelCount > 0 && Boolean(activeViewportNode);
@@ -1249,6 +1270,7 @@ export function SpriteStudio() {
       const compiled = compilePrompt(activeProject.artBible, {
         adherence,
         promptDelta: effectiveDelta,
+        sheetLayout: isInpaintImport ? 'single' : sheetMode,
       });
 
       const importedNode: SpriteNode = {
@@ -1259,6 +1281,14 @@ export function SpriteStudio() {
         imageBlobId: imageBlobRecord.id,
         maskBlobId,
         sketchSha256: rootSketchSha,
+        ...(!isInpaintImport && sheetMode !== 'single'
+          ? {
+              turnaroundMeta: {
+                isTurnaroundSheet: true,
+                turnaroundLayout: sheetMode,
+              },
+            }
+          : {}),
         generationMeta: {
           providerId: providerConfig.id,
           modelId: providerConfig.modelId,
@@ -1310,6 +1340,7 @@ export function SpriteStudio() {
       syncHistoryFlags,
       renderSketchCanvas,
       refreshSpriteNodes,
+      sheetMode,
     ],
   );
 
@@ -1858,6 +1889,8 @@ export function SpriteStudio() {
           onChangeAdherence={setAdherence}
           promptDelta={promptDelta}
           onChangePromptDelta={setPromptDelta}
+          sheetMode={sheetMode}
+          onChangeSheetMode={setSheetMode}
           seed={seed}
           onChangeSeed={setSeed}
           variantCount={variantCount}

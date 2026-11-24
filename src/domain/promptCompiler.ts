@@ -5,11 +5,15 @@ import {
   type ArtMode,
   type Lighting,
   type Projection,
+  type TurnaroundLayout,
 } from './schemas';
+
+export type PromptSheetLayout = 'single' | TurnaroundLayout;
 
 export interface CompilePromptOptions {
   adherence: AdherenceLevel;
   promptDelta: string;
+  sheetLayout?: PromptSheetLayout;
 }
 
 export interface CompiledPromptResult {
@@ -46,6 +50,21 @@ const ADHERENCE_PHRASES: Record<AdherenceLevel, string> = {
   loose: 'treat the input sketch as loose compositional guidance with stylized creative detail',
 };
 
+const SHEET_LAYOUT_PHRASES: Record<TurnaroundLayout, string> = {
+  '2x2':
+    '4-view orthographic turnaround sheet arranged cleanly in a 2x2 grid (top-left Front/South, top-right Right/East, bottom-left Back/North, bottom-right Left/West), flat uniform contrasting background, no grid lines, no text labels, identical character height across all 4 views',
+  '1x4':
+    '4-view orthographic turnaround sheet arranged left-to-right in a 1x4 horizontal strip on a shared baseline (Front/South, Right/East, Back/North, Left/West), flat uniform contrasting background, no grid lines, no text labels, identical character height across all 4 views',
+};
+
+const SHEET_NEGATIVE_TOKENS: readonly string[] = [
+  'grid lines',
+  'border lines',
+  'panel dividers',
+  'text labels',
+  'annotations',
+];
+
 /**
  * Deterministically compiles an Art Bible style lock and per-generation parameters
  * into a reproducible positive + negative prompt pair.
@@ -54,6 +73,7 @@ export function compilePrompt(
   artBible: ArtBible,
   options: CompilePromptOptions,
 ): CompiledPromptResult {
+  const sheetLayout = options.sheetLayout ?? 'single';
   const segments: string[] = [
     ART_MODE_PHRASES[artBible.artMode],
     PROJECTION_PHRASES[artBible.projection],
@@ -62,6 +82,10 @@ export function compilePrompt(
     ADHERENCE_PHRASES[options.adherence],
     MANDATORY_CUTOUT_CONSTRAINTS,
   ];
+
+  if (sheetLayout !== 'single') {
+    segments.push(SHEET_LAYOUT_PHRASES[sheetLayout]);
+  }
 
   if (artBible.palette.length > 0) {
     segments.push(`strict color palette [${artBible.palette.join(', ')}]`);
@@ -82,7 +106,10 @@ export function compilePrompt(
   const rawNeg = artBible.negativePrompt.trim();
   const baseNeg = rawNeg.length > 0 ? rawNeg : DEFAULT_NEGATIVE_PROMPT;
   // Always enforce cutout-safe negative tokens even if user partially clears the field
-  const requiredNegTokens = DEFAULT_NEGATIVE_PROMPT.split(',').map((s) => s.trim());
+  const requiredNegTokens = [
+    ...DEFAULT_NEGATIVE_PROMPT.split(',').map((s) => s.trim()),
+    ...(sheetLayout !== 'single' ? SHEET_NEGATIVE_TOKENS : []),
+  ];
   const existingLower = baseNeg.toLowerCase();
   const missingTokens = requiredNegTokens.filter(
     (token) => token.length > 0 && !existingLower.includes(token.toLowerCase()),

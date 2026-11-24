@@ -4,6 +4,7 @@ import { encodeRgbaToPngBytes } from '../processing/png';
 import {
   inpaintProceduralRegion,
   synthesizeProceduralSprite,
+  synthesizeProceduralTurnaroundSheet,
 } from '../processing/proceduralSprite';
 import type { ProviderConfig } from '../domain/schemas';
 import type {
@@ -72,26 +73,42 @@ export class OfflineMockProvider implements ProviderAdapter {
         String(variantIndex),
       ].join('|');
 
-      const rgba = synthesizeProceduralSprite({
-        sketchRgba: request.sketchRgba,
-        width: request.sketchWidth,
-        height: request.sketchHeight,
-        palette: request.artBible.palette,
-        lighting: request.artBible.lighting,
-        artMode: request.artBible.artMode,
-        adherence: request.adherence,
-        seedKey,
-        variantIndex,
-      });
+      let outWidth = request.sketchWidth;
+      let outHeight = request.sketchHeight;
+      let rgba: Uint8ClampedArray;
 
-      const pngBytes = encodeRgbaToPngBytes(rgba, request.sketchWidth, request.sketchHeight);
+      if (request.turnaroundLayout) {
+        const sheet = synthesizeProceduralTurnaroundSheet({
+          layout: request.turnaroundLayout,
+          palette: request.artBible.palette,
+          seedKey,
+          variantIndex,
+        });
+        rgba = sheet.rgba;
+        outWidth = sheet.width;
+        outHeight = sheet.height;
+      } else {
+        rgba = synthesizeProceduralSprite({
+          sketchRgba: request.sketchRgba,
+          width: request.sketchWidth,
+          height: request.sketchHeight,
+          palette: request.artBible.palette,
+          lighting: request.artBible.lighting,
+          artMode: request.artBible.artMode,
+          adherence: request.adherence,
+          seedKey,
+          variantIndex,
+        });
+      }
+
+      const pngBytes = encodeRgbaToPngBytes(rgba, outWidth, outHeight);
       const sha256 = await sha256Bytes(pngBytes);
 
       outputs.push({
         variantIndex,
         seed: variantSeed,
-        width: request.sketchWidth,
-        height: request.sketchHeight,
+        width: outWidth,
+        height: outHeight,
         rgba,
         pngBytes,
         blob: toBlob(pngBytes),

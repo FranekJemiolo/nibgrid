@@ -34,7 +34,8 @@ test.describe('M12B Visual 9-Slice UI Panel Workshop & Engine Exporters (Screen 
     await page.getByTestId('open-postprocess-btn').click();
     await expect(page.getByTestId('postprocess-inspector')).toBeVisible();
 
-    // Enter Screen 4D -> 9-Slice UI Panel mode
+    // Reclassify asset as UI Panel so Tile & 9-Slice is a primary tab, then open Screen 4D
+    await page.getByTestId('inspector-asset-class-select').selectOption('ui-panel');
     await page.getByTestId('inspector-tab-tile-slice').click();
     await page.getByTestId('workshop-mode-nineslice').click();
     await expect(page.getByTestId('nineslice-guide-stage')).toBeVisible();

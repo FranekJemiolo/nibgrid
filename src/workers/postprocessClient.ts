@@ -1,16 +1,34 @@
 import type { PostProcessConfig } from '../domain/schemas';
+import type { AutoTileOptions } from '../processing/autoTile';
+import type { TurnaroundSliceOptions } from '../processing/turnaroundSlicer';
+import type { VfxFlipbookOptions } from '../processing/vfxFlipbook';
 import {
+  executeBakeVfxFlipbookJob,
+  executeComposeAutoTileJob,
   executePostProcessJob,
+  executeSliceTurnaroundJob,
+  type BakeVfxFlipbookWorkerRequest,
+  type BakeVfxFlipbookWorkerSuccess,
+  type ComposeAutoTileWorkerRequest,
+  type ComposeAutoTileWorkerSuccess,
   type PostProcessWorkerMessage,
   type PostProcessWorkerRequest,
   type PostProcessWorkerSuccess,
+  type SliceTurnaroundWorkerRequest,
+  type SliceTurnaroundWorkerSuccess,
 } from './postprocess.worker';
 
 let workerInstance: Worker | null = null;
 let nextRequestId = 1;
 
 interface PendingJob {
-  resolve: (value: PostProcessWorkerSuccess) => void;
+  resolve: (
+    value:
+      | PostProcessWorkerSuccess
+      | SliceTurnaroundWorkerSuccess
+      | ComposeAutoTileWorkerSuccess
+      | BakeVfxFlipbookWorkerSuccess,
+  ) => void;
   reject: (reason: Error) => void;
   onProgress?: (phase: string, progress: number) => void;
 }
@@ -85,11 +103,154 @@ export async function runPostProcessInWorker(
 
   return new Promise<PostProcessWorkerSuccess>((resolve, reject) => {
     pending.set(id, {
-      resolve,
+      resolve: (value) => resolve(value as PostProcessWorkerSuccess),
       reject,
       onProgress: input.onProgress,
     });
     worker.postMessage(request, [copy.buffer]);
+  });
+}
+
+export interface RunSliceTurnaroundInput {
+  rgba: Uint8ClampedArray;
+  width: number;
+  height: number;
+  removeBackground?: boolean;
+  bgTolerance?: number;
+  options: TurnaroundSliceOptions;
+}
+
+export async function sliceTurnaroundInWorker(
+  input: RunSliceTurnaroundInput,
+): Promise<SliceTurnaroundWorkerSuccess> {
+  const id = nextRequestId++;
+  const copy = new Uint8ClampedArray(input.rgba);
+  const request: SliceTurnaroundWorkerRequest = {
+    type: 'SLICE_TURNAROUND_SHEET',
+    id,
+    rgba: copy,
+    width: input.width,
+    height: input.height,
+    removeBackground: input.removeBackground,
+    bgTolerance: input.bgTolerance,
+    options: input.options,
+  };
+
+  const worker = getWorker();
+  if (!worker) {
+    return executeSliceTurnaroundJob(request);
+  }
+
+  return new Promise<SliceTurnaroundWorkerSuccess>((resolve, reject) => {
+    pending.set(id, {
+      resolve: (value) => resolve(value as SliceTurnaroundWorkerSuccess),
+      reject,
+    });
+    worker.postMessage(request, [copy.buffer]);
+  });
+}
+
+export interface RunComposeAutoTileInput {
+  fill: {
+    rgba: Uint8ClampedArray;
+    width: number;
+    height: number;
+  };
+  underlay: {
+    rgba: Uint8ClampedArray;
+    width: number;
+    height: number;
+  } | null;
+  options: AutoTileOptions;
+}
+
+export async function composeAutoTileInWorker(
+  input: RunComposeAutoTileInput,
+): Promise<ComposeAutoTileWorkerSuccess> {
+  const id = nextRequestId++;
+  const fillCopy = new Uint8ClampedArray(input.fill.rgba);
+  const underlayCopy = input.underlay ? new Uint8ClampedArray(input.underlay.rgba) : null;
+
+  const request: ComposeAutoTileWorkerRequest = {
+    type: 'COMPOSE_AUTO_TILE_SHEET',
+    id,
+    fill: {
+      rgba: fillCopy,
+      width: input.fill.width,
+      height: input.fill.height,
+    },
+    underlay: underlayCopy
+      ? {
+          rgba: underlayCopy,
+          width: input.underlay!.width,
+          height: input.underlay!.height,
+        }
+      : null,
+    options: input.options,
+  };
+
+  const worker = getWorker();
+  if (!worker) {
+    return executeComposeAutoTileJob(request);
+  }
+
+  return new Promise<ComposeAutoTileWorkerSuccess>((resolve, reject) => {
+    pending.set(id, {
+      resolve: (value) => resolve(value as ComposeAutoTileWorkerSuccess),
+      reject,
+    });
+    const transfers: Transferable[] = [fillCopy.buffer];
+    if (underlayCopy) transfers.push(underlayCopy.buffer);
+    worker.postMessage(request, transfers);
+  });
+}
+
+export interface RunBakeVfxFlipbookInput {
+  readonly options: Omit<VfxFlipbookOptions, 'sourceSprite'>;
+  readonly sourceSprite: {
+    readonly rgba: Uint8ClampedArray;
+    readonly width: number;
+    readonly height: number;
+  } | null;
+}
+
+export async function bakeVfxFlipbookInWorker(
+  input: RunBakeVfxFlipbookInput,
+): Promise<BakeVfxFlipbookWorkerSuccess> {
+  const id = nextRequestId++;
+  const sourceCopy = input.sourceSprite ? new Uint8ClampedArray(input.sourceSprite.rgba) : null;
+
+  const request: BakeVfxFlipbookWorkerRequest = {
+    type: 'BAKE_VFX_FLIPBOOK',
+    id,
+    options: {
+      ...input.options,
+      coreRgb: [...input.options.coreRgb],
+      outerRgb: [...input.options.outerRgb],
+      ...(input.options.paletteHex ? { paletteHex: [...input.options.paletteHex] } : {}),
+    },
+    sourceSprite: sourceCopy
+      ? {
+          rgba: sourceCopy,
+          width: input.sourceSprite!.width,
+          height: input.sourceSprite!.height,
+        }
+      : null,
+  };
+
+  const worker = getWorker();
+  if (!worker) {
+    return executeBakeVfxFlipbookJob(request);
+  }
+
+  return new Promise<BakeVfxFlipbookWorkerSuccess>((resolve, reject) => {
+    pending.set(id, {
+      resolve: (value) => resolve(value as BakeVfxFlipbookWorkerSuccess),
+      reject,
+    });
+    const transfers: Transferable[] = [];
+    if (sourceCopy) transfers.push(sourceCopy.buffer);
+    worker.postMessage(request, transfers);
   });
 }
 

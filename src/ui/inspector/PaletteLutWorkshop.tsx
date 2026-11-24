@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
-import { Download, Palette, Plus, Sparkles, Trash2 } from 'lucide-react';
+import { Columns2, Download, Palette, Plus, Sparkles, Trash2 } from 'lucide-react';
+import { BeforeAfterWipe } from '../primitives/BeforeAfterWipe';
 import { zipSync, strToU8 } from 'fflate';
 import type {
   ArtMode,
@@ -173,7 +174,30 @@ export function PaletteLutWorkshop({
   const [selectedRampId, setSelectedRampId] = useState<string | null>(null);
   const [lutMode, setLutMode] = useState<'stacked' | 'single'>('stacked');
   const [zoomMult, setZoomMult] = useState<1 | 2 | 4>(2);
+  const [wipeEnabled, setWipeEnabled] = useState(false);
+  const [wipePercent, setWipePercent] = useState(50);
   const [statusNotice, setStatusNotice] = useState<string | null>(null);
+
+  useEffect(() => {
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.metaKey || e.ctrlKey || e.altKey || e.key !== '\\') return;
+      const target = e.target as HTMLElement | null;
+      const active = document.activeElement as HTMLElement | null;
+      const isEditable = (el: HTMLElement | null) =>
+        Boolean(
+          el &&
+          (el.tagName === 'INPUT' ||
+            el.tagName === 'TEXTAREA' ||
+            el.tagName === 'SELECT' ||
+            el.isContentEditable),
+        );
+      if (isEditable(target) || isEditable(active)) return;
+      e.preventDefault();
+      setWipeEnabled((w) => !w);
+    };
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, []);
 
   const lutStripCanvasRef = useRef<HTMLCanvasElement | null>(null);
 
@@ -659,6 +683,21 @@ export function PaletteLutWorkshop({
                 {z}×
               </button>
             ))}
+            <button
+              type="button"
+              data-testid="lut-wipe-toggle"
+              aria-pressed={wipeEnabled}
+              onClick={() => setWipeEnabled((w) => !w)}
+              className={`ml-2 inline-flex items-center gap-1 rounded border px-2 py-0.5 ${
+                wipeEnabled
+                  ? 'border-[var(--accent-primary)]/60 bg-[var(--accent-primary)]/20 text-[#F5B82E]'
+                  : 'border-slate-700 bg-slate-900 text-slate-300 hover:bg-slate-800'
+              }`}
+              title="Toggle Base vs Variant wipe (\)"
+            >
+              <Columns2 className="h-3 w-3" />
+              Before / After Wipe
+            </button>
           </div>
 
           {stackedLut && (
@@ -673,6 +712,42 @@ export function PaletteLutWorkshop({
         </div>
 
         <div className="flex flex-1 flex-col justify-between gap-6 overflow-auto bg-checkerboard p-6">
+          {wipeEnabled && (
+            <div className="flex flex-col items-center gap-2 rounded-lg border border-[var(--border-hairline)] bg-[var(--bg-panel)]/90 p-3">
+              <div className="text-[11px] font-semibold tracking-wider text-[var(--text-muted)] uppercase">
+                Base vs. {activeVariant?.name ?? 'Active Variant'} Wipe ({wipePercent}%)
+              </div>
+              <BeforeAfterWipe
+                enabled
+                percent={wipePercent}
+                onChangePercent={setWipePercent}
+                testId="lut-wipe-stage"
+                handleTestId="lut-wipe-handle"
+                beforeLabel="Base"
+                afterLabel={activeVariant?.name ?? 'Variant'}
+                widthPx={Math.min(260, decodedBase.width * basePreviewScale)}
+                heightPx={Math.min(260, decodedBase.height * basePreviewScale)}
+                className="overflow-hidden rounded border border-slate-700 bg-checkerboard shadow-lg"
+                before={
+                  <PreviewBufferCanvas
+                    buffer={decodedBase}
+                    zoomScale={basePreviewScale}
+                    pixelArt={isPixelArt}
+                    testId="lut-wipe-before"
+                  />
+                }
+                after={
+                  <PreviewBufferCanvas
+                    buffer={decodedVariants[safeActiveVariantIdx] ?? decodedBase}
+                    zoomScale={basePreviewScale}
+                    pixelArt={isPixelArt}
+                    testId="lut-wipe-after"
+                  />
+                }
+              />
+            </div>
+          )}
+
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
             <div className="flex flex-col items-center gap-2 rounded-lg border border-slate-800 bg-slate-950/80 p-3">
               <span className="text-xs font-medium text-slate-200">Base (Row 0)</span>

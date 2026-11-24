@@ -5,12 +5,14 @@
 ## Milestone 0: Repository Scaffold, Quality Tooling & CI/CD
 
 ### Architectural Decisions & Trade-Offs
+
 - **Strict TypeScript Configuration:** Configured `tsconfig.json` with `"strict": true`, `"noUncheckedIndexedAccess": true`, `"noImplicitAny": true`, `"noUnusedLocals": true`, and `"noUnusedParameters": true`, paired with ESLint `@typescript-eslint/no-explicit-any: "error"` across both `src/` and `tests/`. This enforces safe indexed array/buffer access up front before image-processing loops are written in M2/M3.
 - **Static GitHub Pages Asset Resolution:** Configured `vite.config.ts` with `base: process.env.VITE_BASE_PATH ?? '/'` so local dev/preview serves at `/` while CI/CD builds with `VITE_BASE_PATH=/nibgrid/` for `https://franekjemiolo.github.io/nibgrid/`.
 - **Single-Repo Tooling & CI Parity:** Added `.pre-commit-config.yaml` compatible with `prek` running `typecheck`, `lint`, and `format:check`, plus `.github/workflows/ci.yml` and `.github/workflows/deploy.yml`.
 - **Dark Studio Shell:** Built an initial dark-mode studio shell (`bg-slate-950`) with `Projects` and `Provider Vault` navigation tabs to establish E2E boot invariants before adding domain persistence in M1.
 
 ### Verification Results
+
 - `npm run typecheck`: passed (`tsc --noEmit`, 0 errors)
 - `npm run lint`: passed (`eslint .`, 0 errors, 0 warnings)
 - `npm run format:check`: passed (Prettier code style verified across `src/` and `tests/`)
@@ -24,12 +26,14 @@
 ## Milestone 1: Schemas, IndexedDB Persistence, Project Hub & Art Bible (Screens 1–2)
 
 ### Architectural Decisions & Trade-Offs
+
 - **Runtime Validation & Shared SHA-256 Helper:** Implemented all domain contracts (`ArtBible`, `SpriteNode`, `Project`, `BlobRecord`, `ProviderConfig`) in `src/domain/schemas.ts` using strict Zod schemas and extracted `sha256Bytes` into `src/processing/hash.ts` so both IndexedDB blob hashing and future worker pipelines share one Web Crypto implementation.
 - **Separated Binary Storage with Cascade GC:** Stored binary image assets (`Golden Reference` images and sprite artifacts) in a dedicated Dexie `blobs` table keyed by UUID with SHA-256 digests (`src/db/database.ts`). Implemented transactional `cleanupOrphanedBlobsInTx()` inside `deleteProjectCascade`, `deleteSpriteNode`, and `updateProjectArtBible` so detaching references or deleting projects never leaves orphaned binary blobs in IndexedDB.
 - **Serialized Project Write Queue:** Added `enqueueProjectWrite` and `patchActiveArtBible` in `src/store/useAppStore.ts` with immediate optimistic state updates so rapid sequential form changes (e.g., changing projection, art mode, importing `.gpl`, and attaching Golden References back-to-back) never clobber earlier updates via stale React closures.
 - **Hash-Based Client Routing:** Used client-side URL hash routing (`#/`, `#/project/<id>/bible`, `#/project/<id>/studio`) so static GitHub Pages deployments and full page reloads restore the active project screen straight from IndexedDB without any backend routing.
 
 ### Verification Results
+
 - `npm run typecheck`: passed (`tsc --noEmit`, 0 errors)
 - `npm run lint`: passed (`eslint .`, 0 errors, 0 warnings)
 - `npm run format:check`: passed (Prettier verified across `src/` and `tests/`)
@@ -43,12 +47,14 @@
 ## Milestone 2: Sketch Ingestion, Normalization Worker & Mask Canvas (Screen 3A)
 
 ### Architectural Decisions & Trade-Offs
+
 - **Hybrid Adaptive + Global Thresholding (`src/processing/normalize.ts`):** Pure local adaptive thresholding turns the interior of solid filled dark shapes white when the fill exceeds the local kernel radius. Combined a 2D summed-area table local mean check (`lum < localMean - 26 && lum < bgLum - 26`) with a 75th-percentile background-gated global dark threshold (`lum < min(120, bgLum - 55)`) so both fine pencil lines on uneven paper and solid silhouette fills extract cleanly on `#FFFFFF`.
 - **Ink-Preserving Safe-Margin Scaling (`alignToSafeMargin`):** Implemented aspect-preserving centering within the requested `marginRatio` (`0.1` default) using nearest-neighbor on upscale and dark-pixel-minimum sampling on downscale so 1px ink lines do not drop out during downsampling.
 - **Deterministic Pure-TS PNG Encoding (`src/processing/png.ts`):** Built an uncompressed-zlib RGBA PNG encoder using IEEE CRC32 and Adler32 checksums so Web Workers, Vitest Node suites, and M3 procedural sprite synthesis produce byte-identical PNGs independent of browser canvas/OS encoders.
 - **Dual-Canvas Studio & Web Worker Boundary:** Separated `sketch-canvas` and translucent red `mask-canvas` backed by `Uint8ClampedArray` and `Uint8Array` buffers, bounded `CanvasHistory` (20 snapshots), and transferable-buffer messaging to `src/workers/normalize.worker.ts`.
 
 ### Verification Results
+
 - `npm run typecheck`: passed (`tsc --noEmit`, 0 errors)
 - `npm run lint`: passed (`eslint .`, 0 errors, 0 warnings)
 - `npm run format:check`: passed (Prettier verified across all files)
@@ -62,12 +68,14 @@
 ## Milestone 3: Provider Interface, Prompt Compiler, Offline Mock Engine & Branching DAG (Screen 3B)
 
 ### Architectural Decisions & Trade-Offs
+
 - **Deterministic Prompt Compiler (`src/domain/promptCompiler.ts`):** Compiled `ArtBible` projection, directional lighting, art mode, target dimensions, hex palette, style prompt, adherence directives, mandatory cutout isolation rules (`isolated on a solid flat contrasting background, centered full silhouette, no floor shadow`), `promptDelta`, and guaranteed cutout-safe negative tokens into reproducible prompts.
 - **Pure Immutable DAG Engine (`src/domain/dag.ts`):** Implemented `validateDagAcyclicity`, `appendChildNode`, `forkFromAncestor`, `getAncestorPath`, `getChildren`, `deleteLeafNode`, and `buildDagTreeRows`. Enforces acyclicity, blocks self-parenting and non-leaf deletions, and preserves sibling branches safely.
 - **Seeded Procedural Offline Mock Provider (`src/providers/mockProvider.ts`, `src/processing/proceduralSprite.ts`):** Built a Mulberry32-seeded procedural 2D sprite synthesizer using FNV-1a hashing (`sketchSha256 + seed + adherence + promptDelta + variantIndex`), sketch bounding-box/span-fill silhouette reconstruction, palette sorting/lighting shading, 1px silhouette outlines, and pure-TS PNG encoding so identical inputs return byte-identical PNGs across Node and Chromium. In `inpaint()` mode, strictly copies `baseImageRgba` and modifies only pixels where `mask[i] === 1`, leaving 100% of unmasked pixels byte-for-byte unchanged.
 - **Branching Studio Dock & Compare Modal (`DagTreeDock.tsx`, `CompareSplitModal.tsx`, `GenerationInspector.tsx`):** Added full variant generation (`1` or `2`), masked inpainting creating child nodes (`maskBlobId` persisted in Dexie), ancestor forking, leaf deletion with orphan blob pruning, and a side-by-side split comparison modal.
 
 ### Verification Results
+
 - `npm run typecheck`: passed (`tsc --noEmit`, 0 errors)
 - `npm run lint`: passed (`eslint .`, 0 errors, 0 warnings)
 - `npm run format:check`: passed (Prettier verified across all 35 source and test files)
@@ -81,12 +89,14 @@
 ## Milestone 4: Live BYOK Cloud (Gemini) & Local ComfyUI Adapters
 
 ### Architectural Decisions & Trade-Offs
+
 - **Structured Error Classification & Secret Redaction (`src/providers/errors.ts`):** Mapped HTTP `401`, `403`, `429`, `5xx`, timeouts, `AbortError`, and `TypeError` CORS/offline failures to typed `ProviderErrorCode` values. Added `redactSecrets()` across both `message` and `remediation` so user API keys and query credentials can never leak into UI error banners or console errors.
 - **Pure-TS PNG Decoding via Web Streams (`src/processing/png.ts`):** Implemented `decodePngBytesToRgba()` supporting 8-bit Grayscale, RGB, Grayscale+Alpha, and RGBA PNGs with PNG scanline unfiltering (`0..4`) and `DecompressionStream('deflate')` so external Gemini and ComfyUI PNG outputs decode uniformly in both Chromium and Node Vitest without native dependencies.
 - **Immutable ComfyUI Workflow Injection (`src/providers/comfyuiWorkflows.ts`):** Implemented recursive deep-clone token replacement (`{{PROMPT}}`, `{{NEGATIVE}}`, `{{SEED}}`, `{{SKETCH_FILENAME}}`, `{{MASK_FILENAME}}`, `{{DENOISE}}`) with adherence-to-denoise mapping (`strict: 0.55`, `balanced: 0.72`, `loose: 0.88`) and WebSocket + `/history/{prompt_id}` polling coordination in `ComfyUiProvider`.
 - **Resilient Studio Error Handling (`SpriteStudio.tsx`, `ProviderVaultModal.tsx`):** Surfaced provider errors in a dismissible banner (`studio-error-banner`) while leaving the sketch canvas, `promptDelta`, and existing DAG nodes intact, and upgraded Provider Vault with Gemini/ComfyUI forms, workflow template editing, and live `testConnection()` diagnostics.
 
 ### Verification Results
+
 - `npm run typecheck`: passed (`tsc --noEmit`, 0 errors)
 - `npm run lint`: passed (`eslint .`, 0 errors, 0 warnings)
 - `npm run format:check`: passed (Prettier verified across all source and test files)
@@ -100,12 +110,14 @@
 ## Milestone 5: Client-Side Deterministic Post-Processing Stack (Screen 4A)
 
 ### Architectural Decisions & Trade-Offs
-- **Pure-TS Post-Processing Pipeline (`src/processing/`):** Separated every pixel transformation (`backgroundKey.ts`, `alphaCleanup.ts`, `paletteQuantize.ts`, `resampleAndTrim.ts`, `pipeline.ts`) from DOM APIs so Vitest asserts exact pixel invariants in Node. Placed OKLab palette quantization *after* resampling so Area-Average box downscaling never re-introduces off-palette intermediate RGB values.
+
+- **Pure-TS Post-Processing Pipeline (`src/processing/`):** Separated every pixel transformation (`backgroundKey.ts`, `alphaCleanup.ts`, `paletteQuantize.ts`, `resampleAndTrim.ts`, `pipeline.ts`) from DOM APIs so Vitest asserts exact pixel invariants in Node. Placed OKLab palette quantization _after_ resampling so Area-Average box downscaling never re-introduces off-palette intermediate RGB values.
 - **Premultiplied Area-Average & Inverse-Distance Defringing:** Area-average downscaling accumulates premultiplied RGB weighted by pixel alpha to prevent dark edge halos around transparent borders, while `defringeInteriorRgb()` replaces edge RGB channels (`0 < alpha < 255`) using inverse-distance weighted averages from opaque interior neighbors (`alpha === 255`) within 2px.
 - **Single-Threaded WASM / Lazy WebGPU Cutout (`postprocess.worker.ts`):** Dynamically imports `@huggingface/transformers` only when `Local AI Cutout` is selected and locks `env.backends.onnx.wasm.numThreads = 1` with `env.useBrowserCache = true`, avoiding `Cross-Origin-Embedder-Policy: require-corp` headers that would block live BYOK `fetch()` calls.
 - **Orphan Blob Tracking (`database.ts`):** Added `processedBlobId` tracking in `cleanupOrphanedBlobsInTx()` so iterative post-processing updates prune superseded processed blobs cleanly from IndexedDB.
 
 ### Verification Results
+
 - `npm run typecheck`: passed (`tsc --noEmit`, 0 errors)
 - `npm run lint`: passed (`eslint .`, 0 errors, 0 warnings)
 - `npm run format:check`: passed (Prettier verified across all files)
@@ -119,12 +131,14 @@
 ## Milestone 6: Pivot Editor, Reproducible Recipe Export & Offline PWA Release (Screen 4B)
 
 ### Architectural Decisions & Trade-Offs
+
 - **Synchronous Export Fallback Against Debounce Races (`PostProcessInspector.tsx`):** Worker preview updates debounce by 60ms so interactive sliders remain fluid. When clicking **Download PNG**, **Download ZIP**, or **Export to Local Folder**, `getExportArtifact()` checks whether `processedArtifactRef` matches the current `pipelineKey` and computes `runPostProcessPipeline()` on demand if a debounced update is still in flight, guaranteeing exported pixels and `asset.recipe.json` metadata never drift.
 - **Zero-Key Recipe Validation (`src/export/recipeBuilder.ts`):** Validated `asset.recipe.json` (`schemaVersion: "1.0.0"`) with strict Zod schemas (`AssetRecipeSchema`) and explicit regex checks ensuring API keys (`AIza...`, `sk-...`, `apiKey`) are never serialized into exported archives.
 - **Base-Path-Aware Offline Service Worker (`vite.config.ts`):** Built a Vite `generateBundle` plugin emitting `dist/sw.js` that precaches all static HTML, JS, CSS, Worker, manifest, and SVG icon assets under `VITE_BASE_PATH` (`/` locally or `/nibgrid/` on GitHub Pages) while intentionally excluding optional 26.8 MB `.wasm` runtimes from install-time precache and bypassing cross-origin requests.
 - **Studio Ergonomics (`SpriteStudio.tsx`):** Added non-intrusive keyboard shortcuts (`B` brush, `E` eraser, `M` mask toggle, `G` pixel grid, `Space` pan hold, `Ctrl/Cmd+Z` undo, `Ctrl/Cmd+Shift+Z` redo) gated cleanly when typing in form controls.
 
 ### Verification Results
+
 - `npm run typecheck`: passed (`tsc --noEmit`, 0 errors)
 - `npm run lint`: passed (`eslint .`, 0 errors, 0 warnings)
 - `npm run format:check`: passed (Prettier verified across all files)
@@ -138,24 +152,28 @@
 ## Post-M6 Hardening & QA Audit Ledger (Phases 1–4)
 
 ### Phase 1: Memory, Graphics & IndexedDB Leak Hunt (`184fac8`)
+
 - **Centralized Reference-Counted Blob URL Cache (`src/ui/components/blobUrlCache.ts`, `src/ui/components/BlobImage.tsx`):** Added `acquireBlobUrl` / `releaseBlobUrl` ref-counting keyed by `blobId`, revoking `URL.createObjectURL()` immediately when consumer count drops to zero (including safe cancellation if unmounted while an IndexedDB fetch is in flight). Also shortened export download revocation delay (`src/export/zipPackager.ts`) from `1000ms` to `100ms`.
 - **Canvas & `ImageBitmap` Disposal (`src/ui/studio/SpriteStudio.tsx`, `src/ui/inspector/PostProcessInspector.tsx`):** Zeroed temporary scratch `<canvas>` buffers (`width = 0; height = 0`) alongside `bitmap.close()` in `finally` blocks during image decode. Verified singleton Web Workers transfer underlying `ArrayBuffer`s (`[copy.buffer]`, `[result.rgba.buffer, result.pngBytes.buffer]`) and `CanvasHistory` caps at 20 `Uint8ClampedArray` clones with zero detached DOM elements.
 - **Transactional IndexedDB Orphan Sweep (`src/db/database.ts`, `src/store/useAppStore.ts`):** Added `findOrphanBlobIds(db)`, invoked `cleanupOrphanedBlobsInTx()` inside `saveSpriteNode()` when existing nodes overwrite/replace blobs, added startup GC in `initialize()`, and lifted `studioAdherence` / `studioVariantCount` into project-scoped Zustand state so inspecting nodes no longer resets user parameters on return.
 - **Verification:** Added `tests/unit/audit-leaks.test.ts` (2 tests) and `tests/e2e/audit-memory.spec.ts` (15 consecutive Generate → Inspect → Post-Process → Delete cycles asserting bounded unrevoked object URLs and zero console/page errors).
 
 ### Phase 2: Concurrency, Cancellation & Adversarial Edge Cases (`76fb39e`)
+
 - **Monotonic Worker Request Guard (`src/workers/postprocessClient.ts`, `src/ui/inspector/PostProcessInspector.tsx`):** Added `createMonotonicRequestGuard()` to tag every debounced post-process request with an increasing token; stale out-of-order worker completions, progress updates, and Dexie node writes are deterministically dropped, and enabling Palette Snap on an empty Art Bible renders `empty-palette-snap-hint`.
 - **Generation/Inpaint Cancellation & Cross-Project Isolation (`src/ui/studio/GenerationInspector.tsx`, `src/ui/studio/SpriteStudio.tsx`):** Added `cancel-generation-btn` (`onCancel`), aborted `generationAbortRef` automatically on unmount or `activeProject?.id` switch, handled `ProviderError` `'ABORTED'` cleanly without error banners, and deferred `maskBlob` Dexie writes in `handleInpaint` until after `adapter.inpaint()` resolves so cancelled inpaints never orphan mask blobs.
 - **ComfyUI Workflow Validation & Pure-TS Fuzz Guards (`src/providers/comfyuiWorkflows.ts`, `src/ui/hub/ProviderVaultModal.tsx`, `src/processing/normalize.ts`, `src/processing/resampleAndTrim.ts`):** Exported `validateComfyUiWorkflowTemplate()` rejecting malformed JSON, non-API UI graphs missing `class_type`/`inputs`, or templates omitting `{{PROMPT}}`; hardened `estimateBackgroundLuminance` (`Math.max(1, ...)`) for `1×1` images and added dimension checks in `resampleRgba` / `autoTrimTransparent`. Confirmed zero `console.*` / `localStorage` / `sessionStorage` leaks in `src/`.
 - **Verification:** Added `tests/unit/audit-edge-cases.test.ts` (5 tests) and `tests/e2e/audit-concurrency.spec.ts` (2 tests).
 
 ### Phase 3: Visual Polish, Pixel-Art Fidelity & Studio Ergonomics (`486ab0f`)
+
 - **Mode-Aware Canvas Crispness (`src/ui/studio/SpriteStudio.tsx`, `src/ui/studio/DagTreeDock.tsx`, `src/ui/studio/CompareSplitModal.tsx`, `src/ui/inspector/PostProcessInspector.tsx`):** Propagated `activeProject.artBible.artMode` (`pixel-art` vs `hd-2d`) to `imageSmoothingEnabled`, CSS `imageRendering` (`pixelated` vs `auto`), `DagTreeDock` thumbnails, and `CompareSplitModal` previews.
 - **Exact Processed Pivot Alignment (`src/ui/inspector/PostProcessInspector.tsx`):** Sized the comparator stage directly from `processedSize` rather than `Math.max(rawSize, processedSize)` so `pivot-crosshair` aligns within `<= 2px` even after downscaling (e.g. `64×64`) or auto-trimming.
 - **Responsive Flex/Grid Containment & Accessibility (`src/App.tsx`, `SpriteStudio.tsx`, `GenerationInspector.tsx`, `PostProcessInspector.tsx`):** Added `overflow-x-hidden` and `min-w-0` / `minmax(0, 1fr)` track sizing across studio/inspector split panes plus `aria-pressed` attributes on Studio tool buttons.
 - **Verification:** Added `tests/e2e/audit-visual-polish.spec.ts` checking `scrollWidth <= innerWidth` across `1440×900`, `1280×720`, and `1024×768` viewports on all 4 screens, `"b e m g"` keyboard shortcut isolation, `pixelated` canvas styling, `Bottom-Center` crosshair alignment, and captured + inspected screenshots in `test-results/polish-screenshots/`.
 
 ### Phase 4: Final Release Gate & Documentation
+
 - Updated `README.md` with browser compatibility notes (File System Access API vs `.zip` fallback, WebGPU vs single-threaded WASM cutout, zero-server credential isolation).
 - Verified `VITE_BASE_PATH=/nibgrid/` build output (`dist/index.html`, `dist/manifest.webmanifest`, `dist/sw.js`) contains zero unprefixed root `/assets/` links.
 - Final verification gate: `npm run typecheck`, `npm run lint`, `npm run format:check`, `npm run test:unit` (9 files, 30/30 tests), `npm run test:e2e` (12/12 Playwright Chromium tests), `npm run build`, and `VITE_BASE_PATH=/nibgrid/ npm run build` all pass with zero errors and zero warnings.
@@ -203,20 +221,24 @@
 ## Post-M11 Hardening Ledger
 
 ### Audit Phase 1: WebGL2 Context-Loss, Recovery & GPU Memory Leak Prevention
+
 - **Shared Lifecycle & Zero-Leak Helpers (`src/webgl/glUtils.ts`):** Extracted shared shader compilation (with immediate `detachShader` + `deleteShader`), texture filter setters, `checkWebGlNoError` (asserting `gl.getError() === gl.NO_ERROR` while tolerating async `CONTEXT_LOST_WEBGL`), and `WeakMap`-backed `WEBGL_lose_context` handle caching so StrictMode remounts recover cleanly while unmounts release GPU slots immediately.
 - **Deterministic Recovery (`src/webgl/normalMapRenderer.ts`, `src/webgl/puppetRenderer.ts`, `NormalMapPreview.tsx`, `PuppetWarpEditor.tsx`):** Attached `webglcontextlost` (`event.preventDefault()`, halting `requestAnimationFrame` loops, raising transient restore status without permanently downgrading to CPU) and `webglcontextrestored` (recompiling programs, rebuilding VAOs/VBOs/FBOs/textures, re-uploading cached assets, and redrawing), enforced `MAX_TEXTURE_SIZE` checks, paused `PuppetWarpEditor` playback when `document.hidden === true`, and guaranteed full GPU resource disposal + `WEBGL_lose_context.loseContext()` on `.dispose()`.
 - **Verification (`tests/e2e/audit-webgl-leaks.spec.ts`):** Verified 10 consecutive **Post-Process → Normal Map → Puppet Warp → Atlas Workshop** cycles keep active WebGL2 contexts `<= 2` with zero warnings or `pageerror`s, and forced `loseContext()` → `150ms` → `restoreContext()` recovery succeeds cleanly on both Normal Map and Puppet Warp.
 
 ### Audit Phase 2: Loopback Bridge Security, Cross-Module Integrity & Edge Cases
+
 - **Loopback Bridge Hardening (`.agents/skills/nibgrid/scripts/nibgrid_bridge.py`):** Restricted server binding strictly to loopback addresses (`127.0.0.1`, `localhost`, `::1`), switched token comparison explicitly to `hmac.compare_digest`, enforced `MAX_BODY_BYTES = 25 * 1024 * 1024` returning HTTP `413 Payload Too Large` before buffering oversized bodies, and added `--token` + `create_bridge_server()`.
 - **Solver, Packer & Secret Guards (`src/processing/mlsWarp.ts`, `src/providers/errors.ts`, `src/export/atlasExporters.ts`, `src/ui/atlas/AtlasWorkshop.tsx`):** Sanitized `solveMlsMesh` against coincident/extreme/Float32-overflowing pins (zero `NaN`/`Infinity`), normalized `.tres` paths to `/` with integer `Rect2(...)` bounds, caught oversized atlas packing errors into `atlas-error-banner` + locked `allowRotation` off for Godot/Normals, and enforced secret redaction inside `ProviderError`'s constructor.
 - **Verification (`tests/unit/audit-m7-m11-edges.test.ts`, `tests/unit/test_nibgrid_bridge.py`):** Verified full M7 → M8 → M9 → M11 pipeline integrity, MLS coincident/extreme bounds, oversized sprite rejection, Godot `.tres` hygiene, secret redaction, and all 6 Python bridge security assertions (`ValueError` on `0.0.0.0`, `401`, `403`, `413`, `OPTIONS` PNA preflight, stateful chaining).
 
 ### Audit Phase 3: Visual Polish, High-DPI Precision & Screen 5 UX
+
 - **Pixel-Art Fidelity & Screen 5 Interaction (`NormalMapPreview.tsx`, `PuppetWarpEditor.tsx`, `AtlasWorkshop.tsx`):** Preserved aspect ratios across interactive canvases (`canvasRef.getBoundingClientRect()`) for `<= 1px` pin accuracy under `devicePixelRatio = 2`, enforced `gl.NEAREST` and `imageSmoothingEnabled = false` in pixel-art mode with integer CSS pixel zoom on packed atlas previews, added extrusion + UV rect overlays, and added canvas click-to-highlight card selection (`data-highlighted`).
 - **Verification (`tests/e2e/audit-m7-m11-polish.spec.ts`):** Verified zero horizontal overflow across `1440×900`, `1280×720`, and `1024×768` viewports, inspected Screen 4B/4C/5 screenshots in `test-results/polish-m11/`, verified `Alt+Wheel` `normal-light-z-readout` updates without page scrolling, verified `devicePixelRatio = 2` pin placement accuracy (`<= 1px`), and audited `VITE_BASE_PATH=/nibgrid/` build output (`dist/index.html`, `dist/manifest.webmanifest`, `dist/sw.js`).
 
 ### Audit Phase 4: Final Release Gate
+
 - Verified `npm run typecheck`, `npm run lint`, `npm run format:check`, `npm run test:unit` (15 files, 51/51 tests), `python3 -m unittest tests/unit/test_nibgrid_bridge.py -v` (6/6 tests), `npm run test:e2e` (21/21 Playwright tests), and `VITE_BASE_PATH=/nibgrid/ npm run build` all pass cleanly.
 
 ---
@@ -316,3 +338,98 @@
 - **Screen 7 UI & Navigation (`src/ui/audit/AuditMatrixView.tsx`, `src/ui/audit/BatchRunnerDrawer.tsx`, `src/store/useAppStore.ts`, `src/App.tsx`):** Mounted the top-level **Audit** tab (`#/project/:id/audit`) displaying a weighted `0–100` Readiness Score, filter pills, dynamic Target Biome contrast auditing, 1-click jump-to-fix table cells, `$0.00 local compute` Batch Recipe Drawer with `AbortSignal` cancellation, Before → After Readiness banner, and session **Undo Batch** with automatic IndexedDB orphan cleanup.
 - **Verification:** Verified via `tests/e2e/m17c-audit-batch-e2e.spec.ts` (3 sprites + quiet `-31.7 LUFS` audio clip, dynamic biome contrast updates, batch run raising Readiness Score to `97`, exact `Undo Batch` reversion, and hard-reload persistence) alongside Prettier, TypeScript, ESLint, unit tests, Python bridge unit tests, Playwright E2E, and GitHub Pages production build.
 
+## Milestone 18A: Pure-TS Connected-Component Turnaround Slicer & Schemas
+
+- **Connected-Component Slicer & Shared Pivot Framing (`src/processing/turnaroundSlicer.ts`):** Implemented iterative 4-connected BFS extraction (`detectTurnaroundSlots`) with speck filtering and centroid slot clustering (`2x2` quadrants and `1x4` strips), median-height scale normalization, bottom-center shared pivot blitting with endpoint-safe nearest-neighbor sampling (`sliceAndAlignTurnaround`), exact horizontal canvas mirroring (`flipBufferHorizontal`), and empty/zero-size guards.
+- **Schema & Recipe Extensions (`src/domain/schemas.ts`, `src/export/recipeBuilder.ts`):** Added `TurnaroundLayoutSchema`, `CardinalDirectionSchema`, and `TurnaroundMetaSchema` onto `SpriteNodeSchema` and `AssetRecipeSchema`.
+- **Verification:** Verified via `tests/unit/m18a-turnaround-slicer.test.ts` (`2x2` & `1x4` extraction, floating crown merge + `2x2` speck purge, 12% height normalization & `sharedPivotPx.y - 1` alignment, exact East→West mirror, empty buffer guard) alongside Prettier, TypeScript, ESLint, unit tests, Playwright E2E, and GitHub Pages build.
+
+## Milestone 18B: Orthographic Sheet Mode, Worker Slicing, Atomic Commit & Atlas Grouping
+
+- **Sheet Prompt & Mock Generator (`src/domain/promptCompiler.ts`, `src/providers/types.ts`, `src/processing/proceduralSprite.ts`, `src/providers/mockProvider.ts`):** Added `sheetLayout` prompt compilation rules (`no grid lines`, `no text labels`, uniform character height) and deterministic `2x2` (`128×128`) / `1x4` (`256×64`) procedural sheet synthesis with a floating crown accessory and intentional +10% East height variance.
+- **Worker Slicing & Atomic DAG Commit (`src/workers/postprocess.worker.ts`, `src/workers/postprocessClient.ts`, `src/domain/turnaroundCommit.ts`):** Added transferable `SLICE_TURNAROUND_SHEET` worker pipeline (`executeSliceTurnaroundJob` / `sliceTurnaroundInWorker`) and transactional `commitTurnaroundViews()` + `deleteTurnaroundDirectionGroup()` ensuring zero orphan blobs in IndexedDB.
+- **Screen 3 & Screen 5 Integration (`GenerationInspector.tsx`, `SpriteStudio.tsx`, `DagTreeDock.tsx`, `AtlasWorkshop.tsx`):** Added `Single Sprite | Turnaround (2×2) | Turnaround (1×4)` Studio toggle, DAG turnaround/cardinal badges, and 1-click multi-direction group toggling in MaxRects Atlas Workshop.
+- **Verification:** Verified via `tests/unit/m18b-turnaround-commit.test.ts` (prompt compilation, Mock 2x2 & 1x4 synthesis, worker slicing, atomic 4-view commit with aligned `pivotPx`, group/cascade delete leaving zero orphan blobs) alongside Prettier, TypeScript, ESLint, unit tests, Playwright E2E, and GitHub Pages build.
+
+## Milestone 18C: Screen 4H Turnaround Slicer UI, Onion-Skin & Turntable Alignment
+
+- **Screen 4H Interactive Slicer (`src/ui/inspector/TurnaroundSlicer.tsx`, `src/ui/inspector/PostProcessInspector.tsx`, `src/store/useAppStore.ts`):** Mounted the `Turnaround Slicer` inspector tab (`?tab=turnaround`, auto-focused on turnaround sheet nodes) with Worker-isolated BFS slot boxes (`#22C55E`/`#F59E0B`/`#38BDF8`/`#A855F7`), per-slot direction remapping, `Mirror East → West`, zero-allocation `35%` Onion-Skin stack + `1–6 FPS` Turntable playback anchored to `sharedPivotPx` with strict `document.hidden` / unmount rAF cleanup, and atomic **Commit 4 Linked Views** action jumping directly into Atlas Packer, 1× Sandbox, or Sprite Studio DAG.
+- **Verification:** Verified end-to-end via `tests/e2e/m18c-turnaround-e2e.spec.ts` (2×2 sheet generation, 4 detected slot boxes & Onion-Skin canvas pixels, Mirror East → West, Turntable rAF lifecycle cleanup dropping active rAF count to `0` on tab switch, atomic 4-node DAG commit with shared `directionGroupId` & `pivotPx`, Screen 5 directional 1-click group toggle, and hard-reload IndexedDB persistence) alongside Prettier, TypeScript, ESLint, unit tests, Python bridge unit tests, Playwright E2E, and GitHub Pages build.
+
+## Milestone 19A: Neutral Studio Chrome, `ScrubInput` & Floating `CanvasHud`
+
+- **Neutral Dark Theme & Viewport-First Screen 4 (`src/styles/tokens.css`, `src/index.css`, `src/App.tsx`, `src/ui/inspector/PostProcessInspector.tsx`):** Shifted Nibgrid chrome to color-neutral `#111113` / `#18181B` / `#222226` grays with warm `#E5A00D` studio accents, reclaimed the top canvas toolbar into a bottom-center floating `CanvasHud` (`src/ui/primitives/CanvasHud.tsx`), added Mid `#808` neutral backdrop alongside Checker/Dark/Light/Game Green, and narrowed the Screen 4A inspector into a collapsible `288px` drawer leaving `70%+` canvas area.
+- **Scrubbable Numeric Controls (`src/ui/primitives/scrubMath.ts`, `src/ui/primitives/ScrubInput.tsx`, `ColliderEditor.tsx`):** Implemented `computeScrubbedValue()` (`0.1×` `Shift` precision, clamped step quantization) and interactive `ScrubInput` pills with pointer capture drag, arrow keys, and double-click inline numeric entry (`Enter`/`Escape`).
+- **Verification:** Verified via `tests/unit/m19-ux-polish.test.ts` (`computeScrubbedValue` / `formatScrubValue`) and `tests/e2e/m19-ux-polish.spec.ts` (`1440×900`, `1280×720`, `1024×768` zero overflow, `>= 70%` canvas width, `ScrubInput` drag / `Shift+drag` / inline edit, and drawer collapse) alongside the full TypeScript, ESLint, Prettier, unit, E2E, and GitHub Pages build gate.
+
+## Milestone 19B: Asset-Type-Aware Workspaces, `1×` PiP Biome Preview & `BeforeAfterWipe`
+
+- **Asset Classification & Contextual Tab Bar (`src/domain/schemas.ts`, `src/export/recipeBuilder.ts`, `src/ui/inspector/workspaceTabs.ts`, `PostProcessInspector.tsx`):** Persisted `AssetClass` (`character | prop | tile | ui-panel | vfx`) on `SpriteNode` and `asset.recipe.json`, reducing Screen 4 header clutter by promoting class-relevant primary tabs (3 tabs for `ui-panel`) and tucking secondary tabs cleanly into `+ Tools` overflow.
+- **Zero-WebGL2 `1×` PiP Biome Contrast Preview (`src/ui/inspector/PipBiomePreview.tsx`):** Mounted an always-on draggable `1×` Canvas2D biome preview reusing `generateBiomeTile()` and `computeBiomeContrast()` with live contrast ratio pill, biome cycling, and input-isolated `P` toggle.
+- **Unified `BeforeAfterWipe` (`src/ui/primitives/BeforeAfterWipe.tsx`, `NormalMapPreview.tsx`, `PaletteLutWorkshop.tsx`):** Replaced duplicate split-pane logic across Screen 4A, Screen 4B (Flat vs. Lit Normal), and Screen 4E (Base vs. LUT Variant) with one pointer-captured `clip-path` wipe primitive supporting double-click `50%` reset and `\` toggle.
+- **Verification:** Verified via `tests/unit/m19-ux-polish.test.ts` (`resolveInspectorTabs`, `inferAssetClass`) and `tests/e2e/m19-ux-polish.spec.ts` (`ui-panel` 3-tab collapse + reload persistence, `1×` PiP `P` toggle & zero WebGL2 check, `BeforeAfterWipe` drag/double-click/backslash) plus updated M12A/M12B/M14C E2E tests and the full build/lint/unit/E2E suite.
+
+## Milestone 19C: `Cmd/Ctrl+K` Command Palette & Universal Drop Router
+
+- **Command Palette & Fuzzy Matcher (`src/ui/command/commandRegistry.ts`, `src/ui/command/CommandPalette.tsx`, `src/App.tsx`):** Added `Cmd/Ctrl+K` and header `⌘K` quick-switcher powered by pure-TS `rankCommands()` (`"trc hull"` -> `Auto-Trace Convex Hull`), covering screen navigation, Inspector sub-tools, and live project sprites/audio assets with full keyboard navigation and clean focus restoration.
+- **Universal Drag-and-Drop Router (`src/ui/command/UniversalDropOverlay.tsx`):** Added external `Files` drag detection across the workspace shell to route dropped images (Sprite Node, Golden Reference, 2×2 Turnaround Sheet, Top-8 Art Bible Palette Extractor) and audio clips into IndexedDB with zero orphan blobs on cancel/Escape.
+- **Verification:** Verified via `tests/unit/m19-ux-polish.test.ts` (`rankCommands` fuzzy/prefix/asset tests) and `tests/e2e/m19-ux-polish.spec.ts` (`Control+k`, `"Audit"` -> Screen 7 navigation, `Escape` close, and strict input-focus isolation typing `p\` without firing `P` or `\` hotkeys) alongside the full TypeScript, ESLint, Prettier, unit, E2E, and GitHub Pages build gate.
+
+## Milestone 20A: Pure-TS Auto-Tile Bitmask Gating, SDF Terrain Compositor & Schema
+
+- **Pure-TS Terrain Compositor (`src/processing/autoTile.ts`):** Built zero-DOM `gateBlobMask()` (strictly 47 canonical Blob masks), `getCanonicalWang16Masks()`, `computeAutoTileGridMask()`, and deterministic seeded `composeAutoTileSheet()` packing `8×6` (`blob-47`) and `4×4` (`wang-16`) atlas sheets with `crisp-bevel`, `organic-overhang`, and `pixel-outline` edge treatments while enforcing square tile validation and 100% solid interior centers (`mask === 255` / `15`).
+- **Schema & Recipe Integration (`src/domain/schemas.ts`, `src/export/recipeBuilder.ts`):** Added `AutoTileConfigSchema` onto `SpriteNodeSchema` and `AssetRecipeSchema` for round-trip `.recipe.json` reproducibility.
+- **Verification:** Verified via `tests/unit/m20a-autotile-core.test.ts` (exact 47 canonical masks, diagonal gating, `128×96` Blob-47 & `64×64` Wang-16 packing, opaque solid center under organic jitter, non-square guard, byte-identical determinism) alongside TypeScript, ESLint, Prettier, full unit suite, Playwright E2E, and production build.
+
+## Milestone 20B: Godot 4 `TileSet` `.tres`, Tiled `.tsx` Exporters & Worker Offloading
+
+- **Engine Terrain Exporters (`src/export/autoTileExporters.ts`):** Implemented `exportGodotTileSetTres()`, `exportTiledTsx()`, and `packageAutoTileZip()` emitting complete Godot 4 `.tres` peering-bit tilesets, Tiled XML `<wangsets>` (exact clockwise `N,NE,E,SE,S,SW,W,NW` `wangid` order), packed sheet PNGs, and Zod-validated `.recipe.json` metadata.
+- **Dedicated Worker Pipeline (`src/workers/postprocess.worker.ts`, `src/workers/postprocessClient.ts`):** Added `COMPOSE_AUTO_TILE_SHEET` with `executeComposeAutoTileJob()` and transferable `composeAutoTileInWorker()`.
+- **Verification:** Verified via `tests/unit/m20b-autotile-exporters.test.ts` (Godot `.tres` Blob-47/Wang-16 peering bits, Tiled `.tsx` 47/16 `wangtile` generation, `fflate.unzipSync` PNG magic header & Zod recipe check, worker execution parity) alongside the full TypeScript, ESLint, Prettier, unit, E2E, and GitHub Pages build gate.
+
+## Milestone 20C: Interactive Auto-Tile Paint-Test Workshop & Engine Bundle
+
+- **Screen 4I Auto-Tile Terrain Generator (`src/ui/inspector/AutoTileWorkshop.tsx`, `src/ui/inspector/PostProcessInspector.tsx`, `src/ui/inspector/workspaceTabs.ts`, `src/store/useAppStore.ts`):** Registered `?tab=autotile` (promoted automatically for `tile` assets), mounted the interactive `12×8` left-paint/right-erase Canvas2D tilemap sandbox, added `Full Packed Sheet` vs. `Live 12×8 Paint Map` toggle, `ScrubInput` SDF inset/corner/jitter controls, Underlay Tile picker from project assets, IndexedDB persistence, and 1-click `.zip` Terrain Bundle export.
+- **Verification:** Verified end-to-end via `tests/e2e/m20c-autotile-e2e.spec.ts` (reclassify to `tile`, clear & load sample map, interactive drag-paint, `Wang-16` 4×4 & `Blob-47` 8×6 sheet verification, Dexie save & reload persistence, and unpacked `.zip` PNG / Godot 4 `.tres` / Tiled `.tsx` / Zod `.recipe.json` validation) alongside the full final verification gate (Prettier, TypeScript, ESLint, unit tests, Python bridge unit tests, Playwright E2E, and production build).
+
+## Milestone 21A: Pure-TS Barycentric Socket Binding, Per-Frame Mesh Tracker & Schema
+
+- **Barycentric Socket Tracking Core (`src/processing/attachmentSockets.ts`):** Implemented zero-DOM rest-pose triangle binding (`bindSocketToRestMesh`), shortest-arc per-frame deformed position and tangent angle evaluation (`evaluateSocketAtFrame`, `evaluateSocketsAcrossFrames`), geometry conversion helpers (`extractMeshGeometry`, `interleavedPositionsToVec2`), and `sanitizeSocketName()`.
+- **Schema & Recipe Provenance (`src/domain/schemas.ts`, `src/export/recipeBuilder.ts`):** Added `SocketDefinitionSchema` (`^[a-z0-9_]+$`) onto `SpriteNodeSchema` and `AssetRecipeSchema`.
+- **Verification:** Verified via `tests/unit/m21a-attachment-sockets.test.ts` (`(+10, -6)` + `+30°` rigid translation/rotation tracking within `±0.1px` / `±0.2°`, ±180° branch-cut wrapping, degenerate/out-of-triangle fallback, static null mesh fallback, and Zod schema validation) alongside the full TypeScript, ESLint, Prettier, unit, E2E, and GitHub Pages build gate.
+
+## Milestone 21B: Godot 4, Phaser 3 & PixiJS Socket Exporters + Automatic ZIP Integration
+
+- **Zero-DOM Engine Exporters (`src/export/socketExporters.ts`):** Implemented `exportGodotSocketsTscnSnippet()` (`Marker2D` nodes with pivot-relative `Vector2`, radians rotation, and multi-frame `AnimationPlayer` keyframe comments), `exportPhaserSocketsJson()`, `exportPixiSocketsJson()` (`rotationRad`, `angleDeg`, `scaleX: 1`, `scaleY: 1`), `buildUnifiedSocketsJson()`, and `buildSocketExportFiles()`.
+- **ZIP Packager Integration (`src/export/zipPackager.ts`):** Updated `packageSpriteZip()` to automatically bundle `<slug>_sockets.json` whenever `recipe.sockets` is populated, computing rest-pose pivot-relative transforms when `evaluatedSocketsByFrame` is omitted and preserving any explicit override in `extraFiles`.
+- **Verification:** Verified via `tests/unit/m21b-socket-exporters.test.ts` (Godot 4 `.tscn`, Phaser 3 JSON, PixiJS JSON, `fflate.unzipSync` ZIP round-trip with Zod `AssetRecipeSchema` check, and empty/static edge cases) alongside the full TypeScript, ESLint, Prettier, unit, E2E, and GitHub Pages build gate.
+
+## Milestone 21C: Interactive Attachment Sockets Editor, Screen 4 Wiring & E2E Flow
+
+- **Contextual Sockets Workspace (`src/store/useAppStore.ts`, `src/ui/inspector/workspaceTabs.ts`, `src/ui/command/CommandPalette.tsx`):** Added `'sockets'` tab routing (primary on `'character'`, `'prop'`, and `'vfx'` classes while keeping `'ui-panel'` strictly at 3 primary tabs) and registered **"Open Attachment Sockets Editor"** in `Cmd/Ctrl+K`.
+- **Interactive Socket Overlay & Screen 4 Persistence (`src/ui/inspector/SocketEditor.tsx`, `src/ui/inspector/PostProcessInspector.tsx`):** Built zero-WebGL2 Canvas2D + SVG marker editor (`computeEvaluatedSocketsForSprite()`, preset & deduplicated custom IDs, `ScrubInput` base angle, `window`-captured HiDPI pointer drag, input-isolated `Delete`/`Backspace`, frame scrubber over `rasterizeDeformedMeshCpu()`, live Godot 4 / Phaser 3 / PixiJS preview tabs, explicit Dexie save, and `<slug>_sockets.json` + `.recipe.json` ZIP/folder emission).
+- **Verification:** Verified end-to-end via `tests/e2e/m21c-sockets-e2e.spec.ts` (DPR 1 preset placement, marker drag, `Backspace` input isolation, exporter tab switching, Dexie save & reload persistence, `fflate.unzipSync` `<slug>_sockets.json` + `AssetRecipeSchema` validation, plus isolated `deviceScaleFactor: 2` HiDPI drag accuracy) alongside the full TypeScript, ESLint, Prettier, unit, Python bridge, Playwright E2E, and GitHub Pages build gate.
+
+## Milestone 22A: Pure-TS 2D VFX Flipbook Synthesizer, FBM Noise & Schema
+
+- **Pure-TS Flipbook Core (`src/processing/vfxFlipbook.ts`):** Implemented zero-DOM seeded PRNG (`mulberry32`), 2D smooth value & 3-octave FBM noise (`valueNoise2d`, `fbm2d`), 5 VFX archetypes (`'sparks'`, `'dust-puff'`, `'smoke'`, `'hit-ring'`, `'noise-dissolve'`), stretched-FBM dissolve erosion with glowing burn rim and final-frame ember guard, optional Art Bible palette snapping, and packed `cols × rows` sheet synthesis (`bakeVfxFlipbook()`).
+- **Schema & Recipe Integration (`src/domain/schemas.ts`, `src/export/recipeBuilder.ts`):** Added `VfxArchetypeSchema`, `VfxFlipbookConfigSchema`, and optional `vfxFlipbook` persistence on `SpriteNodeSchema` and `AssetRecipeSchema`.
+- **Verification:** Verified via `tests/unit/m22a-vfx-flipbook.test.ts` (byte-identical `32×32` `4×4` sparks determinism across `seed: 101`, all 5 archetypes non-empty across every frame, monotonic opaque-to-eroded `'noise-dissolve'` progression, Art Bible palette snap, and `AssetRecipeSchema` round-trip) alongside the full TypeScript, ESLint, Prettier, unit, E2E, and GitHub Pages build gate.
+
+## Milestone 22B: Godot 4 `GPUParticles2D` & PixiJS VFX Exporters + Worker/ZIP Integration
+
+- **Engine VFX Exporters (`src/export/vfxExporters.ts`, `src/export/zipPackager.ts`):** Implemented `exportGodotVfxBundle()` (`CanvasItemMaterial` `.tres` + `GPUParticles2D` `.tscn` with `anim_speed_min/max = 1.0`), `exportPixiVfxJson()` (exact per-cell rects and archetype blend mode), `buildVfxExportFiles()`, `packageVfxFlipbookZip()`, and `PackageSpriteZipInput.vfxFlipbookBundle`.
+- **Dedicated Worker Baking (`src/workers/postprocess.worker.ts`, `src/workers/postprocessClient.ts`):** Added `BAKE_VFX_FLIPBOOK` (`executeBakeVfxFlipbookJob` / `bakeVfxFlipbookInWorker`) using deduplicated `Set<Transferable>` transfers to avoid `DataCloneError`.
+- **Verification:** Verified via `tests/unit/m22b-vfx-exporters.test.ts` (Godot 4 `.tres`/`.tscn`, PixiJS JSON cell layout, `fflate.unzipSync` ZIP round-trip with PNG magic header and Zod `AssetRecipeSchema` check, plus Worker fallback parity) alongside the full TypeScript, ESLint, Prettier, unit, E2E, and GitHub Pages build gate.
+
+## Milestone 22C: Interactive VFX Flipbook Baker UI, Screen 4 Wiring & E2E Flow
+
+- **Contextual VFX Baker Tab & Palette (`src/store/useAppStore.ts`, `src/ui/inspector/workspaceTabs.ts`, `src/ui/command/CommandPalette.tsx`):** Registered `'vfx-baker'` as a primary tab for `'vfx'` sprites (kept in `+ Tools` overflow for non-VFX classes, leaving `'ui-panel'` at 3 primary tabs) and added **"Open 2D VFX Flipbook Baker"** to `Cmd/Ctrl+K`.
+- **Interactive Canvas2D Workshop (`src/ui/inspector/VfxBaker.tsx`, `src/ui/inspector/PostProcessInspector.tsx`):** Built the 3-pane VFX flipbook studio featuring 5 archetypes, `4×4`/`8×2`/`4×2` grids, `32px`/`64px` cells, `ScrubInput` (`Seed`, `Spread`, `Turbulence`, `FPS`), Core/Outer Art Bible swatch pickers, Worker baking, `document.hidden`/unmount-safe `rAF` player, Live vs. Full Sheet toggle, Godot `.tres`/`.tscn` + PixiJS JSON previewers, IndexedDB persistence, and `.zip` export.
+- **Verification:** Verified end-to-end via `tests/e2e/m22c-vfx-e2e.spec.ts` (reclassify to `'vfx'`, Hit Ring archetype selection, `Spread`/`Turbulence` scrub, Play/Pause live canvas & `256×256` Full Sheet checks, `.tres`/`.tscn`/`.json` preview switching, Dexie save & reload persistence, and `fflate.unzipSync` ZIP verification against `AssetRecipeSchema`) alongside the full TypeScript, ESLint, Prettier, unit, Python bridge, Playwright E2E, and GitHub Pages build gate.
+
+## Audit & Optimization Pass (M18–M22)
+
+- **Bug Fixes & Memory Hygiene (`UniversalDropOverlay.tsx`, `PostProcessInspector.tsx`, `autoTile.ts`, `PipBiomePreview.tsx`, `AutoTileWorkshop.tsx`):** Added orphan-blob cleanup on failed drop imports, stabilized `PostProcessInspector` config-sync effect onto `activeProjectId` so `project.updatedAt` refreshes never reset unsaved inspector state, fixed `wang-16` `crisp-bevel` top-edge lighting check (`(mask & 12) !== 12`), made ZIP download notices accurately summarize bundled extra files, and released offscreen scratch `<canvas>` backing stores on unmount.
+- **Algorithmic & React Optimizations (`vfxFlipbook.ts`, `VfxBaker.tsx`, `autoTile.ts`, `AutoTileWorkshop.tsx`, `TurnaroundSlicer.tsx`):** Hoisted frame-invariant `Float64Array` trig/FBM fields out of the flipbook frame loop, added squared-distance early-rejects and `subarray`/`set` row blits across `vfxFlipbook.ts` and `autoTile.ts`, skipped unnecessary sprite buffer transfers in `VfxBaker.tsx` outside `noise-dissolve`, keyed underlay loading cleanly on resolved `underlayBlobId` in `AutoTileWorkshop.tsx`, and eliminated duplicate synchronous main-thread BFS in `TurnaroundSlicer.tsx`.
+- **Verification:** Added `wang-16` `crisp-bevel` regression coverage in `tests/unit/m20a-autotile-core.test.ts` and re-verified the entire CI suite (Prettier, ESLint, TypeScript `tsc --noEmit` & `tsc -b`, unit tests, Python bridge unit tests, Playwright E2E, and `VITE_BASE_PATH=/nibgrid/` build).

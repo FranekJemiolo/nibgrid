@@ -34,7 +34,8 @@ test.describe('M12A Seamless Tile 50% Wrap-Offset & Auto-Masking Workflow (Scree
     await page.getByTestId('open-postprocess-btn').click();
     await expect(page.getByTestId('postprocess-inspector')).toBeVisible();
 
-    // Switch to Screen 4D: Tile & 9-Slice -> Seamless Tile mode
+    // Reclassify asset as Tile so Tile & 9-Slice primary tab is promoted, then open Screen 4D
+    await page.getByTestId('inspector-asset-class-select').selectOption('tile');
     await page.getByTestId('inspector-tab-tile-slice').click();
     await expect(page.getByTestId('tile-slice-workshop-panel')).toBeVisible();
     await expect(page.getByTestId('workshop-mode-tile')).toBeVisible();

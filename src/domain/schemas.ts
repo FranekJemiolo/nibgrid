@@ -413,11 +413,108 @@ export const CollisionLayerShapeSchema = z.object({
 });
 export type CollisionLayerShape = z.infer<typeof CollisionLayerShapeSchema>;
 
+export const TurnaroundLayoutSchema = z.enum(['2x2', '1x4']);
+export type TurnaroundLayout = z.infer<typeof TurnaroundLayoutSchema>;
+
+export const CardinalDirectionSchema = z.enum(['south', 'east', 'north', 'west']);
+export type CardinalDirection = z.infer<typeof CardinalDirectionSchema>;
+
+export const TurnaroundMetaSchema = z.object({
+  isTurnaroundSheet: z.boolean().optional(),
+  turnaroundLayout: TurnaroundLayoutSchema.optional(),
+  directionGroupId: z.string().min(1).optional(),
+  cardinalDirection: CardinalDirectionSchema.optional(),
+  scaleApplied: z.number().positive().optional(),
+  sharedPivotPx: z
+    .object({
+      x: z.number().int().min(0),
+      y: z.number().int().min(0),
+    })
+    .optional(),
+});
+export type TurnaroundMeta = z.infer<typeof TurnaroundMetaSchema>;
+
+export const AssetClassSchema = z.enum(['character', 'prop', 'tile', 'ui-panel', 'vfx']);
+export type AssetClass = z.infer<typeof AssetClassSchema>;
+
+export const AutoTileModeSchema = z.enum(['blob-47', 'wang-16']);
+export type AutoTileMode = z.infer<typeof AutoTileModeSchema>;
+
+export const AutoTileEdgeStyleSchema = z.enum(['crisp-bevel', 'organic-overhang', 'pixel-outline']);
+export type AutoTileEdgeStyle = z.infer<typeof AutoTileEdgeStyleSchema>;
+
+export const AutoTileConfigSchema = z.object({
+  mode: AutoTileModeSchema.default('blob-47'),
+  edgeStyle: AutoTileEdgeStyleSchema.default('organic-overhang'),
+  borderWidthPx: z.number().min(0).max(32).default(3),
+  cornerRadiusPx: z.number().min(0).max(32).default(4),
+  jitterPx: z.number().min(0).max(16).default(1.5),
+  edgeTintHex: HexColorSchema.default('#1A1C2C'),
+  seed: z.number().int().min(0).max(0xffffffff).default(1337),
+  underlayNodeId: z.string().min(1).optional(),
+  sampleMapBits: z.string().optional(),
+});
+export type AutoTileConfig = z.infer<typeof AutoTileConfigSchema>;
+
+export function createDefaultAutoTileConfig(): AutoTileConfig {
+  return AutoTileConfigSchema.parse({});
+}
+
+export const SocketDefinitionSchema = z.object({
+  id: z.string().min(1),
+  name: z
+    .string()
+    .trim()
+    .min(1)
+    .max(48)
+    .regex(/^[a-z0-9_]+$/, 'Socket name must match ^[a-z0-9_]+$'),
+  restPosPx: z.object({
+    x: z.number().finite(),
+    y: z.number().finite(),
+  }),
+  baseAngleDeg: z.number().finite().min(-360).max(360).default(0),
+  colorHex: HexColorSchema.optional(),
+});
+export type SocketDefinition = z.infer<typeof SocketDefinitionSchema>;
+
+export const VfxArchetypeSchema = z.enum([
+  'sparks',
+  'dust-puff',
+  'smoke',
+  'hit-ring',
+  'noise-dissolve',
+]);
+export type VfxArchetype = z.infer<typeof VfxArchetypeSchema>;
+
+export const VfxFlipbookConfigSchema = z.object({
+  archetype: VfxArchetypeSchema.default('sparks'),
+  frameSizePx: z.number().int().min(8).max(256).default(64),
+  cols: z.number().int().min(1).max(16).default(4),
+  rows: z.number().int().min(1).max(16).default(4),
+  seed: z.number().int().min(0).max(0xffffffff).default(101),
+  spread: z.number().min(0.1).max(0.48).default(0.42),
+  turbulence: z.number().min(0).max(1).default(0.35),
+  fps: z.number().int().min(1).max(60).default(16),
+  coreHex: HexColorSchema.default('#FFF3B0'),
+  outerHex: HexColorSchema.default('#F97316'),
+  useSourceSprite: z.boolean().default(true),
+  snapToPalette: z.boolean().default(false),
+});
+export type VfxFlipbookConfig = z.infer<typeof VfxFlipbookConfigSchema>;
+
+export function createDefaultVfxFlipbookConfig(): VfxFlipbookConfig {
+  return VfxFlipbookConfigSchema.parse({});
+}
+
 export const SpriteNodeSchema = z.object({
   id: z.string().min(1),
   projectId: z.string().min(1),
   parentId: z.string().min(1).nullable(),
   kind: SpriteNodeKindSchema,
+  assetClass: AssetClassSchema.optional(),
+  autoTile: AutoTileConfigSchema.optional(),
+  sockets: z.array(SocketDefinitionSchema).optional(),
+  vfxFlipbook: VfxFlipbookConfigSchema.optional(),
   imageBlobId: z.string().min(1),
   maskBlobId: z.string().min(1).optional(),
   processedBlobId: z.string().min(1).optional(),
@@ -429,6 +526,7 @@ export const SpriteNodeSchema = z.object({
   audioBindings: AudioBindingsSchema.optional(),
   collisionShapes: z.array(CollisionLayerShapeSchema).optional(),
   recipeArtBibleHash: z.string().min(1).optional(),
+  turnaroundMeta: TurnaroundMetaSchema.optional(),
   sketchSha256: z.string().regex(/^[0-9a-f]{64}$/, 'sketchSha256 must be a 64-char hex SHA-256'),
   generationMeta: GenerationMetaSchema,
 });

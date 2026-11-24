@@ -1,0 +1,32 @@
+:root {
+  --bg-well: #111113;
+  --bg-panel: #18181b;
+  --bg-elevated: #222226;
+  --border-hairline: #2b2b30;
+  --text-primary: #e4e4e7;
+  --text-muted: #9696a0;
+  --accent-primary: #e5a00d;
+  --accent-primary-hover: #f5b82e;
+  --accent-primary-fg: #111113;
+}
+
+@theme {
+  --color-slate-950: #111113;
+  --color-slate-900: #18181b;
+  --color-slate-800: #222226;
+  --color-slate-700: #2b2b30;
+  --color-slate-600: #3f3f46;
+  --color-slate-500: #63636e;
+  --color-slate-400: #9696a0;
+  --color-slate-300: #c4c4cc;
+  --color-slate-200: #e4e4e7;
+  --color-slate-100: #f4f4f5;
+}
+
+.tabular-nums {
+  font-variant-numeric: tabular-nums;
+}
+
+.pixelated {
+  image-rendering: pixelated;
+}

@@ -9,7 +9,7 @@ import {
   Wand2,
   X,
 } from 'lucide-react';
-import { compilePrompt } from '../../domain/promptCompiler';
+import { compilePrompt, type PromptSheetLayout } from '../../domain/promptCompiler';
 import type { AdherenceLevel, ArtBible, ProviderConfig, SpriteNode } from '../../domain/schemas';
 import { selectStatefulInteractionChain } from '../../providers/antigravityBridgeProvider';
 import type { BridgeCritiqueResponse } from '../../providers/bridgeContract';
@@ -24,6 +24,8 @@ interface GenerationInspectorProps {
   onChangeAdherence: (adherence: AdherenceLevel) => void;
   promptDelta: string;
   onChangePromptDelta: (delta: string) => void;
+  sheetMode?: PromptSheetLayout;
+  onChangeSheetMode?: (mode: PromptSheetLayout) => void;
   seed: number;
   onChangeSeed: (seed: number) => void;
   variantCount: 1 | 2;
@@ -52,6 +54,8 @@ export function GenerationInspector({
   onChangeAdherence,
   promptDelta,
   onChangePromptDelta,
+  sheetMode = 'single',
+  onChangeSheetMode,
   seed,
   onChangeSeed,
   variantCount,
@@ -72,7 +76,7 @@ export function GenerationInspector({
 }: GenerationInspectorProps) {
   const activeConfig = providers.find((p) => p.id === selectedProviderId) ?? providers[0];
   const adapter = activeConfig ? resolveProviderAdapter(activeConfig) : null;
-  const compiled = compilePrompt(artBible, { adherence, promptDelta });
+  const compiled = compilePrompt(artBible, { adherence, promptDelta, sheetLayout: sheetMode });
   const bridgeDecision =
     activeConfig?.kind === 'antigravity-bridge'
       ? selectStatefulInteractionChain(activeParentNode, activeConfig.id)
@@ -161,6 +165,36 @@ export function GenerationInspector({
           </select>
         </label>
       </div>
+
+      {onChangeSheetMode && (
+        <div className="space-y-1 text-xs">
+          <span className="font-medium text-slate-300">Sheet Mode</span>
+          <div className="grid grid-cols-3 gap-1 rounded-md border border-slate-800 bg-slate-950 p-1">
+            {(
+              [
+                ['single', 'Single Sprite'],
+                ['2x2', 'Turnaround (2×2)'],
+                ['1x4', 'Turnaround (1×4)'],
+              ] as const
+            ).map(([mode, label]) => (
+              <button
+                key={mode}
+                type="button"
+                data-testid={`sheet-mode-${mode}`}
+                aria-pressed={sheetMode === mode}
+                onClick={() => onChangeSheetMode(mode)}
+                className={`rounded px-1.5 py-1 text-[11px] font-medium transition-colors ${
+                  sheetMode === mode
+                    ? 'bg-indigo-600 text-white'
+                    : 'text-slate-300 hover:bg-slate-800 hover:text-white'
+                }`}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
 
       <label className="space-y-1 text-xs">
         <span className="font-medium text-slate-300">Prompt Delta</span>

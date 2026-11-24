@@ -3,6 +3,8 @@ import {
   AdherenceSchema,
   AnimPresetSchema,
   ArtModeSchema,
+  AssetClassSchema,
+  AutoTileConfigSchema,
   BevelProfileSchema,
   CollisionLayerShapeSchema,
   DimensionSchema,
@@ -17,6 +19,11 @@ import {
   ProjectionSchema,
   PuppetPinSchema,
   SeamlessTileConfigSchema,
+  SocketDefinitionSchema,
+  TurnaroundMetaSchema,
+  VfxFlipbookConfigSchema,
+  type AssetClass,
+  type AutoTileConfig,
   type CollisionLayerShape,
   type NineSliceConfig,
   type NormalMapConfig,
@@ -25,7 +32,10 @@ import {
   type Project,
   type PuppetAnimConfig,
   type SeamlessTileConfig,
+  type SocketDefinition,
   type SpriteNode,
+  type TurnaroundMeta,
+  type VfxFlipbookConfig,
 } from '../domain/schemas';
 
 export const RECIPE_SCHEMA_VERSION = '1.0.0' as const;
@@ -108,6 +118,11 @@ export const AssetRecipeSchema = z.object({
   paletteLut: PaletteLutConfigSchema.optional(),
   collisionShapes: z.array(CollisionLayerShapeSchema).optional(),
   recipeArtBibleHash: z.string().min(1).optional(),
+  turnaroundMeta: TurnaroundMetaSchema.optional(),
+  assetClass: AssetClassSchema.optional(),
+  autoTile: AutoTileConfigSchema.optional(),
+  sockets: z.array(SocketDefinitionSchema).optional(),
+  vfxFlipbook: VfxFlipbookConfigSchema.optional(),
 });
 
 export type AssetRecipe = z.infer<typeof AssetRecipeSchema>;
@@ -140,6 +155,11 @@ export interface BuildAssetRecipeInput {
   paletteLut?: PaletteLutConfig;
   collisionShapes?: readonly CollisionLayerShape[];
   recipeArtBibleHash?: string;
+  turnaroundMeta?: TurnaroundMeta;
+  assetClass?: AssetClass;
+  autoTile?: AutoTileConfig;
+  sockets?: readonly SocketDefinition[];
+  vfxFlipbook?: VfxFlipbookConfig;
 }
 
 const SENSITIVE_KEY_PATTERNS: readonly RegExp[] = [
@@ -220,6 +240,20 @@ export function buildAssetRecipe(input: BuildAssetRecipeInput): AssetRecipe {
     ...((input.recipeArtBibleHash ?? node.recipeArtBibleHash)
       ? { recipeArtBibleHash: input.recipeArtBibleHash ?? node.recipeArtBibleHash }
       : {}),
+    ...((input.turnaroundMeta ?? node.turnaroundMeta)
+      ? { turnaroundMeta: input.turnaroundMeta ?? node.turnaroundMeta }
+      : {}),
+    ...((input.assetClass ?? node.assetClass)
+      ? { assetClass: input.assetClass ?? node.assetClass }
+      : {}),
+    ...((input.autoTile ?? node.autoTile) ? { autoTile: input.autoTile ?? node.autoTile } : {}),
+    ...((input.vfxFlipbook ?? node.vfxFlipbook)
+      ? { vfxFlipbook: input.vfxFlipbook ?? node.vfxFlipbook }
+      : {}),
+    ...(() => {
+      const sockList = input.sockets ?? node.sockets;
+      return sockList && sockList.length > 0 ? { sockets: [...sockList] } : {};
+    })(),
   });
 
   const serialized = JSON.stringify(recipe);

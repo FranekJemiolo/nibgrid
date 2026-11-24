@@ -115,6 +115,8 @@ export function DagTreeDock({
                 data-node-kind={node.kind}
                 data-node-depth={depth}
                 data-parent-id={node.parentId ?? 'root'}
+                data-direction={node.turnaroundMeta?.cardinalDirection}
+                data-direction-group={node.turnaroundMeta?.directionGroupId}
                 style={{ marginLeft: `${depth * 24}px` }}
                 className={`flex items-center justify-between gap-3 rounded-lg border px-2.5 py-1.5 transition-colors ${
                   isActive
@@ -152,6 +154,22 @@ export function DagTreeDock({
                       <span className="text-[11px] text-slate-500">
                         ({node.generationMeta.adherence})
                       </span>
+                      {node.turnaroundMeta?.isTurnaroundSheet && (
+                        <span
+                          data-testid={`dag-turnaround-badge-${node.id}`}
+                          className="rounded border border-cyan-500/40 bg-cyan-500/15 px-1.5 py-0.5 font-mono text-[10px] font-semibold text-cyan-200"
+                        >
+                          Sheet {node.turnaroundMeta.turnaroundLayout ?? '2x2'}
+                        </span>
+                      )}
+                      {node.turnaroundMeta?.cardinalDirection && (
+                        <span
+                          data-testid={`dag-direction-badge-${node.id}`}
+                          className="rounded border border-emerald-500/40 bg-emerald-500/15 px-1.5 py-0.5 font-mono text-[10px] font-semibold text-emerald-200 uppercase"
+                        >
+                          {node.turnaroundMeta.cardinalDirection}
+                        </span>
+                      )}
                       {isForkParent && (
                         <span className="rounded bg-amber-500/20 px-1.5 py-0.5 text-[10px] font-medium text-amber-300">
                           Active Parent

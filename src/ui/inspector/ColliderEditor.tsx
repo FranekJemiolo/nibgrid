@@ -26,6 +26,7 @@ import {
 import { buildAlphaClippedMesh } from '../../processing/spriteMesh';
 import type { RgbaBuffer } from '../../processing/types';
 import { buildPuppetStripArtifacts } from '../../webgl/puppetRenderer';
+import { ScrubInput } from '../primitives/ScrubInput';
 
 export interface ColliderEditorProps {
   readonly sprite: RgbaBuffer;
@@ -597,22 +598,18 @@ export function ColliderEditor({
             </select>
           </label>
 
-          <label className="block space-y-1">
-            <div className="flex justify-between text-[11px] text-slate-400">
-              <span>RDP Epsilon Tolerance</span>
-              <span className="font-mono">{epsilonPx.toFixed(2)} px</span>
-            </div>
-            <input
-              type="range"
-              data-testid="collider-epsilon-slider"
-              min={0.5}
-              max={8.0}
-              step={0.25}
-              value={epsilonPx}
-              onChange={(e) => setEpsilonPx(Number(e.target.value))}
-              className="w-full accent-emerald-400"
-            />
-          </label>
+          <ScrubInput
+            label="RDP Epsilon Tolerance"
+            value={epsilonPx}
+            min={0.5}
+            max={8.0}
+            step={0.25}
+            decimals={2}
+            unit="px"
+            testId="scrub-collider-epsilon"
+            compatRangeTestId="collider-epsilon-slider"
+            onChange={setEpsilonPx}
+          />
 
           <label className="block space-y-1">
             <div className="flex justify-between text-[11px] text-slate-400">

@@ -122,7 +122,10 @@ export function AtlasWorkshop() {
     const frames: AtlasFrameInput[] = [];
     for (let idx = 0; idx < decodedAssets.length; idx++) {
       const asset = decodedAssets[idx]!;
-      const nodeSlug = `sprite_${idx}_${asset.node.generationMeta.seed}`;
+      const dirSuffix = asset.node.turnaroundMeta?.cardinalDirection
+        ? `_${asset.node.turnaroundMeta.cardinalDirection}`
+        : '';
+      const nodeSlug = `sprite_${idx}_${asset.node.generationMeta.seed}${dirSuffix}`;
       const pivot = asset.node.postProcessConfig?.pivotNorm ?? { x: 0.5, y: 0.5 };
       const bakedNorm = includeNormals
         ? bakeNormalMapCpu(asset.rgba, {
@@ -454,74 +457,142 @@ export function AtlasWorkshop() {
           )}
 
           <div className="space-y-2">
-            {decodedAssets.map((asset, idx) => {
-              const hasRig = Boolean(
-                asset.node.puppetAnim && asset.node.puppetAnim.pins.length > 0,
-              );
-              const isHighlighted = highlightedNodeId === asset.node.id;
-              return (
-                <div
-                  key={asset.node.id}
-                  data-testid={`atlas-card-${idx}`}
-                  data-highlighted={isHighlighted ? 'true' : 'false'}
-                  onClick={() => setHighlightedNodeId(asset.node.id)}
-                  className={`space-y-1.5 rounded-lg border p-2.5 text-xs transition-colors ${
-                    isHighlighted
-                      ? 'border-emerald-400 bg-emerald-950/30 ring-1 ring-emerald-400/50'
-                      : 'border-slate-800 bg-slate-950/70'
-                  }`}
-                >
-                  <label className="flex items-center gap-2 font-medium text-slate-200">
-                    <input
-                      type="checkbox"
-                      data-testid={`atlas-item-${idx}`}
-                      checked={Boolean(selectedStaticIds[asset.node.id])}
-                      onChange={(e) =>
-                        setSelectedStaticIds((prev) => ({
-                          ...prev,
-                          [asset.node.id]: e.target.checked,
-                        }))
-                      }
-                      className="accent-indigo-500"
-                    />
-                    <span className="truncate">
-                      #{idx + 1} {asset.node.kind} · seed {asset.node.generationMeta.seed}
-                    </span>
-                  </label>
-
-                  {hasRig ? (
-                    <label className="flex items-center gap-2 pl-4 text-[11px] text-cyan-300">
+            {(() => {
+              const renderAssetCard = (asset: DecodedNodeAsset, idx: number) => {
+                const hasRig = Boolean(
+                  asset.node.puppetAnim && asset.node.puppetAnim.pins.length > 0,
+                );
+                const isHighlighted = highlightedNodeId === asset.node.id;
+                const dir = asset.node.turnaroundMeta?.cardinalDirection;
+                return (
+                  <div
+                    key={asset.node.id}
+                    data-testid={`atlas-card-${idx}`}
+                    data-highlighted={isHighlighted ? 'true' : 'false'}
+                    onClick={() => setHighlightedNodeId(asset.node.id)}
+                    className={`space-y-1.5 rounded-lg border p-2.5 text-xs transition-colors ${
+                      isHighlighted
+                        ? 'border-emerald-400 bg-emerald-950/30 ring-1 ring-emerald-400/50'
+                        : 'border-slate-800 bg-slate-950/70'
+                    }`}
+                  >
+                    <label className="flex items-center gap-2 font-medium text-slate-200">
                       <input
                         type="checkbox"
-                        data-testid={`atlas-loop-${idx}`}
-                        checked={Boolean(selectedLoopIds[asset.node.id])}
+                        data-testid={`atlas-item-${idx}`}
+                        checked={Boolean(selectedStaticIds[asset.node.id])}
                         onChange={(e) =>
-                          setSelectedLoopIds((prev) => ({
+                          setSelectedStaticIds((prev) => ({
                             ...prev,
                             [asset.node.id]: e.target.checked,
                           }))
                         }
-                        className="accent-cyan-500"
+                        className="accent-indigo-500"
                       />
-                      <Film className="h-3 w-3" />
-                      <span>
-                        {asset.node.puppetAnim!.preset} ({asset.node.puppetAnim!.frameCount}f)
+                      <span className="truncate">
+                        #{idx + 1} {asset.node.kind} · seed {asset.node.generationMeta.seed}
+                        {dir ? `_${dir}` : ''}
                       </span>
+                      {dir && (
+                        <span className="ml-auto rounded border border-emerald-500/40 bg-emerald-500/15 px-1 py-0.5 font-mono text-[10px] text-emerald-200 uppercase">
+                          {dir}
+                        </span>
+                      )}
                     </label>
-                  ) : (
-                    <button
-                      type="button"
-                      data-testid={`atlas-add-loop-${idx}`}
-                      onClick={() => void handleAttachQuickPuppetLoop(asset)}
-                      className="ml-4 inline-flex items-center gap-1 rounded border border-cyan-500/30 bg-cyan-500/10 px-2 py-0.5 text-[10px] font-medium text-cyan-200 hover:bg-cyan-500/20"
+
+                    {hasRig ? (
+                      <label className="flex items-center gap-2 pl-4 text-[11px] text-cyan-300">
+                        <input
+                          type="checkbox"
+                          data-testid={`atlas-loop-${idx}`}
+                          checked={Boolean(selectedLoopIds[asset.node.id])}
+                          onChange={(e) =>
+                            setSelectedLoopIds((prev) => ({
+                              ...prev,
+                              [asset.node.id]: e.target.checked,
+                            }))
+                          }
+                          className="accent-cyan-500"
+                        />
+                        <Film className="h-3 w-3" />
+                        <span>
+                          {asset.node.puppetAnim!.preset} ({asset.node.puppetAnim!.frameCount}f)
+                        </span>
+                      </label>
+                    ) : (
+                      <button
+                        type="button"
+                        data-testid={`atlas-add-loop-${idx}`}
+                        onClick={() => void handleAttachQuickPuppetLoop(asset)}
+                        className="ml-4 inline-flex items-center gap-1 rounded border border-cyan-500/30 bg-cyan-500/10 px-2 py-0.5 text-[10px] font-medium text-cyan-200 hover:bg-cyan-500/20"
+                      >
+                        <Sparkles className="h-2.5 w-2.5" />
+                        Add 6f Puppet Loop
+                      </button>
+                    )}
+                  </div>
+                );
+              };
+
+              const groupMembers = new Map<
+                string,
+                Array<{ asset: DecodedNodeAsset; idx: number }>
+              >();
+              decodedAssets.forEach((asset, idx) => {
+                const gid = asset.node.turnaroundMeta?.directionGroupId;
+                if (!gid) return;
+                const list = groupMembers.get(gid) ?? [];
+                list.push({ asset, idx });
+                groupMembers.set(gid, list);
+              });
+
+              const renderedGroups = new Set<string>();
+              return decodedAssets.map((asset, idx) => {
+                const gid = asset.node.turnaroundMeta?.directionGroupId;
+                const members = gid ? groupMembers.get(gid) : undefined;
+                if (gid && members && members.length >= 2) {
+                  if (renderedGroups.has(gid)) {
+                    return null;
+                  }
+                  renderedGroups.add(gid);
+                  const allSelected = members.every((m) =>
+                    Boolean(selectedStaticIds[m.asset.node.id]),
+                  );
+                  return (
+                    <div
+                      key={`group-${gid}`}
+                      data-testid={`atlas-direction-group-${gid}`}
+                      className="space-y-2 rounded-lg border border-cyan-500/35 bg-cyan-950/15 p-2"
                     >
-                      <Sparkles className="h-2.5 w-2.5" />
-                      Add 6f Puppet Loop
-                    </button>
-                  )}
-                </div>
-              );
-            })}
+                      <label className="flex cursor-pointer items-center justify-between gap-2 px-1 text-[11px] font-semibold text-cyan-200">
+                        <span>Select All {members.length} Directions</span>
+                        <input
+                          type="checkbox"
+                          data-testid={`atlas-group-toggle-${gid}`}
+                          checked={allSelected}
+                          onChange={(e) => {
+                            const checked = e.target.checked;
+                            setSelectedStaticIds((prev) => {
+                              const next = { ...prev };
+                              for (const m of members) {
+                                next[m.asset.node.id] = checked;
+                              }
+                              return next;
+                            });
+                          }}
+                          className="accent-cyan-400"
+                        />
+                      </label>
+                      <div className="space-y-1.5">
+                        {members.map((m) => renderAssetCard(m.asset, m.idx))}
+                      </div>
+                    </div>
+                  );
+                }
+
+                return renderAssetCard(asset, idx);
+              });
+            })()}
           </div>
         </aside>
 

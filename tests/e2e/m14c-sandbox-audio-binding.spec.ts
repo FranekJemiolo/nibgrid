@@ -70,7 +70,8 @@ test.describe('M14C 1x Game Scale Sandbox & 9-Slice Audio-Visual Juice Binding',
       hitOptionVal!,
     );
 
-    // 4. Switch to 9-Slice UI Panel Workshop -> bind UI Click SFX -> click Wide Button preview
+    // 4. Switch to 9-Slice UI Panel Workshop via + Tools overflow -> bind UI Click SFX -> click Wide Button preview
+    await page.getByTestId('inspector-more-tools-btn').click();
     await page.getByTestId('inspector-tab-tile-slice').click();
     await page.getByTestId('workshop-mode-nineslice').click();
     await expect(page.getByTestId('nineslice-guide-stage')).toBeVisible();
@@ -100,6 +101,7 @@ test.describe('M14C 1x Game Scale Sandbox & 9-Slice Audio-Visual Juice Binding',
     await expect(page.getByTestId('game-sandbox-panel')).toBeVisible();
     await expect(page.getByTestId('sandbox-hit-sfx-select')).toHaveValue(hitOptionVal!);
 
+    await page.getByTestId('inspector-more-tools-btn').click();
     await page.getByTestId('inspector-tab-tile-slice').click();
     await page.getByTestId('workshop-mode-nineslice').click();
     await expect(page.getByTestId('nineslice-click-sfx-select')).toHaveValue(clickOptionVal!);

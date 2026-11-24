@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react';
-import { Lightbulb, SunMedium } from 'lucide-react';
+import { Columns2, Lightbulb, SunMedium } from 'lucide-react';
 import type { ArtMode, NormalMapConfig } from '../../domain/schemas';
 import {
   bakeNormalMapCpu,
@@ -12,6 +12,32 @@ import {
   type NormalViewMode,
   type PointLightParams,
 } from '../../webgl/normalMapRenderer';
+import { BeforeAfterWipe } from '../primitives/BeforeAfterWipe';
+
+function FlatAlbedoCanvas({ sprite, pixelArt }: { sprite: RgbaBuffer; pixelArt: boolean }) {
+  const ref = useRef<HTMLCanvasElement | null>(null);
+  useEffect(() => {
+    const canvas = ref.current;
+    if (!canvas) return;
+    canvas.width = sprite.width;
+    canvas.height = sprite.height;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+    ctx.imageSmoothingEnabled = !pixelArt;
+    ctx.putImageData(
+      new ImageData(new Uint8ClampedArray(sprite.data), sprite.width, sprite.height),
+      0,
+      0,
+    );
+  }, [sprite, pixelArt]);
+  return (
+    <canvas
+      ref={ref}
+      className="block h-full w-full"
+      style={{ imageRendering: pixelArt ? 'pixelated' : 'auto' }}
+    />
+  );
+}
 
 interface NormalMapPreviewProps {
   sprite: RgbaBuffer;
@@ -39,6 +65,8 @@ export function NormalMapPreview({
   const rafRef = useRef<number>(0);
 
   const [viewMode, setViewMode] = useState<NormalViewMode>('lit');
+  const [wipeEnabled, setWipeEnabled] = useState(false);
+  const [wipePercent, setWipePercent] = useState(50);
   const [lightZ, setLightZ] = useState(0.28);
   const [intensity, setIntensity] = useState(1.6);
   const [roughness, setRoughness] = useState(0.45);
@@ -326,6 +354,21 @@ export function NormalMapPreview({
                 {label}
               </button>
             ))}
+            <button
+              type="button"
+              data-testid="normal-wipe-toggle"
+              aria-pressed={wipeEnabled}
+              onClick={() => setWipeEnabled((w) => !w)}
+              className={`ml-1 inline-flex items-center gap-1 rounded border px-2 py-1 text-xs ${
+                wipeEnabled
+                  ? 'border-[var(--accent-primary)]/60 bg-[var(--accent-primary)]/20 text-[#F5B82E]'
+                  : 'border-slate-700 bg-slate-900 text-slate-300 hover:bg-slate-800'
+              }`}
+              title="Toggle Flat Albedo vs Lit Normal wipe (\)"
+            >
+              <Columns2 className="h-3 w-3" />
+              Wipe
+            </button>
           </div>
           <span className="text-[11px] text-slate-400">
             Move cursor to relight · Click to {pinned ? 'unpin' : 'pin'} · Alt+Wheel for Z height
@@ -337,10 +380,11 @@ export function NormalMapPreview({
             ref={stageRef}
             data-testid="normal-light-stage"
             onPointerMove={(e) => {
-              if (pinnedRef.current) return;
+              if (pinnedRef.current || wipeEnabled) return;
               updateLightPosition(e.clientX, e.clientY);
             }}
             onClick={(e) => {
+              if (wipeEnabled) return;
               const nextPinned = !pinnedRef.current;
               setPinned(nextPinned);
               if (nextPinned) {
@@ -354,11 +398,26 @@ export function NormalMapPreview({
               height: sprite.height > sprite.width ? '440px' : 'auto',
             }}
           >
-            <canvas
-              ref={canvasRef}
-              data-testid="normal-preview-canvas"
-              className="block h-full w-full"
-              style={{ imageRendering: artMode === 'pixel-art' ? 'pixelated' : 'auto' }}
+            <BeforeAfterWipe
+              enabled={wipeEnabled}
+              percent={wipePercent}
+              onChangePercent={setWipePercent}
+              onToggleEnabled={() => setWipeEnabled((w) => !w)}
+              enableBackslashShortcut
+              testId="normal-wipe-stage"
+              handleTestId="normal-wipe-handle"
+              beforeLabel="Flat Albedo"
+              afterLabel="Lit Normal"
+              className="h-full w-full"
+              before={<FlatAlbedoCanvas sprite={sprite} pixelArt={artMode === 'pixel-art'} />}
+              after={
+                <canvas
+                  ref={canvasRef}
+                  data-testid="normal-preview-canvas"
+                  className="block h-full w-full"
+                  style={{ imageRendering: artMode === 'pixel-art' ? 'pixelated' : 'auto' }}
+                />
+              }
             />
             {viewMode === 'lit' && !usingCpuFallback && !isContextLost && (
               <div
