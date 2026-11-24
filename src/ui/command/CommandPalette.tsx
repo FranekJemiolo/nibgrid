@@ -143,29 +143,6 @@ export function CommandPalette({ open, onOpenChange }: CommandPaletteProps) {
             }),
         },
         {
-          id: 'act-parallax',
-          title: 'Open Parallax Background Compositor',
-          subtitle: 'Seamless horizontal bands, aerial depth tinting, AI stack & Godot Parallax2D',
-          category: 'action',
-          keywords: [
-            'parallax',
-            'background',
-            'scroll',
-            'horizon',
-            'depth',
-            'aerial',
-            'tilesprite',
-            'godot',
-          ],
-          execute: () =>
-            navigate({
-              screen: 'inspector',
-              projectId: projId,
-              nodeId: targetId,
-              initialTab: 'parallax',
-            }),
-        },
-        {
           id: 'act-bmfont',
           title: 'Open Bitmap Font & Damage Numeral Exporter',
           subtitle: 'Art Bible pixel numerals, OKLab Sel-Out, AngelCode .fnt/.xml & crit preview',
@@ -276,6 +253,14 @@ export function CommandPalette({ open, onOpenChange }: CommandPaletteProps) {
           category: 'navigation',
           keywords: ['audit', 'batch', 'score', 'readiness'],
           execute: () => navigate({ screen: 'audit', projectId: projId }),
+        },
+        {
+          id: 'nav-entities',
+          title: 'Entity Hub & Godot 4 Prefab Foundry',
+          subtitle: 'Group sprites, colliders, sockets & audio into synced .tscn prefabs',
+          category: 'navigation',
+          keywords: ['entity', 'entities', 'godot', 'tscn', 'prefab', 'sync', 'res'],
+          execute: () => navigate({ screen: 'entities', projectId: projId }),
         },
         {
           id: 'nav-studio',

@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import {
   BookOpen,
+  Boxes,
   ClipboardCheck,
   Command,
   FolderKanban,
@@ -18,6 +19,8 @@ import { AuditMatrixView } from './ui/audit/AuditMatrixView';
 import { ArtBibleEditor } from './ui/bible/ArtBibleEditor';
 import { CommandPalette } from './ui/command/CommandPalette';
 import { UniversalDropOverlay } from './ui/command/UniversalDropOverlay';
+import { EntityHubView } from './ui/entities/EntityHubView';
+import { GodotSyncPill } from './ui/entities/GodotSyncPill';
 import { ProjectHub } from './ui/hub/ProjectHub';
 import { ProviderVaultModal } from './ui/hub/ProviderVaultModal';
 import { PostProcessInspector } from './ui/inspector/PostProcessInspector';
@@ -142,6 +145,15 @@ export function App() {
                 <ClipboardCheck className="h-3.5 w-3.5" />
                 Audit
               </button>
+              <button
+                type="button"
+                data-testid="nav-entities"
+                onClick={() => void navigate({ screen: 'entities', projectId: activeProject.id })}
+                className={navButtonClass(route.screen === 'entities')}
+              >
+                <Boxes className="h-3.5 w-3.5" />
+                Entities
+              </button>
             </>
           )}
 
@@ -167,9 +179,12 @@ export function App() {
           </button>
         </nav>
 
-        <div className="hidden shrink-0 items-center gap-1.5 rounded-full border border-emerald-500/30 bg-emerald-500/10 px-2.5 py-1 text-[11px] font-medium text-emerald-300 lg:inline-flex">
-          <ShieldCheck className="h-3.5 w-3.5" />
-          <span>100% Client-Side</span>
+        <div className="flex shrink-0 items-center gap-2">
+          {activeProject && <GodotSyncPill />}
+          <div className="hidden shrink-0 items-center gap-1.5 rounded-full border border-emerald-500/30 bg-emerald-500/10 px-2.5 py-1 text-[11px] font-medium text-emerald-300 2xl:inline-flex">
+            <ShieldCheck className="h-3.5 w-3.5" />
+            <span>100% Client-Side</span>
+          </div>
         </div>
       </header>
 
@@ -199,6 +214,8 @@ export function App() {
           <AudioFoundry />
         ) : route.screen === 'audit' ? (
           <AuditMatrixView />
+        ) : route.screen === 'entities' ? (
+          <EntityHubView />
         ) : (
           <SpriteStudio />
         )}

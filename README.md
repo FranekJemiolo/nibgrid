@@ -1,6 +1,6 @@
 # Nibgrid
 
-Local-first, zero-server Bring-Your-Own-Key / Bring-Your-Own-Model (BYOK/BYOM) Progressive Web App for turning hand-drawn sketches and vocal hums into style-locked, engine-ready 2D game sprites, 4-view turnarounds, normal maps, animations, auto-tiles, mesh-tracked sockets, VFX flipbooks, parallax backgrounds, bitmap fonts & damage numerals, colliders, UI panels, and audio.
+Local-first, zero-server Bring-Your-Own-Key / Bring-Your-Own-Model (BYOK/BYOM) Progressive Web App for turning hand-drawn sketches and vocal hums into style-locked, engine-ready 2D game sprites, 4-view turnarounds, normal maps, animations, auto-tiles, mesh-tracked sockets, VFX flipbooks, parallax backgrounds, bitmap fonts & damage numerals, colliders, UI panels, Godot 4 `.tscn` prefabs & live `res://` sync, and audio.
 
 **Live App (GitHub Pages):** https://franekjemiolo.github.io/nibgrid/
 
@@ -35,6 +35,7 @@ Local-first, zero-server Bring-Your-Own-Key / Bring-Your-Own-Model (BYOK/BYOM) P
   - [2.16 Bake Procedural 2D VFX Flipbooks & Particle Sheets (Screen 4K)](#216-bake-procedural-2d-vfx-flipbooks--particle-sheets-screen-4k)
   - [2.17 Compose Seamless Parallax Backgrounds & Depth Tinting (Screen 4L)](#217-compose-seamless-parallax-backgrounds--depth-tinting-screen-4l)
   - [2.18 Export Palette-Locked Bitmap Fonts & Damage Numerals (Screen 4M)](#218-export-palette-locked-bitmap-fonts--damage-numerals-screen-4m)
+  - [2.19 Assemble Godot 4 `.tscn` Prefabs & Live `res://` Folder Sync (Entity Hub)](#219-assemble-godot-4-tscn-prefabs--live-res-folder-sync-entity-hub)
 - [Part 3 — Engine Drop-In Integration Examples](#part-3--engine-drop-in-integration-examples)
 - [Architecture Summary](#architecture-summary)
 - [Development & Verification](#development--verification)
@@ -66,6 +67,7 @@ Local-first, zero-server Bring-Your-Own-Key / Bring-Your-Own-Model (BYOK/BYOM) P
 | Procedural Sparks, Smoke, Rings & Dissolve VFX    | `VFX Baker` (Screen 4K)                | `$0.00 Local` (Worker FBM Synthesizer)     | Packed `_vfx_sheet.png`, Godot `GPUParticles2D`, Pixi JSON                                          |
 | Multi-Layer Parallax Vistas & Aerial Depth Haze   | `Parallax BG` (Screen 4L)              | `$0.00 Local` or BYOK / Bridge Stack       | Horizontal seamless band PNGs, Godot `Parallax2D` `.tscn`, Phaser/Pixi JSON                         |
 | Palette-Locked Bitmap Fonts & Damage Numerals     | `Bitmap Font` (Screen 4M)              | `$0.00 Local` (Worker PoT Packer)          | `<slug>.png`, AngelCode `.fnt` + `.xml`, `<slug>.recipe.json`                                       |
+| Godot 4 `.tscn` Prefabs & Live `res://` Sync      | `Entities` (Entity Hub) + Sync Pill    | `$0.00 Local` (FSAA + SHA-256 Diff)        | `.tscn`, `_frames.tres`, `_anims.tres`, `CanvasTexture`, lossless `.png.import`                     |
 
 ---
 
@@ -504,6 +506,22 @@ Once a sprite is inside **Post-Process & Export Inspector** (`Screen 4`), switch
 
 ---
 
+### 2.19 Assemble Godot 4 `.tscn` Prefabs & Live `res://` Folder Sync (Entity Hub)
+
+**When to use it:** Instead of manually unzipping asset bundles, fixing compressed `.import` flags, and wiring child nodes in Godot for every character or pickup, group your sprite, optional normal map, M16 colliders/hitboxes, M21 sockets, and M14/M15 audio into one Entity Card and sync changed files straight into your local `res://` directory for instant Godot 4 hot-reload.
+
+**Click-by-Click:**
+
+1. Click **`Entities`** in the top navigation bar, then click **`New Entity`**.
+2. Set **`Display Name`** (`Goblin Scout`) and **`Entity Slug`** (`goblin_scout`), choose **`Godot Root Body`** (`CharacterBody2D`, `StaticBody2D`, `Area2D`, `RigidBody2D`, or `Node2D`), set **`Target res:// Subpath`** (`assets/nibgrid`), link your **Primary SpriteNode**, optionally check **`Bake Normal Map (_n.png) & CanvasTexture .tres`**, add **Animation Clips**, and check **Bound Audio Clips**.
+3. Switch to **`.tscn Preview`** inside the drawer to verify the assembled `CharacterBody2D`, `AnimatedSprite2D`, `CollisionPolygon2D`, `Area2D` Hitbox/Hurtbox, `Marker2D` Sockets, `AudioStreamPlayer2D`, and `AnimationPlayer` hierarchy, then click **`Save Entity`** so the Entity Card lights up its 5 coverage dots.
+4. Click **`Bind Godot res://`** in the top header pill (Chromium File System Access API) to pick your local Godot project root (or use **`Sync ZIP`** on Firefox/Safari).
+5. Click the **`res://<folder>`** pill to inspect the SHA-256 dry-run diff (**`+ Added`** / **`~ Modified`**), then click **`Sync to Godot`** to write only changed PNGs, `.png.import` sidecars, `.tres` resources, WAVs, and `.tscn` prefabs straight to disk—subsequent syncs write `0` files until an asset changes.
+
+![Screen 8 — Entity Hub & Live Godot 4 res:// Sync](docs/demo/24-entity-hub-godot-sync.png)
+
+---
+
 ## Part 3 — Engine Drop-In Integration Examples
 
 ### Godot 4 (`4.2+`)
@@ -535,6 +553,8 @@ Nibgrid exports Godot-native `.tres` resources (`AtlasTexture` / `SpriteFrames`,
    - Paste exported `[node name="..." type="Marker2D" parent="."]` blocks under your centered `Sprite2D` / `AnimatedSprite2D`, load `<slug>_vfx_godot.tscn` + `<slug>_vfx_godot.tres` for flipbook `GPUParticles2D` bursts, or open `<slug>_parallax.tscn` (Godot 4.3+ `Parallax2D` nodes with baked `scroll_scale`, `repeat_size`, and `texture_filter = 1`) alongside your exported layer PNGs.
 6. **Bitmap Fonts & Floating Damage Numerals (`<slug>.fnt` + `<slug>.png`):**
    - Drop `<slug>.fnt` and `<slug>.png` into `res://fonts/`. Godot 4 imports `<slug>.fnt` natively as a `FontFile` (set `Antialiasing = None` and `Texture Filter = Nearest`), ready to assign directly to `Label` / `RichTextLabel` → `Theme Overrides` → `Fonts`.
+7. **1-Click Live `res://` Entity Prefabs (`<slug>.tscn` + `.png.import`):**
+   - Bind your local Godot project root via **`Bind Godot res://`** in the top header bar and click **`Sync to Godot`** to write `assets/nibgrid/<slug>/<slug>.tscn`, `<slug>_frames.tres`, `<slug>_anims.tres`, `<slug>_canvas.tres`, WAV audio, and lossless `.png.import` sidecars straight to disk—Godot 4 hot-reloads the ready-to-instance prefab immediately.
 
 ### Phaser 3 (`3.60+`) + Matter.js
 
@@ -651,6 +671,7 @@ const pop = new BitmapText({
 - **2D VFX Flipbook & Particle Sheet Baker (Screen 4K):** Synthesize deterministic `4×4`, `8×2`, or `4×2` spark bursts, dust puffs, smoke plumes, shockwave hit rings, and FBM noise-dissolve sheets off-thread in Worker threads (`vfxFlipbook.ts`, `postprocess.worker.ts`) with Art Bible palette snapping, audition loops in a visibility-aware Canvas2D player (`VfxBaker.tsx`), and export Godot 4 `CanvasItemMaterial` `.tres` + `GPUParticles2D` `.tscn`, PixiJS flipbook JSON, and Zod-valid `.recipe.json` ZIPs (`vfxExporters.ts`).
 - **Parallax Background Layer Compositor, Atmospheric Tinter & Matched-Stack Generator (Screen 4L):** Orchestrate 2-stage AI blueprints (`parallaxBlueprint.ts`), optional Master Keyframe anchoring, `#FF00FF` chroma-isolated band streaming (`parallaxGenerator.ts`), or `$0.00` Offline Mock bands; execute Worker-isolated smoothstep horizontal seam-wrapping and contrast-dampening horizon scatter tinting (`parallaxCompositor.ts`, `PROCESS_PARALLAX_LAYER`); preview live 60 FPS Canvas2D scroll ratios with `1×` foreground contrast checks (`ParallaxWorkshop.tsx`); and export Godot 4.3+ `Parallax2D` `.tscn`, Phaser 3 `TileSprite` / PixiJS `TilingSprite` manifests (`parallaxExporters.ts`), and orphan-blob-safe Dexie ZIPs.
 - **Bitmap Font & Damage Numeral Exporter (Screen 4M):** Rasterize pure-TS `5×7` monochrome bitmaps (`pixelGlyphTable.ts`) or `.ttf`/`.otf`/`.woff2` / system font faces (`fontRasterizer.ts`), bake vertical 2-stop palette-snapped gradients + 4-/8-way OKLab Sel-Out outlines + hard drop shadows into Power-of-Two shelf atlases off-thread (`bitmapFont.ts`, `BAKE_BITMAP_FONT`), audition animated floating Crit Pops over game biomes (`BitmapFontWorkshop.tsx`), and export Godot 4 `.fnt`, Phaser 3 / PixiJS `.xml`, `<slug>.png`, and Zod-validated `<slug>.recipe.json` ZIPs (`bmfontExporter.ts`, `zipPackager.ts`).
+- **Entity Hub, Godot 4 `.tscn` Prefab Assembler & Live `res://` Sync:** Group `SpriteNode` clips, optional Sobel normal maps, M16 colliders/hitboxes, M21 sockets, and M14/M15 WAVs into Dexie v3 `EntityDefinition` records (`entitySchema.ts`) without duplicating blobs; assemble lossless `.png.import` sidecars, `CanvasTexture`, `SpriteFrames`, synchronized `AnimationLibrary`, and complete `.tscn` scenes in pure TS (`godotPrefabAssembler.ts`); inspect cards & `.tscn Preview` (`EntityHubView.tsx`); and stream SHA-256-diffed writes (`syncDiff.ts`) straight to a bound local Godot project via the File System Access API or `fflate` ZIP fallback (`fsaaSyncEngine.ts`, `GodotSyncPill.tsx`).
 
 ---
 

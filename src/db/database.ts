@@ -1,5 +1,11 @@
 import Dexie, { type Table } from 'dexie';
 import {
+  EntityDefinitionSchema,
+  GodotSyncTargetMetaSchema,
+  type EntityDefinition,
+  type GodotSyncTargetRecord,
+} from '../domain/entitySchema';
+import {
   ArtBibleSchema,
   AudioAssetSchema,
   AudioBindingsSchema,
@@ -32,6 +38,8 @@ export class NibgridDatabase extends Dexie {
   spriteNodes!: Table<SpriteNode, string>;
   providerConfigs!: Table<ProviderConfig, string>;
   audioAssets!: Table<AudioAsset, string>;
+  entities!: Table<EntityDefinition, string>;
+  syncTargets!: Table<GodotSyncTargetRecord, string>;
 
   constructor(dbName = 'nibgrid-db') {
     super(dbName);
@@ -47,6 +55,15 @@ export class NibgridDatabase extends Dexie {
       spriteNodes: 'id, projectId, parentId, [projectId+createdAt]',
       providerConfigs: 'id, kind, updatedAt',
       audioAssets: 'id, projectId, presetId, createdAt',
+    });
+    this.version(3).stores({
+      projects: 'id, updatedAt, name',
+      blobs: 'id, sha256, createdAt',
+      spriteNodes: 'id, projectId, parentId, [projectId+createdAt]',
+      providerConfigs: 'id, kind, updatedAt',
+      audioAssets: 'id, projectId, presetId, createdAt',
+      entities: '&id, projectId, slug',
+      syncTargets: '&projectId',
     });
   }
 }
@@ -366,16 +383,88 @@ export class NibgridRepository {
     );
   }
 
+  async listEntities(projectId: string): Promise<EntityDefinition[]> {
+    const rows = await this.database.entities.where('projectId').equals(projectId).toArray();
+    return rows
+      .map((row) => EntityDefinitionSchema.parse(row))
+      .sort((a, b) => b.updatedAt - a.updatedAt);
+  }
+
+  async saveEntity(entity: EntityDefinition): Promise<EntityDefinition> {
+    const validated = EntityDefinitionSchema.parse(entity);
+    await this.database.transaction(
+      'rw',
+      [this.database.entities, this.database.projects],
+      async () => {
+        await this.database.entities.put(validated);
+        await this.database.projects
+          .where('id')
+          .equals(validated.projectId)
+          .modify({ updatedAt: nowIso() });
+      },
+    );
+    return validated;
+  }
+
+  async deleteEntity(entityId: string): Promise<void> {
+    await this.database.entities.delete(entityId);
+  }
+
+  async getSyncTarget(projectId: string): Promise<GodotSyncTargetRecord | undefined> {
+    const found = await this.database.syncTargets.get(projectId);
+    if (!found) return undefined;
+    const meta = GodotSyncTargetMetaSchema.parse({
+      projectId: found.projectId,
+      folderName: found.folderName,
+      lastSyncedHashes: found.lastSyncedHashes ?? {},
+      lastSyncedAt: found.lastSyncedAt ?? null,
+    });
+    return {
+      ...meta,
+      directoryHandle: found.directoryHandle ?? null,
+    };
+  }
+
+  async saveSyncTarget(record: GodotSyncTargetRecord): Promise<GodotSyncTargetRecord> {
+    const meta = GodotSyncTargetMetaSchema.parse({
+      projectId: record.projectId,
+      folderName: record.folderName,
+      lastSyncedHashes: record.lastSyncedHashes ?? {},
+      lastSyncedAt: record.lastSyncedAt ?? null,
+    });
+    const toStore: GodotSyncTargetRecord = {
+      ...meta,
+      directoryHandle: record.directoryHandle ?? null,
+    };
+    try {
+      await this.database.syncTargets.put(toStore);
+    } catch {
+      // Non-cloneable mock directory handles (e.g. Playwright/Vitest stubs) still persist metadata cleanly.
+      await this.database.syncTargets.put({ ...meta, directoryHandle: null });
+    }
+    return toStore;
+  }
+
+  async clearSyncTarget(projectId: string): Promise<void> {
+    await this.database.syncTargets.delete(projectId);
+  }
+
   async deleteProjectCascade(projectId: string): Promise<void> {
     await this.database.transaction(
       'rw',
-      this.database.projects,
-      this.database.spriteNodes,
-      this.database.audioAssets,
-      this.database.blobs,
+      [
+        this.database.projects,
+        this.database.spriteNodes,
+        this.database.audioAssets,
+        this.database.entities,
+        this.database.syncTargets,
+        this.database.blobs,
+      ],
       async () => {
         await this.database.spriteNodes.where('projectId').equals(projectId).delete();
         await this.database.audioAssets.where('projectId').equals(projectId).delete();
+        await this.database.entities.where('projectId').equals(projectId).delete();
+        await this.database.syncTargets.delete(projectId);
         await this.database.projects.delete(projectId);
         await this.cleanupOrphanedBlobsInTx();
       },

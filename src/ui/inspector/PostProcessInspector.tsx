@@ -1035,6 +1035,9 @@ export function PostProcessInspector({
       await repository.saveSpriteNode({
         ...current,
         assetClass: latestAssetClassRef.current,
+        ...(latestCollisionShapesRef.current.length > 0
+          ? { collisionShapes: latestCollisionShapesRef.current }
+          : {}),
         sockets: nextSockets,
       });
       await refreshSpriteNodes(activeProject.id);
@@ -1051,6 +1054,10 @@ export function PostProcessInspector({
       await repository.saveSpriteNode({
         ...current,
         assetClass: latestAssetClassRef.current,
+        ...(latestCollisionShapesRef.current.length > 0
+          ? { collisionShapes: latestCollisionShapesRef.current }
+          : {}),
+        ...(latestSocketsRef.current.length > 0 ? { sockets: latestSocketsRef.current } : {}),
         vfxFlipbook: savedConfig,
       });
       await refreshSpriteNodes(activeProject.id);

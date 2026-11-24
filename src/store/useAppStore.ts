@@ -1,5 +1,6 @@
 import { create } from 'zustand';
 import { OFFLINE_MOCK_PROVIDER_ID, repository, type ProjectSummary } from '../db/database';
+import type { EntityDefinition, GodotSyncTargetRecord } from '../domain/entitySchema';
 import type {
   AdherenceLevel,
   ArtBible,
@@ -32,7 +33,8 @@ export type ScreenRoute =
   | { screen: 'inspector'; projectId: string; nodeId: string; initialTab?: InspectorTab }
   | { screen: 'atlas'; projectId: string }
   | { screen: 'audio'; projectId: string }
-  | { screen: 'audit'; projectId: string };
+  | { screen: 'audit'; projectId: string }
+  | { screen: 'entities'; projectId: string };
 
 const VALID_INSPECTOR_TABS = new Set<InspectorTab>([
   'postprocess',
@@ -86,6 +88,10 @@ export function parseHashRoute(hash: string): ScreenRoute {
   if (auditMatch?.[1]) {
     return { screen: 'audit', projectId: auditMatch[1] };
   }
+  const entitiesMatch = /^\/project\/([^/]+)\/entities$/.exec(path);
+  if (entitiesMatch?.[1]) {
+    return { screen: 'entities', projectId: entitiesMatch[1] };
+  }
   return { screen: 'hub' };
 }
 
@@ -109,6 +115,9 @@ export function formatHashRoute(route: ScreenRoute): string {
   if (route.screen === 'audit') {
     return `#/project/${route.projectId}/audit`;
   }
+  if (route.screen === 'entities') {
+    return `#/project/${route.projectId}/entities`;
+  }
   return '#/';
 }
 
@@ -118,6 +127,8 @@ interface AppState {
   activeProject: Project | null;
   spriteNodes: SpriteNode[];
   audioAssets: AudioAsset[];
+  entities: EntityDefinition[];
+  syncTarget: GodotSyncTargetRecord | null;
   providers: ProviderConfig[];
   selectedProviderId: string;
   studioAdherence: AdherenceLevel;
@@ -152,6 +163,11 @@ interface AppState {
   saveAudioAssetRecord: (asset: AudioAsset) => Promise<AudioAsset>;
   deleteAudioAssetRecord: (assetId: string, projectId: string) => Promise<void>;
   patchProjectAudioBindings: (patch: Partial<AudioBindings>) => Promise<void>;
+
+  refreshEntities: (projectId: string) => Promise<void>;
+  saveEntityRecord: (entity: EntityDefinition) => Promise<EntityDefinition>;
+  deleteEntityRecord: (entityId: string, projectId: string) => Promise<void>;
+  refreshSyncTarget: (projectId: string) => Promise<void>;
 }
 
 let projectWriteQueue: Promise<void> = Promise.resolve();
@@ -171,6 +187,8 @@ export const useAppStore = create<AppState>((set, get) => ({
   activeProject: null,
   spriteNodes: [],
   audioAssets: [],
+  entities: [],
+  syncTarget: null,
   providers: [],
   selectedProviderId: OFFLINE_MOCK_PROVIDER_ID,
   studioAdherence: 'balanced',
@@ -194,9 +212,11 @@ export const useAppStore = create<AppState>((set, get) => ({
       if (initialRoute.screen !== 'hub') {
         const project = await repository.getProject(initialRoute.projectId);
         if (project) {
-          const [spriteNodes, audioAssets] = await Promise.all([
+          const [spriteNodes, audioAssets, entities, syncTarget] = await Promise.all([
             repository.listSpriteNodes(project.id),
             repository.listAudioAssets(project.id),
+            repository.listEntities(project.id),
+            repository.getSyncTarget(project.id),
           ]);
           set({
             route: initialRoute,
@@ -205,6 +225,8 @@ export const useAppStore = create<AppState>((set, get) => ({
             activeProject: project,
             spriteNodes,
             audioAssets,
+            entities,
+            syncTarget: syncTarget ?? null,
             isLoading: false,
           });
           return;
@@ -221,6 +243,8 @@ export const useAppStore = create<AppState>((set, get) => ({
         activeProject: null,
         spriteNodes: [],
         audioAssets: [],
+        entities: [],
+        syncTarget: null,
         isLoading: false,
       });
     } catch (error) {
@@ -247,6 +271,8 @@ export const useAppStore = create<AppState>((set, get) => ({
         activeProject: null,
         spriteNodes: [],
         audioAssets: [],
+        entities: [],
+        syncTarget: null,
         errorMessage: null,
       });
       return;
@@ -264,6 +290,8 @@ export const useAppStore = create<AppState>((set, get) => ({
         activeProject: null,
         spriteNodes: [],
         audioAssets: [],
+        entities: [],
+        syncTarget: null,
         errorMessage: `Project "${route.projectId}" was not found.`,
       });
       return;
@@ -271,15 +299,19 @@ export const useAppStore = create<AppState>((set, get) => ({
 
     const prevProjectId = get().activeProject?.id;
     const isSwitchingProject = prevProjectId !== project.id;
-    const [spriteNodes, audioAssets] = await Promise.all([
+    const [spriteNodes, audioAssets, entities, syncTarget] = await Promise.all([
       repository.listSpriteNodes(project.id),
       repository.listAudioAssets(project.id),
+      repository.listEntities(project.id),
+      repository.getSyncTarget(project.id),
     ]);
     set({
       route,
       activeProject: project,
       spriteNodes,
       audioAssets,
+      entities,
+      syncTarget: syncTarget ?? null,
       errorMessage: null,
       ...(isSwitchingProject ? { studioAdherence: 'balanced', studioVariantCount: 2 } : {}),
     });
@@ -314,6 +346,8 @@ export const useAppStore = create<AppState>((set, get) => ({
         activeProject: null,
         spriteNodes: [],
         audioAssets: [],
+        entities: [],
+        syncTarget: null,
         projects,
       });
     } else {
@@ -470,5 +504,28 @@ export const useAppStore = create<AppState>((set, get) => ({
         set({ projects, errorMessage: null });
       }
     });
+  },
+
+  refreshEntities: async (projectId) => {
+    const entities = await repository.listEntities(projectId);
+    set({ entities });
+  },
+
+  saveEntityRecord: async (entity) => {
+    const saved = await repository.saveEntity(entity);
+    const entities = await repository.listEntities(saved.projectId);
+    set({ entities });
+    return saved;
+  },
+
+  deleteEntityRecord: async (entityId, projectId) => {
+    await repository.deleteEntity(entityId);
+    const entities = await repository.listEntities(projectId);
+    set({ entities });
+  },
+
+  refreshSyncTarget: async (projectId) => {
+    const target = await repository.getSyncTarget(projectId);
+    set({ syncTarget: target ?? null });
   },
 }));
