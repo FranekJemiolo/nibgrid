@@ -1,6 +1,6 @@
 # Nibgrid
 
-Local-first, zero-server Bring-Your-Own-Key / Bring-Your-Own-Model (BYOK/BYOM) Progressive Web App for turning hand-drawn sketches and vocal hums into style-locked, engine-ready 2D game sprites, normal maps, animations, colliders, UI panels, and audio.
+Local-first, zero-server Bring-Your-Own-Key / Bring-Your-Own-Model (BYOK/BYOM) Progressive Web App for turning hand-drawn sketches and vocal hums into style-locked, engine-ready 2D game sprites, 4-view turnarounds, normal maps, animations, auto-tiles, mesh-tracked sockets, VFX flipbooks, colliders, UI panels, and audio.
 
 **Live App (GitHub Pages):** https://franekjemiolo.github.io/nibgrid/
 
@@ -28,6 +28,11 @@ Local-first, zero-server Bring-Your-Own-Key / Bring-Your-Own-Model (BYOK/BYOM) P
   - [2.9 Turn Microphone Hums or WAV Sketches into Game Audio (Screen 6 · Mic Sketch)](#29-turn-microphone-hums-or-wav-sketches-into-game-audio-screen-6--mic-sketch)
   - [2.10 Audit Project Compliance & Run 1-Click $0.00 Batch Fixes (Screen 7)](#210-audit-project-compliance--run-1-click-000-batch-fixes-screen-7)
   - [2.11 Pair the Local Antigravity Loopback Bridge (127.0.0.1:4188)](#211-pair-the-local-antigravity-loopback-bridge-1270014188)
+  - [2.12 Slice 2×2 / 1×4 Turnaround Sheets into Linked Views (Screen 4H)](#212-slice-22--14-turnaround-sheets-into-linked-views-screen-4h)
+  - [2.13 Navigate Fast with Contextual Tabs, 1× PiP, Wipe & Command Palette (Studio UX)](#213-navigate-fast-with-contextual-tabs-1-pip-wipe--command-palette-studio-ux)
+  - [2.14 Paint & Export Blob-47 / Wang-16 Auto-Tile Terrain Sets (Screen 4I)](#214-paint--export-blob-47--wang-16-auto-tile-terrain-sets-screen-4i)
+  - [2.15 Bind Mesh-Tracked Attachment Sockets onto Sprites & Rigs (Screen 4J)](#215-bind-mesh-tracked-attachment-sockets-onto-sprites--rigs-screen-4j)
+  - [2.16 Bake Procedural 2D VFX Flipbooks & Particle Sheets (Screen 4K)](#216-bake-procedural-2d-vfx-flipbooks--particle-sheets-screen-4k)
 - [Part 3 — Engine Drop-In Integration Examples](#part-3--engine-drop-in-integration-examples)
 - [Architecture Summary](#architecture-summary)
 - [Development & Verification](#development--verification)
@@ -52,6 +57,11 @@ Local-first, zero-server Bring-Your-Own-Key / Bring-Your-Own-Model (BYOK/BYOM) P
 | Procedural SFX, Google Lyria 3 Music & Gemini TTS | `Audio Foundry` (Screen 6)             | `$0.00 Local` or Single Gemini Key         | 16-bit WAV + 1/4/6× variations + `.audio.recipe.json`                                               |
 | Mic Hum-to-Laser, Engine Rev or Chiptune Melody   | `Audio Foundry` → `Mic Sketch`         | `$0.00 Local` or Single Gemini Key         | Contour-locked WAVs + `audioSketch` recipe                                                          |
 | Project-Wide Asset Drift Audit & Batch Re-Bake    | `Audit` (Screen 7)                     | `$0.00 Local`                              | Readiness `0–100` matrix + reversible batch fixes                                                   |
+| 4-View Directional Character Turnarounds          | `Turnaround Slicer` (Screen 4H)        | `$0.00 Local` (BFS Auto-Slicer)            | 4 linked `directionGroupId` nodes + shared pivot                                                    |
+| Asset-Class Workspaces, `1×` PiP & Quick-Switch   | Screen 4 HUD + `Cmd/Ctrl+K` Palette    | `$0.00 Local` (Canvas2D + Drop Router)     | Class-aware tabs, `BeforeAfterWipe`, drag-drop import                                               |
+| Blob-47 & Wang-16 Terrain Tilemaps                | `Auto-Tile` (Screen 4I)                | `$0.00 Local` (Worker SDF Compositor)      | Packed sheet PNG, Godot `_tileset.tres`, Tiled `.tsx`                                               |
+| Deforming Weapon, Muzzle & Exhaust Sockets        | `Attachment Sockets` (Screen 4J)       | `$0.00 Local` (Barycentric MLS Binding)    | `_sockets.json`, Godot `Marker2D` `.tscn`, Phaser/Pixi JSON                                         |
+| Procedural Sparks, Smoke, Rings & Dissolve VFX    | `VFX Baker` (Screen 4K)                | `$0.00 Local` (Worker FBM Synthesizer)     | Packed `_vfx_sheet.png`, Godot `GPUParticles2D`, Pixi JSON                                          |
 
 ---
 
@@ -378,6 +388,86 @@ Once a sprite is inside **Post-Process & Export Inspector** (`Screen 4`), switch
 
 ---
 
+### 2.12 Slice 2×2 / 1×4 Turnaround Sheets into Linked Views (Screen 4H)
+
+**When to use it:** Generating `south`, `east`, `north`, and `west` directions in four separate AI calls causes outfit and proportion drift. Sheet Mode generates all four orthographic views in one pass and extracts uniformly scaled, pivot-locked directional sprites cleanly.
+
+**Click-by-Click:**
+
+1. In **Sprite Studio** (`Screen 3`), toggle Sheet Mode to **`2x2`** or **`1x4`** in **Generation Inspector** and click **Generate**.
+2. Click the generated turnaround node card and click **Open Post-Process**—Nibgrid opens **`Turnaround Slicer`** (`Screen 4H`) automatically with 4-connected BFS view detection offloaded to a Web Worker.
+3. Adjust **Uniform Padding**, **Min Speck Pixels (BFS Threshold)**, **Normalize Height (Median Lock)**, **Mirror East → West**, and **Slot Direction Mapping** (`SOUTH`, `EAST`, `NORTH`, `WEST`) as needed.
+4. Switch between **`Onion-Skin Stack`** (35% layered silhouettes over the bottom-center pivot crosshair) and **`Turntable`** playback to confirm foot-ground alignment across all 4 angles.
+5. Click **`Commit 4 Linked Views`** to store all 4 directional `SpriteNode`s atomically under a shared `directionGroupId`, ready to drop straight into **Screen 5 Atlas Packer**.
+
+![Screen 4H — Orthographic Turnaround Auto-Slicer and Onion-Skin Alignment](docs/demo/17-turnaround-sheet-slicer.png)
+
+---
+
+### 2.13 Navigate Fast with Contextual Tabs, 1× PiP, Wipe & Command Palette (Studio UX)
+
+**When to use it:** Keep your canvas large and unobstructed while switching seamlessly between character, prop, tile, UI-panel, and VFX tools across screens.
+
+**Click-by-Click:**
+
+1. Use the **`Class`** dropdown (`Character`, `Prop`, `Tile / Terrain`, `UI Panel`, `VFX`) in Screen 4's header to tailor primary tabs automatically (for example, `UI Panel` streamlines to 3 primary tabs while tucking secondary tools into **`+ Tools`**).
+2. Drag **`ScrubInput`** number bars horizontally for fast coarse adjustments (`Shift+Drag` for `0.1×` precision, double-click to type an exact value), and use the floating **`CanvasHud`** pill for zoom, pixel grid, backdrops, and wipe toggles.
+3. Drag the **Before/After Wipe** divider across **Raw/Processed** (`Screen 4A`), **Flat Albedo/Lit Normal** (`Screen 4B`), and **Base/LUT** (`Screen 4E`) previews (press `\` to toggle or double-click to reset to `50%`).
+4. Keep an eye on the draggable **`1×` PiP Biome Contrast** card in the bottom-right corner (`P` toggles collapse) to verify sprite readability over dungeon, meadow, or snow backdrops at native scale without leaving your active tool.
+5. Press **`Cmd/Ctrl+K`** (or click **`⌘K`**) anywhere in Nibgrid to jump directly to any screen, Inspector tool, sprite node, or audio clip—or drop `.png`/`.webp`/`.wav` files onto any window edge to open the **Universal Drop Router**.
+
+![Studio UX — Neutral Chrome, Before/After Wipe, 1× PiP Biome & Command Palette](docs/demo/18-studio-ux-command-palette.png)
+
+---
+
+### 2.14 Paint & Export Blob-47 / Wang-16 Auto-Tile Terrain Sets (Screen 4I)
+
+**When to use it:** Painting cliffs, mossy floors, roads, and dungeon platforms manually requires dozens of inner and outer corner tiles. Nibgrid generates canonical 47-tile Blob (`8×6`) or 16-tile Wang (`4×4`) sheets directly from any square terrain fill texture and lets you paint-test transitions live.
+
+**Click-by-Click:**
+
+1. Open Screen 4 on a square terrain texture (set **`Class` → `Tile / Terrain`**, or pick **`Auto-Tile`** from `+ Tools`).
+2. Under **Auto-Tile Rule Set**, select **`Blob-47 (8×6)`** or **`Wang-16 (4×4)`**.
+3. Pick an **Edge Treatment Style** (`Organic Overhang (Deterministic Jitter)`, `Crisp Bevel`, or `Pixel Outline`), optionally pick an **Underlay Terrain Sprite** from your project (e.g., dirt under grass), and dial **SDF Transition Geometry** (`Border Inset`, `Corner Radius`, `Organic Jitter`, `Edge Tint`, `Seed`).
+4. Left-click/drag directly across **`Live 12×8 Paint Map`** (or click **`Load Sample Map`**) to test inner corners, corridors, and islands in real time, and toggle **`Full Packed Sheet`** to inspect the complete `8×6` or `4×4` texture.
+5. Click **`Save to Project`** and **`Download Terrain Bundle (.zip)`** to export the packed PNG, Godot 4 `TileSet` `<slug>_tileset.tres`, Tiled `<slug>.tsx` (`<wangsets>`), and `<slug>.recipe.json`.
+
+![Screen 4I — Blob-47 & Wang-16 Auto-Tile Terrain Generator](docs/demo/19-autotile-terrain-generator.png)
+
+---
+
+### 2.15 Bind Mesh-Tracked Attachment Sockets onto Sprites & Rigs (Screen 4J)
+
+**When to use it:** Spawning bullets at a gun barrel, attaching a held torch or sword, or anchoring thruster particles shouldn't break the moment a character breathes or bends. Named sockets bind once to M9 Moving Least Squares triangles via barycentric coordinates and follow every frame's position and angle.
+
+**Click-by-Click:**
+
+1. Open **`Attachment Sockets`** in Screen 4 (`Character`, `Prop`, `VFX`, or `+ Tools`).
+2. Click **Quick Presets** (`+ hand_r`, `+ hand_l`, `+ muzzle`, `+ exhaust`, `+ head`, `+ center`) or enter a **Custom Socket ID** (auto-sanitized to `^[a-z0-9_]+$`) and click **Add**.
+3. Drag each color-coded crosshair directly on the rest-pose stage relative to the amber Pivot crosshair, and scrub **Base Angle** (in degrees) on the left pane (press `Delete`/`Backspace` outside text inputs to remove the selected socket).
+4. If your sprite has **Puppet Warp Animator** (`Screen 4C`) pins, scrub the bottom **Frame Slider** to inspect deformed `(x, y)` coordinates and tangent rotations tracked across every animation frame.
+5. Preview **`Godot 4`** (`Marker2D`), **`Phaser 3`** JSON, or **`PixiJS`** JSON on the right, click **`Save Sockets to Project`**, and click **`Download Sprite + Sockets ZIP`** (any sprite ZIP export with sockets automatically bundles `<slug>_sockets.json` and records `sockets[]` in `<slug>.recipe.json`).
+
+![Screen 4J — Named Attachment Sockets & Godot 4 Marker2D Exporter](docs/demo/20-attachment-sockets-editor.png)
+
+---
+
+### 2.16 Bake Procedural 2D VFX Flipbooks & Particle Sheets (Screen 4K)
+
+**When to use it:** Generating multi-frame spark bursts, dust clouds, rising smoke, impact rings, or burning pixel dissolves frame-by-frame with AI leads to popping centers and uneven frame sizes. Screen 4K synthesizes deterministic `cols × rows` sheets off the main thread in a Web Worker.
+
+**Click-by-Click:**
+
+1. Set **`Class` → `VFX`** (or open **`VFX Baker`** from `+ Tools` / `Cmd+K`).
+2. Pick a **VFX Archetype** (**`Sparks`**, **`Dust Puff`**, **`Smoke`**, **`Hit Ring`**, or **`Noise Dissolve`**), **Grid Layout** (`4×4`, `8×2`, `4×2`), and **Cell Size** (`32px`, `64px`).
+3. Dial **`Seed`**, **`Spread`**, **`Turbulence`**, and **`Playback FPS`** with `ScrubInput`, pick **Core** / **Outer** colors from your **Art Bible** swatches (toggle **`Snap to Art Bible Palette`** to quantize every frame cleanly, or **`Use Active Sprite (Dissolve)`** to erode the active sprite silhouette).
+4. Switch between **`Live Flipbook`** (`Play`/`Pause`, **`Ping-Pong`**, `Checker`/`Dark`/`Light` stage) and **`Full Sheet`** (`256×256` grid inspection).
+5. Inspect **`Godot .tres`**, **`Godot .tscn`**, or **`PixiJS JSON`**, click **`Save VFX to Project`**, and click **`Download VFX ZIP`** to export `<slug>_vfx_sheet.png`, Godot `CanvasItemMaterial` `.tres` + `GPUParticles2D` `.tscn`, `<slug>_vfx_pixi.json`, and `<slug>.recipe.json`.
+
+![Screen 4K — Procedural 2D VFX Flipbook & Particle Sheet Baker](docs/demo/21-vfx-flipbook-baker.png)
+
+---
+
 ## Part 3 — Engine Drop-In Integration Examples
 
 ### Godot 4 (`4.2+`)
@@ -404,25 +494,34 @@ Nibgrid exports Godot-native `.tres` resources (`AtlasTexture` / `SpriteFrames`,
    ```
 4. **9-Slice UI Panel (`<slug>_stylebox.tres`):**
    - Drop `<slug>.png` and `<slug>_stylebox.tres` into the same `res://ui/` folder and assign `<slug>_stylebox.tres` directly to `PanelContainer` or `Button` → `Theme Overrides` → `Styles` → `Panel` / `Normal`.
+5. **Blob-47 / Wang-16 Terrain (`<slug>_tileset.tres`), `Marker2D` Sockets & `GPUParticles2D` VFX:**
+   - Drop `<slug>_autotile_blob-47.png` + `<slug>_tileset.tres` into `TileMapLayer.tile_set` to paint terrain transitions immediately with pre-bound `terrains_peering_bit/*` rules.
+   - Paste the exported `[node name="..." type="Marker2D" parent="."]` blocks into your character `.tscn` under the centered `Sprite2D` / `AnimatedSprite2D`, or load `<slug>_vfx_godot.tscn` + `<slug>_vfx_godot.tres` directly for one-shot flipbook `GPUParticles2D` bursts.
 
 ### Phaser 3 (`3.60+`) + Matter.js
 
 ```ts
-// 1. Preload packed Multiatlas + combined Matter PhysicsEditor JSON from Atlas Packer ZIP
+// 1. Preload packed Multiatlas, combined Matter PhysicsEditor JSON & Attachment Sockets
 this.load.multiatlas('hero_atlas', 'assets/atlas.json', 'assets');
 this.load.json('hero_physics', 'assets/atlas_physics.json');
+this.load.json('hero_sockets', 'assets/cat-warrior_sockets.json');
+this.load.tilemapTiledJSON('level_tileset', 'assets/moss-turf.tsx'); // Tiled auto-tile XML
 
-// 2. Spawn physics-backed sprite in Scene.create() using exact bottom-center pivot alignment
+// 2. Spawn physics-backed sprite and sync a muzzle attachment per animation frame
 const shapes = this.cache.json.get('hero_physics');
+const sockets = this.cache.json.get('hero_sockets').sockets;
 const hero = this.matter.add.sprite(240, 180, 'hero_atlas', 'cat_warrior_0', {
   shape: shapes.cat_warrior,
 });
+const frame0Muzzle = sockets.muzzle.frames[0];
+const muzzleWorldX = hero.x + frame0Muzzle.x;
+const muzzleWorldY = hero.y + frame0Muzzle.y;
 ```
 
 ### PixiJS v8
 
 ```ts
-import { Assets, AnimatedSprite, NineSliceSprite } from 'pixi.js';
+import { Assets, AnimatedSprite, NineSliceSprite, Texture, Rectangle } from 'pixi.js';
 import { createPaletteSwapFilter } from './cat_warrior_lut_pixi';
 
 // 1. Load packed PixiJS v8 JSON Hash atlas + animations
@@ -435,7 +534,24 @@ runner.play();
 const lutTex = await Assets.load('assets/cat_warrior_lut.png');
 runner.filters = [createPaletteSwapFilter(lutTex, 1)]; // switch to Variant row 1
 
-// 3. Responsive 9-Slice UI frame from <slug>_nineslice_pixi.json margins
+// 3. Track named attachment socket (`<slug>_sockets.json`) and trigger VFX flipbook (`_vfx_pixi.json`)
+const socketSpec = await (await fetch('assets/cat-warrior_sockets.json')).json();
+const vfxSpec = await (await fetch('assets/spark-burst_vfx_pixi.json')).json();
+const vfxBase = await Assets.load(vfxSpec.texture);
+const vfxFrames = vfxSpec.frames.map(
+  (f: { x: number; y: number; w: number; h: number }) =>
+    new Texture({ source: vfxBase.source, frame: new Rectangle(f.x, f.y, f.w, f.h) }),
+);
+const burst = new AnimatedSprite(vfxFrames);
+burst.blendMode = vfxSpec.blendMode; // 'add' for Sparks / Hit Rings, 'normal' for Smoke / Dust
+burst.animationSpeed = vfxSpec.fps / 60;
+const handFrame = socketSpec.sockets.hand_r.frames[runner.currentFrame];
+burst.position.set(runner.x + handFrame.x, runner.y + handFrame.y);
+burst.rotation = handFrame.rotationRad;
+burst.loop = false;
+burst.play();
+
+// 4. Responsive 9-Slice UI frame from <slug>_nineslice_pixi.json margins
 const sliceMeta = await (await fetch('assets/panel_nineslice_pixi.json')).json();
 const panel = new NineSliceSprite({
   texture: await Assets.load('assets/panel.png'),
