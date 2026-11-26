@@ -25,6 +25,7 @@ import {
   ShaderConfigSchema,
   SocketDefinitionSchema,
   TurnaroundMetaSchema,
+  UiKitStyleConfigSchema,
   VfxFlipbookConfigSchema,
   type AssetClass,
   type AutoTileConfig,
@@ -43,6 +44,7 @@ import {
   type SocketDefinition,
   type SpriteNode,
   type TurnaroundMeta,
+  type UiKitStyleConfigSchemaType,
   type VfxFlipbookConfig,
 } from '../domain/schemas';
 
@@ -134,6 +136,7 @@ export const AssetRecipeSchema = z.object({
   parallaxScene: ParallaxSceneConfigSchema.optional(),
   bitmapFont: BitmapFontConfigSchema.optional(),
   shaderConfig: ShaderConfigSchema.optional(),
+  uiKitConfig: UiKitStyleConfigSchema.optional(),
   inpaintHistory: z.array(InpaintHistoryEntrySchema).optional(),
   manualPixelEditCount: z.number().int().nonnegative().optional(),
 });
@@ -176,6 +179,7 @@ export interface BuildAssetRecipeInput {
   parallaxScene?: ParallaxSceneConfig;
   bitmapFont?: BitmapFontConfig;
   shaderConfig?: ShaderConfig;
+  uiKitConfig?: UiKitStyleConfigSchemaType;
   inpaintHistory?: readonly InpaintHistoryEntry[];
   manualPixelEditCount?: number;
 }
@@ -276,6 +280,9 @@ export function buildAssetRecipe(input: BuildAssetRecipeInput): AssetRecipe {
       : {}),
     ...((input.shaderConfig ?? node.shaderConfig)
       ? { shaderConfig: input.shaderConfig ?? node.shaderConfig }
+      : {}),
+    ...((input.uiKitConfig ?? node.uiKitConfig)
+      ? { uiKitConfig: input.uiKitConfig ?? node.uiKitConfig }
       : {}),
     ...(() => {
       const sockList = input.sockets ?? node.sockets;

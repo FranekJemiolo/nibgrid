@@ -36,6 +36,7 @@ import {
   createDefaultPuppetAnimConfig,
   createDefaultSeamlessTileConfig,
   createDefaultShaderConfig,
+  createDefaultUiKitConfig,
   createDefaultVfxFlipbookConfig,
   type AssetClass,
   type AutoTileConfig,
@@ -58,6 +59,7 @@ import {
   type ShaderConfig,
   type SocketDefinition,
   type SpriteNode,
+  type UiKitStyleConfigSchemaType,
   type VfxFlipbookConfig,
 } from '../../domain/schemas';
 import { buildColliderExportFiles } from '../../export/colliderExporters';
@@ -118,6 +120,7 @@ import { ShaderStudio } from './ShaderStudio';
 import { SocketEditor } from './SocketEditor';
 import { TileAndSliceWorkshop } from './TileAndSliceWorkshop';
 import { TurnaroundSlicer } from './TurnaroundSlicer';
+import { UiKitWorkshop } from './UiKitWorkshop';
 import { VfxBaker } from './VfxBaker';
 import {
   ASSET_CLASS_OPTIONS,
@@ -296,6 +299,10 @@ export function PostProcessInspector({
   const [shaderConfig, setShaderConfig] = useState<ShaderConfig>(
     () => targetNode?.shaderConfig ?? createDefaultShaderConfig(),
   );
+  const [uiKitConfig, setUiKitConfig] = useState<UiKitStyleConfigSchemaType>(
+    () =>
+      targetNode?.uiKitConfig ?? createDefaultUiKitConfig(activeProject?.artBible.palette ?? []),
+  );
   const [activeSpriteBuffer, setActiveSpriteBuffer] = useState<RgbaBuffer | null>(null);
   const bakedNormalRef = useRef<{ buffer: RgbaBuffer; key: string } | null>(null);
   const [foundryStats, setFoundryStats] = useState<{
@@ -402,6 +409,8 @@ export function PostProcessInspector({
   latestBitmapFontRef.current = bitmapFontConfig;
   const latestShaderConfigRef = useRef(shaderConfig);
   latestShaderConfigRef.current = shaderConfig;
+  const latestUiKitRef = useRef(uiKitConfig);
+  latestUiKitRef.current = uiKitConfig;
 
   useEffect(() => {
     if (!overflowOpen) return;
@@ -444,6 +453,10 @@ export function PostProcessInspector({
     setParallaxSceneConfig(node.parallaxScene ?? createDefaultParallaxSceneConfig());
     setBitmapFontConfig(node.bitmapFont ?? createDefaultBitmapFontConfig());
     setShaderConfig(node.shaderConfig ?? createDefaultShaderConfig());
+    setUiKitConfig(
+      node.uiKitConfig ??
+        createDefaultUiKitConfig(latestProjectRef.current?.artBible.palette ?? []),
+    );
     pixelUndoStackRef.current.clear();
     setUndoState({ canUndo: false, canRedo: false });
     inpaintMaskRef.current = new Uint8Array(0);
@@ -512,28 +525,25 @@ export function PostProcessInspector({
     const timer = window.setTimeout(() => {
       const currentNode = latestNodeRef.current;
       if (!currentNode || currentNode.id !== targetNodeId) return;
-      const persistedLut =
-        latestLutVariantsRef.current.length > 0
-          ? paletteVariantsToConfig(latestLutVariantsRef.current, currentNode.paletteLut)
-          : currentNode.paletteLut;
       void repository
-        .saveSpriteNode({
-          ...currentNode,
-          assetClass: latestAssetClassRef.current,
-          puppetAnim: latestPuppetRef.current,
-          ...(latestNineSliceRef.current.enabled ? { nineSlice: latestNineSliceRef.current } : {}),
-          ...(persistedLut ? { paletteLut: persistedLut } : {}),
-          ...(latestCollisionShapesRef.current.length > 0
-            ? { collisionShapes: latestCollisionShapesRef.current }
-            : { collisionShapes: [] }),
-          ...(latestSocketsRef.current.length > 0
-            ? { sockets: latestSocketsRef.current }
-            : { sockets: [] }),
-          ...(currentNode.autoTile ? { autoTile: latestAutoTileRef.current } : {}),
-          ...(currentNode.vfxFlipbook ? { vfxFlipbook: latestVfxFlipbookRef.current } : {}),
-          ...(currentNode.parallaxScene ? { parallaxScene: latestParallaxSceneRef.current } : {}),
-          ...(currentNode.bitmapFont ? { bitmapFont: latestBitmapFontRef.current } : {}),
-          ...(currentNode.shaderConfig ? { shaderConfig: latestShaderConfigRef.current } : {}),
+        .patchSpriteNode(targetNodeId, (existing) => {
+          const persistedLut =
+            latestLutVariantsRef.current.length > 0
+              ? paletteVariantsToConfig(latestLutVariantsRef.current, existing.paletteLut)
+              : existing.paletteLut;
+          return {
+            ...existing,
+            assetClass: latestAssetClassRef.current,
+            puppetAnim: latestPuppetRef.current,
+            ...(latestNineSliceRef.current.enabled ? { nineSlice: latestNineSliceRef.current } : {}),
+            ...(persistedLut ? { paletteLut: persistedLut } : {}),
+            ...(latestCollisionShapesRef.current.length > 0
+              ? { collisionShapes: latestCollisionShapesRef.current }
+              : { collisionShapes: [] }),
+            ...(latestSocketsRef.current.length > 0
+              ? { sockets: latestSocketsRef.current }
+              : { sockets: [] }),
+          };
         })
         .then(() => refreshSpriteNodes(activeProject.id));
     }, 120);
@@ -717,8 +727,8 @@ export function PostProcessInspector({
             }
             return;
           }
-          await repository.saveSpriteNode({
-            ...nodeSnapshot,
+          await repository.patchSpriteNode(nodeSnapshot.id, (existing) => ({
+            ...existing,
             assetClass: latestAssetClassRef.current,
             processedBlobId: stored.id,
             postProcessConfig: latestConfigRef.current,
@@ -734,7 +744,7 @@ export function PostProcessInspector({
               ? {
                   paletteLut: paletteVariantsToConfig(
                     latestLutVariantsRef.current,
-                    nodeSnapshot.paletteLut,
+                    existing.paletteLut,
                   ),
                 }
               : {}),
@@ -742,14 +752,7 @@ export function PostProcessInspector({
               ? { collisionShapes: latestCollisionShapesRef.current }
               : {}),
             ...(latestSocketsRef.current.length > 0 ? { sockets: latestSocketsRef.current } : {}),
-            ...(nodeSnapshot.autoTile ? { autoTile: latestAutoTileRef.current } : {}),
-            ...(nodeSnapshot.vfxFlipbook ? { vfxFlipbook: latestVfxFlipbookRef.current } : {}),
-            ...(nodeSnapshot.parallaxScene
-              ? { parallaxScene: latestParallaxSceneRef.current }
-              : {}),
-            ...(nodeSnapshot.bitmapFont ? { bitmapFont: latestBitmapFontRef.current } : {}),
-            ...(nodeSnapshot.shaderConfig ? { shaderConfig: latestShaderConfigRef.current } : {}),
-          });
+          }));
           await repository.cleanupOrphanedBlobs();
           if (
             !cancelled &&
@@ -835,12 +838,10 @@ export function PostProcessInspector({
       return;
     }
     const timer = window.setTimeout(() => {
-      const currentNode = latestNodeRef.current;
-      if (!currentNode) return;
-      void repository.saveSpriteNode({
-        ...currentNode,
+      void repository.patchSpriteNode(targetNodeId, (existing) => ({
+        ...existing,
         postProcessConfig: latestConfigRef.current,
-      });
+      }));
     }, 80);
     return () => window.clearTimeout(timer);
   }, [config.pivotNorm.x, config.pivotNorm.y, activeProject, targetNodeId]);
@@ -1541,6 +1542,7 @@ export function PostProcessInspector({
       ...(targetNode.parallaxScene ? { parallaxScene: parallaxSceneConfig } : {}),
       ...(targetNode.bitmapFont ? { bitmapFont: bitmapFontConfig } : {}),
       ...(targetNode.shaderConfig ? { shaderConfig } : {}),
+      ...(targetNode.uiKitConfig ? { uiKitConfig } : {}),
       ...(manualPixelEditCount > 0 ? { manualPixelEditCount } : {}),
       ...(inpaintHistory.length > 0 ? { inpaintHistory } : {}),
       recipeArtBibleHash: computeArtBibleHash(activeProject.artBible),
@@ -1667,12 +1669,12 @@ export function PostProcessInspector({
       setAutoTileConfig(savedConfig);
       const current = latestNodeRef.current;
       if (!activeProject || !current) return;
-      await repository.saveSpriteNode({
-        ...current,
+      await repository.patchSpriteNode(current.id, (existing) => ({
+        ...existing,
         assetClass: latestAssetClassRef.current,
         autoTile: savedConfig,
         ...(latestSocketsRef.current.length > 0 ? { sockets: latestSocketsRef.current } : {}),
-      });
+      }));
       await refreshSpriteNodes(activeProject.id);
     },
     [activeProject, refreshSpriteNodes],
@@ -1684,14 +1686,14 @@ export function PostProcessInspector({
       latestSocketsRef.current = nextSockets;
       const current = latestNodeRef.current;
       if (!activeProject || !current) return;
-      await repository.saveSpriteNode({
-        ...current,
+      await repository.patchSpriteNode(current.id, (existing) => ({
+        ...existing,
         assetClass: latestAssetClassRef.current,
         ...(latestCollisionShapesRef.current.length > 0
           ? { collisionShapes: latestCollisionShapesRef.current }
           : {}),
         sockets: nextSockets,
-      });
+      }));
       await refreshSpriteNodes(activeProject.id);
     },
     [activeProject, refreshSpriteNodes],
@@ -1703,15 +1705,15 @@ export function PostProcessInspector({
       latestVfxFlipbookRef.current = savedConfig;
       const current = latestNodeRef.current;
       if (!activeProject || !current) return;
-      await repository.saveSpriteNode({
-        ...current,
+      await repository.patchSpriteNode(current.id, (existing) => ({
+        ...existing,
         assetClass: latestAssetClassRef.current,
         ...(latestCollisionShapesRef.current.length > 0
           ? { collisionShapes: latestCollisionShapesRef.current }
           : {}),
         ...(latestSocketsRef.current.length > 0 ? { sockets: latestSocketsRef.current } : {}),
         vfxFlipbook: savedConfig,
-      });
+      }));
       await refreshSpriteNodes(activeProject.id);
     },
     [activeProject, refreshSpriteNodes],
@@ -1723,11 +1725,11 @@ export function PostProcessInspector({
       latestParallaxSceneRef.current = savedConfig;
       const current = latestNodeRef.current;
       if (!activeProject || !current) return;
-      await repository.saveSpriteNode({
-        ...current,
+      await repository.patchSpriteNode(current.id, (existing) => ({
+        ...existing,
         assetClass: latestAssetClassRef.current,
         parallaxScene: savedConfig,
-      });
+      }));
       await repository.cleanupOrphanedBlobs();
       await refreshSpriteNodes(activeProject.id);
     },
@@ -1740,11 +1742,11 @@ export function PostProcessInspector({
       latestBitmapFontRef.current = savedConfig;
       const current = latestNodeRef.current;
       if (!activeProject || !current) return;
-      await repository.saveSpriteNode({
-        ...current,
+      await repository.patchSpriteNode(current.id, (existing) => ({
+        ...existing,
         assetClass: latestAssetClassRef.current,
         bitmapFont: savedConfig,
-      });
+      }));
       await refreshSpriteNodes(activeProject.id);
     },
     [activeProject, refreshSpriteNodes],
@@ -1756,11 +1758,27 @@ export function PostProcessInspector({
       latestShaderConfigRef.current = savedConfig;
       const current = latestNodeRef.current;
       if (!activeProject || !current) return;
-      await repository.saveSpriteNode({
-        ...current,
+      await repository.patchSpriteNode(current.id, (existing) => ({
+        ...existing,
         assetClass: latestAssetClassRef.current,
         shaderConfig: savedConfig,
-      });
+      }));
+      await refreshSpriteNodes(activeProject.id);
+    },
+    [activeProject, refreshSpriteNodes],
+  );
+
+  const handleSaveUiKitConfig = useCallback(
+    async (savedConfig: UiKitStyleConfigSchemaType) => {
+      setUiKitConfig(savedConfig);
+      latestUiKitRef.current = savedConfig;
+      const current = latestNodeRef.current;
+      if (!activeProject || !current) return;
+      await repository.patchSpriteNode(current.id, (existing) => ({
+        ...existing,
+        assetClass: latestAssetClassRef.current,
+        uiKitConfig: savedConfig,
+      }));
       await refreshSpriteNodes(activeProject.id);
     },
     [activeProject, refreshSpriteNodes],
@@ -1771,10 +1789,10 @@ export function PostProcessInspector({
       setAssetClass(nextClass);
       const current = latestNodeRef.current;
       if (!activeProject || !current) return;
-      await repository.saveSpriteNode({
-        ...current,
+      await repository.patchSpriteNode(current.id, (existing) => ({
+        ...existing,
         assetClass: nextClass,
-      });
+      }));
       await refreshSpriteNodes(activeProject.id);
     },
     [activeProject, refreshSpriteNodes],
@@ -2161,6 +2179,20 @@ export function PostProcessInspector({
             bitmapConfig={bitmapFontConfig}
             onChangeConfig={setBitmapFontConfig}
             onSaveToProject={handleSaveBitmapFont}
+          />
+        ) : inspectorTab === 'uikit' ? (
+          <UiKitWorkshop
+            artMode={activeProject.artBible.artMode}
+            project={activeProject}
+            targetNode={targetNode}
+            spriteNodes={spriteNodes}
+            providers={providers}
+            postProcessConfig={config}
+            rawWidth={rawSize.width}
+            rawHeight={rawSize.height}
+            uiKitConfig={uiKitConfig}
+            onChangeConfig={setUiKitConfig}
+            onSaveToProject={handleSaveUiKitConfig}
           />
         ) : inspectorTab === 'shader' && activeSpriteBuffer ? (
           <ShaderStudio

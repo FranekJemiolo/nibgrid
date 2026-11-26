@@ -15,9 +15,11 @@ import {
   type EntityAssemblySpriteFile,
   type VirtualSyncFile,
 } from '../export/godotPrefabAssembler';
+import { assembleGodotUiKitFiles, bakeBitmapFontFromConfig } from '../export/godotThemeExporter';
 import { toAssetSlug, triggerBlobDownload } from '../export/zipPackager';
 import { bakeNormalMapCpu } from '../processing/distanceField';
 import { decodePngBytesToRgba, encodeRgbaToPngBytes } from '../processing/png';
+import { bakeProceduralUiKit } from '../processing/uiKitCore';
 import { computeSyncDiff, virtualFileToBytes, type SyncDiffPlan } from './syncDiff';
 
 type WindowWithDirectoryPicker = Window & {
@@ -367,7 +369,8 @@ export async function collectEntitySyncFiles(
 }
 
 /**
- * Aggregates deterministic Godot 4 virtual files across every `EntityDefinition` in a project.
+ * Aggregates deterministic Godot 4 virtual files across every `EntityDefinition` and
+ * saved M33 `uiKitConfig` node in a project.
  */
 export async function collectProjectGodotSyncFiles(
   database: NibgridDatabase,
@@ -389,6 +392,62 @@ export async function collectProjectGodotSyncFiles(
       deduped.set(file.relativePath, file);
     }
   }
+
+  const isPixelArt = project.artBible.artMode === 'pixel-art';
+  const nodeById = new Map(spriteNodes.map((n) => [n.id, n]));
+  for (const node of spriteNodes) {
+    if (!node.uiKitConfig) continue;
+    const kit = bakeProceduralUiKit(node.uiKitConfig);
+    const linkedFontNode = node.uiKitConfig.linkedBmFontId
+      ? nodeById.get(node.uiKitConfig.linkedBmFontId)
+      : undefined;
+    const linkedBmFont = linkedFontNode?.bitmapFont
+      ? bakeBitmapFontFromConfig(linkedFontNode.bitmapFont, project.artBible.palette)
+      : node.uiKitConfig.linkedBmFontId === 'builtin-hud-font'
+        ? bakeBitmapFontFromConfig(
+            {
+              fontName: 'hud_font',
+              sourceKind: 'builtin-5x7',
+              customFontFamily: 'monospace',
+              rasterSizePx: 16,
+              charsetPreset: 'hud-upper',
+              customCharset: '0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ+-!%x.,:/ ',
+              scale: 2,
+              topHex: '#FFCD75',
+              bottomHex: '#EF7D57',
+              snapToPalette: true,
+              outlineMode: 1,
+              selOutDarken: 0.55,
+              useCustomOutline: false,
+              outlineHex: '#1A1C2C',
+              shadowOffsetX: 0,
+              shadowOffsetY: 1,
+              shadowHex: '#1A1C2C',
+              shadowAlpha: 180,
+              letterSpacingPx: 1,
+              paddingPx: 2,
+              previewText: 'HP 100/100',
+            },
+            project.artBible.palette,
+          )
+        : undefined;
+
+    const uiFiles = assembleGodotUiKitFiles(kit, {
+      isPixelArt,
+      ...(linkedBmFont
+        ? {
+            linkedFont: {
+              filenameBase: linkedBmFont.fontName || 'hud_font',
+              font: linkedBmFont,
+            },
+          }
+        : {}),
+    });
+    for (const file of uiFiles) {
+      deduped.set(file.relativePath, file);
+    }
+  }
+
   return Array.from(deduped.values()).sort((a, b) =>
     a.relativePath < b.relativePath ? -1 : a.relativePath > b.relativePath ? 1 : 0,
   );

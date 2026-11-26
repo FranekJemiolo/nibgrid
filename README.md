@@ -1,6 +1,6 @@
 # Nibgrid
 
-Local-first, zero-server Bring-Your-Own-Key / Bring-Your-Own-Model (BYOK/BYOM) Progressive Web App for turning hand-drawn sketches and vocal hums into style-locked, engine-ready 2D game sprites, 4-view turnarounds, normal maps, animations, auto-tiles, mesh-tracked sockets, VFX flipbooks, parallax backgrounds, bitmap fonts & damage numerals, colliders, UI panels, Godot 4 `.gdshader` + `ShaderMaterial` `.tres` shaders, `.tscn` + typed `.gd` prefabs & live `res://` sync, surgical pixel micro-editing & region-masked AI inpainting, Vision-LLM Art Director QA reviews, reusable Global Asset Vault libraries, `.nibgrid.zip` snapshots, zero-server `#share=` URL/Pack Feeds, WebRTC P2P direct transfers, and audio.
+Local-first, zero-server Bring-Your-Own-Key / Bring-Your-Own-Model (BYOK/BYOM) Progressive Web App for turning hand-drawn sketches and vocal hums into style-locked, engine-ready 2D game sprites, 4-view turnarounds, normal maps, animations, auto-tiles, mesh-tracked sockets, VFX flipbooks, parallax backgrounds, bitmap fonts & damage numerals, colliders, UI panels, matched Godot 4 `Theme` `.tres` UI kits, Godot 4 `.gdshader` + `ShaderMaterial` `.tres` shaders, `.tscn` + typed `.gd` prefabs & live `res://` sync, surgical pixel micro-editing & region-masked AI inpainting, Vision-LLM Art Director QA reviews, reusable Global Asset Vault libraries, `.nibgrid.zip` snapshots, zero-server `#share=` URL/Pack Feeds, WebRTC P2P direct transfers, and audio.
 
 **Live App (GitHub Pages):** https://franekjemiolo.github.io/nibgrid/
 
@@ -44,6 +44,7 @@ Local-first, zero-server Bring-Your-Own-Key / Bring-Your-Own-Model (BYOK/BYOM) P
   - [2.25 Transfer Snapshots Browser-to-Browser via WebRTC P2P (`NIB-O1:` / `NIB-A1:`)](#225-transfer-snapshots-browser-to-browser-via-webrtc-p2p-nib-o1--nib-a1)
   - [2.26 Polish Sprites via Surgical Pixel Micro-Editor & Region Inpainting (Screen 4A)](#226-polish-sprites-via-surgical-pixel-micro-editor--region-inpainting-screen-4a)
   - [2.27 Run Vision-LLM Art Director Visual QA Passes (Audit Matrix)](#227-run-vision-llm-art-director-visual-qa-passes-audit-matrix)
+  - [2.28 Build Matched Godot 4 `Theme` `.tres` UI Kits (Inspector → UI Kit)](#228-build-matched-godot-4-theme-tres-ui-kits-inspector--ui-kit)
 - [Part 3 — Engine Drop-In Integration Examples](#part-3--engine-drop-in-integration-examples)
 - [Architecture Summary](#architecture-summary)
 - [Development & Verification](#development--verification)
@@ -83,6 +84,7 @@ Local-first, zero-server Bring-Your-Own-Key / Bring-Your-Own-Model (BYOK/BYOM) P
 | Direct Browser-to-Browser WebRTC Binary Transfer  | `Projects` / `Vault` → `Share via P2P`        | `$0.00 Local` (Non-Trickle DataChannel)     | Scannable `NIB-O1:` / `NIB-A1:` QR/SDP handshake + 16 KiB chunked SHA-256 verified `.nibgrid.zip`   |
 | Surgical Pixel Fixes & Region-Masked Inpainting   | `Post-Process` (Screen 4A) Floating Rail      | `$0.00` Local Edits / `$0.00` Mock / BYOK   | Byte-preserved unmasked pixels + atomic Dexie commit (`manualPixelEditCount` / `inpaintHistory`)    |
 | Vision-LLM Art Director Visual QA Contact Sheet   | `Audit` (Screen 7) → `Art Director Visual QA` | `$0.00` Offline Mock or `~$0.002`/sheet     | Paginated `REF`-pinned contact sheet, SHA-256 cached QA findings & 1-click Micro-Editor deep-links  |
+| Godot 4 `Theme` `.tres` UI Kit Builder            | `Inspector` → `UI Kit` (`ui-panel` primary)   | `$0.00` Procedural or GenAI State Sheet     | 7 state PNGs, `.png.import`, paired M24 `.fnt`/`.png`, `<slug>_theme.tres` (`StyleBoxTexture`), ZIP |
 
 ---
 
@@ -661,6 +663,18 @@ flowchart LR
 
 ---
 
+### 2.28 Build Matched Godot 4 `Theme` `.tres` UI Kits (Inspector → UI Kit)
+
+**When to use it:** Building one 9-slice panel isn't enough to theme a whole Godot 4 HUD—you need matched **Normal / Hover / Pressed / Disabled** button states, panel backgrounds, progress bar tracks/fills, and a crisp bitmap font wired into one drop-in `Theme` `.tres`.
+
+**Click-by-Click:**
+
+1. Open any sprite in **`Inspector`**, set **Asset Class** to **`UI Panel`**, and click the primary **`UI Kit`** tab (or invoke `Open Godot 4 UI Kit & Theme Builder` via **`Cmd/Ctrl+K`**).
+2. Choose **`Procedural ($0)`** to synthesize all 7 `24×24` / `32×32` / `48×48` 9-slice states directly from your Art Bible colors, or switch to **`GenAI Sheet`** to prompt Gemini / Antigravity Bridge (`#FF00FF` chroma `4×2` state sheet).
+3. Scrub **`Border Thickness`**, **`Corner Cut`**, **`Content Padding`**, and **L/T/R/B 9-Slice Margins** (clamped safely against collapse with live cyan guide overlays), pair any saved **M24 Bitmap Font** (or the built-in `5×7` HUD font), click-test **Hover / Pressed / Disabled** button states and scrub the **HP ProgressBar**, then click **`Save UI Kit to Project`**, **`Sync to Godot (res://)`**, or **`Download Theme Bundle (.zip)`**.
+
+---
+
 ## Part 3 — Engine Drop-In Integration Examples
 
 ### Godot 4 (`4.2+`)
@@ -696,6 +710,8 @@ Nibgrid exports Godot-native `.tres` resources (`AtlasTexture` / `SpriteFrames`,
    - Bind your local Godot project root via **`Bind Godot res://`** in the top header bar and click **`Sync to Godot`** to write `assets/nibgrid/<slug>/<slug>.tscn`, `<slug>_frames.tres`, `<slug>_anims.tres`, `<slug>_canvas.tres`, WAV audio, and lossless `.png.import` sidecars straight to disk—Godot 4 hot-reloads the ready-to-instance prefab immediately.
 8. **AI `canvas_item` Shaders & `ShaderMaterial` (`<slug>.gdshader` + `<slug>_mat.tres`):**
    - Drop exported `<slug>.gdshader` and `<slug>_mat.tres` into the same `res://` folder and assign `<slug>_mat.tres` to any `Sprite2D` / `AnimatedSprite2D` → **`Material`**. When saved on an Entity's primary sprite node in Screen 4N, M25 **`Sync to Godot`** automatically emits `<slug>.gdshader` + `<slug>_mat.tres` and wires `material = ExtResource(...)` onto `AnimatedSprite2D` inside `<slug>.tscn`.
+9. **Complete `Theme` `.tres` UI Kits (`<slug>_theme.tres` + 7 State PNGs + M24 `.fnt`):**
+   - Assign `<slug>_theme.tres` to your root `Control` / `CanvasLayer` → **`Theme`** (`res://assets/nibgrid/<slug>/`); Godot 4 automatically styles every child `Button` (`normal` / `hover` / `pressed` / `disabled`), `Panel` / `PanelContainer`, `ProgressBar`, and `Label` with `default_font` linked to your packed M24 `.fnt`.
 
 ### Phaser 3 (`3.60+`) + Matter.js
 
@@ -820,6 +836,7 @@ const pop = new BitmapText({
 - **Zero-Server WebRTC P2P Direct Transfer:** Stream `.nibgrid.zip` snapshots directly between browsers with zero signaling backend using non-trickle `zlib`+Base64URL `NIB-O1:` / `NIB-A1:` SDP codes and built-in QR code generation (`sdpCodec.ts`), backpressure-controlled `16 KiB` DataChannel framing + `SHA-256` manifest verification (`p2pProtocol.ts`, `webrtcTransfer.ts`), and `P2pTransferModal.tsx`.
 - **Surgical Pixel Micro-Editor & Region-Masked Inpainting (Screen 4A):** Draw Bresenham strokes with optional horizontal symmetry (`Mirror-X`), 4-connected flood fill, eyedropper, and 50-step `PixelUndoStack` in pure TS (`pixelEditorCore.ts`); paint binary inpaint masks and merge Gemini BYOK / Antigravity Bridge / ComfyUI / Offline Mock regenerations strictly within masked texels (`inpaintMask.ts`, `inpaintAdapter.ts`) while guaranteeing 100% byte-identical preservation of unmasked pixels; and persist edits atomically (`commitProcessedSpritePixels`) with HiDPI texel mapping (`PixelMicroEditorToolbar.tsx`, `PostProcessInspector.tsx`).
 - **Vision-LLM Art Director Visual QA Pass (Screen 7 Audit Matrix):** Pack project casts into paginated `REF`-pinned mid-gray contact sheets with M24 `5×7` bitmap index stamps and 1× silhouette thumbnails in pure TS (`qaContactSheet.ts`), validate structured Gemini Flash Vision / Antigravity Bridge / `$0.00` offline heuristic findings (`artDirectorQaSchema.ts`, `artDirectorQa.ts`), cache reports in Dexie v5 `qaReports` by sheet SHA-256, and expose clickable contact sheets, row `Visual QA` badges, M28 `Visual QA Warnings` filtering, and 1-click Screen 4A Micro-Editor deep-links (`ArtDirectorQaPanel.tsx`, `AuditMatrixView.tsx`).
+- **Godot 4 `Theme` `.tres` UI Kit Builder (`UI Kit` Tab):** Synthesize matched 7-slot 9-slice widget kits (`button_normal`, `button_hover`, `button_pressed`, `button_disabled`, `panel_bg`, `bar_track`, `bar_fill`) in pure TS (`uiKitCore.ts`) or slice `#FF00FF` GenAI `4×2` state sheets (`uiKitAdapter.ts`), test live interactive hover/press/disabled buttons and HP progress bars paired with M24 `.fnt` fonts (`UiKitWorkshop.tsx`), and export Godot 4 `format=3` `Theme` `.tres` resources + `.png.import` sidecars + ZIPs (`godotThemeExporter.ts`, `fsaaSyncEngine.ts`).
 
 ---
 

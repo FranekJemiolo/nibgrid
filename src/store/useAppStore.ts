@@ -25,6 +25,7 @@ export type InspectorTab =
   | 'autotile'
   | 'parallax'
   | 'bmfont'
+  | 'uikit'
   | 'palette-lut'
   | 'collider'
   | 'sandbox'
@@ -67,6 +68,7 @@ const VALID_INSPECTOR_TABS = new Set<InspectorTab>([
   'autotile',
   'parallax',
   'bmfont',
+  'uikit',
   'palette-lut',
   'collider',
   'sandbox',

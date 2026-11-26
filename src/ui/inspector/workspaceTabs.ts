@@ -69,6 +69,12 @@ export const INSPECTOR_TAB_META: Record<InspectorTab, InspectorTabMeta> = {
     shortLabel: 'BMFont',
     testId: 'inspector-tab-bmfont',
   },
+  uikit: {
+    id: 'uikit',
+    label: 'Godot 4 UI Kit & Theme',
+    shortLabel: 'UI Kit',
+    testId: 'inspector-tab-uikit',
+  },
   'palette-lut': {
     id: 'palette-lut',
     label: 'Palette-Swap & LUT',
@@ -105,6 +111,7 @@ export const ALL_INSPECTOR_TABS: readonly InspectorTab[] = [
   'autotile',
   'parallax',
   'bmfont',
+  'uikit',
   'palette-lut',
   'collider',
   'sandbox',
@@ -142,7 +149,7 @@ export function resolveInspectorTabs(
       primary = ['postprocess', 'tile-slice', 'autotile', 'parallax', 'normal', 'palette-lut'];
       break;
     case 'ui-panel':
-      primary = ['postprocess', 'tile-slice', 'bmfont', 'palette-lut'];
+      primary = ['postprocess', 'tile-slice', 'bmfont', 'uikit', 'palette-lut'];
       break;
     case 'vfx':
       primary = [

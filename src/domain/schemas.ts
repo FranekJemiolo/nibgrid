@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { ContourTimbrePatchSchema } from '../audio/contourPatchSchema';
+import { pickUiKitColorsFromPalette } from '../processing/uiKitCore';
 import { extractDefaultUniformValues, getGdShaderPreset } from '../processing/gdshaderPresets';
 import {
   ParallaxBandBlueprintSchema,
@@ -641,6 +642,46 @@ export function createDefaultShaderConfig(presetId = 'hit_flash'): ShaderConfig 
   });
 }
 
+export const RgbTripletSchema = z.tuple([
+  z.number().int().min(0).max(255),
+  z.number().int().min(0).max(255),
+  z.number().int().min(0).max(255),
+]);
+
+export const NineSliceMarginsSchema = z.object({
+  left: z.number().int().min(1).max(256).default(6),
+  top: z.number().int().min(1).max(256).default(6),
+  right: z.number().int().min(1).max(256).default(6),
+  bottom: z.number().int().min(1).max(256).default(6),
+});
+
+export const UiKitStyleConfigSchema = z.object({
+  slug: z.string().trim().min(1).max(64).default('ui_rpg'),
+  tileSizePx: z.union([z.literal(24), z.literal(32), z.literal(48)]).default(32),
+  borderPx: z.union([z.literal(1), z.literal(2), z.literal(3)]).default(2),
+  cornerCutPx: z.union([z.literal(0), z.literal(1), z.literal(2)]).default(1),
+  baseRgb: RgbTripletSchema.default([72, 78, 108]),
+  accentRgb: RgbTripletSchema.default([255, 205, 117]),
+  fillBarRgb: RgbTripletSchema.default([177, 62, 83]),
+  outlineRgb: RgbTripletSchema.default([26, 28, 44]),
+  margins: NineSliceMarginsSchema.default({ left: 6, top: 6, right: 6, bottom: 6 }),
+  contentMarginPx: z.number().int().min(0).max(24).default(6),
+  linkedBmFontId: z.string().min(1).optional(),
+});
+export type UiKitStyleConfigSchemaType = z.infer<typeof UiKitStyleConfigSchema>;
+
+export function createDefaultUiKitConfig(
+  paletteHex: readonly string[] = [],
+): UiKitStyleConfigSchemaType {
+  const colors = pickUiKitColorsFromPalette(paletteHex);
+  return UiKitStyleConfigSchema.parse({
+    baseRgb: [...colors.baseRgb],
+    accentRgb: [...colors.accentRgb],
+    fillBarRgb: [...colors.fillBarRgb],
+    outlineRgb: [...colors.outlineRgb],
+  });
+}
+
 export const InpaintHistoryEntrySchema = z.object({
   prompt: z.string().min(1).max(400),
   maskedPixels: z.number().int().positive(),
@@ -660,6 +701,7 @@ export const SpriteNodeSchema = z.object({
   parallaxScene: ParallaxSceneConfigSchema.optional(),
   bitmapFont: BitmapFontConfigSchema.optional(),
   shaderConfig: ShaderConfigSchema.optional(),
+  uiKitConfig: UiKitStyleConfigSchema.optional(),
   inpaintHistory: z.array(InpaintHistoryEntrySchema).optional(),
   manualPixelEditCount: z.number().int().nonnegative().optional(),
   imageBlobId: z.string().min(1),

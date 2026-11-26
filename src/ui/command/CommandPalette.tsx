@@ -158,6 +158,20 @@ export function CommandPalette({ open, onOpenChange }: CommandPaletteProps) {
             }),
         },
         {
+          id: 'act-uikit-workshop',
+          title: 'Open Godot 4 UI Kit & Theme Builder',
+          subtitle: 'Generate matched 9-slice button states, progress bars & Theme .tres',
+          category: 'action',
+          keywords: ['ui', 'uikit', 'theme', 'tres', 'styleboxtexture', 'button', 'hud', 'godot'],
+          execute: () =>
+            navigate({
+              screen: 'inspector',
+              projectId: projId,
+              nodeId: targetId,
+              initialTab: 'uikit',
+            }),
+        },
+        {
           id: 'act-palette-lut',
           title: 'Open Palette-Swap & LUT Workshop',
           subtitle: 'OKLCH faction variants and GPU lookup strip',

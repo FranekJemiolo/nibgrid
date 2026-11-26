@@ -581,3 +581,18 @@
 - **Audit Matrix & Deep-Link Wiring (`src/ui/audit/ArtDirectorQaPanel.tsx`, `src/ui/audit/AuditMatrixView.tsx`, `src/store/useAppStore.ts`, `src/App.tsx`, `src/ui/inspector/PostProcessInspector.tsx`):** Added clickable contact sheet preview canvas, `Run Visual QA Pass (AI)` with transparent cost + `Cached` badges, per-sprite `Visual QA` column badges, and `?tool=pencil` Micro-Editor deep-link routing.
 - **Smart Browser Filter (`src/ui/vault/VaultAndBrowserView.tsx`):** Added `Visual QA Warnings` filter chip + status option and per-card `qa:*` badges.
 - **Verification:** Added `tests/e2e/m32c-art-director-e2e.spec.ts` covering contact sheet rendering, intercepted Gemini Vision QA findings, `Fix in Micro-Editor` navigation, M28 `Visual QA Warnings` filtering, hard-reload IndexedDB cache restoration, and zero orphan blobs.
+
+## Milestone 33A: Pure-TS Procedural UI Kit Core, Slicer & Schema
+
+- **Procedural UI Kit Synthesizer & Slicer (`src/processing/uiKitCore.ts`, `src/domain/schemas.ts`, `src/export/recipeBuilder.ts`):** Implemented `bakeProceduralUiKit()` across all 7 `UiWidgetSlot` tiles, `clampNineSliceMargins()`, `#FF00FF` chroma-key `sliceUiStateSheet()`, nearest-neighbor `renderNineSliceToBuffer()`, and `UiKitStyleConfigSchema` persistence.
+- **Verification:** Added `tests/unit/m33a-ui-kit-core.test.ts` validating `hover > normal > pressed` interior luminance, lower disabled saturation, margin clamping, byte determinism, and 4×2 sheet chroma slicing.
+
+## Milestone 33B: GenAI UI State Sheet Adapter & Godot 4 `Theme` `.tres` Exporter
+
+- **Adapter & Exporter (`src/providers/uiKitAdapter.ts`, `src/export/godotThemeExporter.ts`, `src/sync/fsaaSyncEngine.ts`):** Implemented `buildGeminiUiKitRequest()`, `generateUiKitViaAi()` with secret stripping, `exportGodotThemeTres()` (`format=3`, exact `load_steps`, 7 `StyleBoxTexture` controls, optional M24 `FontFile`), `assembleGodotUiKitFiles()`, `packageUiKitThemeZip()`, and M25 project sync integration.
+- **Verification:** Added `tests/unit/m33b-godot-theme-exporter.test.ts` asserting `load_steps=16` / `15`, `.png.import` `compress/mode=0`, `.fnt` pairing, and `AIzaSyUIKIT999` secret stripping on HTTP `401`/`429`.
+
+## Milestone 33C: Interactive Godot 4 UI Kit Workshop, M24 Font Pairing & M25 Sync
+
+- **UI Kit Workshop & Workspace Integration (`src/ui/inspector/UiKitWorkshop.tsx`, `src/ui/inspector/workspaceTabs.ts`, `src/store/useAppStore.ts`, `src/ui/inspector/PostProcessInspector.tsx`, `src/ui/command/CommandPalette.tsx`):** Added `'uikit'` tab promoted on `ui-panel` assets, interactive 9-slice Hover/Pressed/Disabled button & scrubbed HP progress bar canvases, M24 Bitmap Font selector (`default_font = ExtResource("8_font")`), Art Bible color swatches + clamped margin guide canvas, `Save UI Kit to Project`, 1-click `Sync to Godot (res://)`, and `<slug>_theme.zip` bundling.
+- **Verification:** Updated `tests/unit/m19-ux-polish.test.ts` for `ui-panel` primary tabs and added `tests/e2e/m33c-ui-kit-e2e.spec.ts` verifying M24 font saving & pairing, live hover/press/disabled state transitions, unzipped 7 PNGs + `.png.import` + `.fnt`/`.png` + `<slug>_theme.tres` (`load_steps=16`), Zod-validated `.recipe.json`, and hard-reload IndexedDB persistence.

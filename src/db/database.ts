@@ -391,6 +391,40 @@ export class NibgridRepository {
     return validated;
   }
 
+  /**
+   * Atomically reads, transforms, validates, and commits a `SpriteNode` update inside one
+   * serialized Dexie `'rw'` transaction so overlapping tab/worker saves never clobber sibling fields.
+   */
+  async patchSpriteNode(
+    nodeId: string,
+    updater: (existing: SpriteNode) => SpriteNode,
+  ): Promise<SpriteNode | null> {
+    let updated: SpriteNode | null = null;
+    await this.database.transaction(
+      'rw',
+      [
+        this.database.spriteNodes,
+        this.database.projects,
+        this.database.audioAssets,
+        this.database.blobs,
+        this.database.vaultItems,
+      ],
+      async () => {
+        const existing = await this.database.spriteNodes.get(nodeId);
+        if (!existing) return;
+        const validated = SpriteNodeSchema.parse(updater(existing));
+        await this.database.spriteNodes.put(validated);
+        await this.database.projects
+          .where('id')
+          .equals(validated.projectId)
+          .modify({ updatedAt: nowIso() });
+        await this.cleanupOrphanedBlobsInTx();
+        updated = validated;
+      },
+    );
+    return updated;
+  }
+
   async deleteSpriteNode(nodeId: string): Promise<void> {
     await this.database.transaction(
       'rw',
