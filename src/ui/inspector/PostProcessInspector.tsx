@@ -44,6 +44,7 @@ import {
   type CollisionLayerShape,
   type DemixelMode,
   type ErosionConnectivity,
+  type InpaintHistoryEntry,
   type Lighting,
   type NineSliceConfig,
   type NormalMapConfig,
@@ -72,12 +73,31 @@ import {
 import { parseHexRgb } from '../../processing/backgroundKey';
 import type { DetectedGrid } from '../../processing/demixel';
 import { bakeNormalMapCpu } from '../../processing/distanceField';
+import {
+  countMaskedPixels,
+  maskToOverlayRgba,
+  paintMaskLine,
+  paintMaskPixel,
+} from '../../processing/inpaintMask';
 import type { PaletteVariant } from '../../processing/paletteLut';
+import {
+  PixelUndoStack,
+  floodFillRgba,
+  hexToRgbaColor,
+  mapClientToTexel,
+  plotBresenhamLine,
+  plotPixel,
+  rgbaColorToHex,
+  samplePixelRgba,
+  type PixelBrushSize,
+  type PixelTool,
+} from '../../processing/pixelEditorCore';
 import { runPostProcessPipeline } from '../../processing/pipeline';
 import { decodePngBytesToRgba, encodeRgbaToPngBytes, rgbaToPngBlob } from '../../processing/png';
 import { computeArtBibleHash } from '../../processing/projectAudit';
 import { buildAlphaClippedMesh, type SpriteMesh } from '../../processing/spriteMesh';
 import type { RgbaBuffer } from '../../processing/types';
+import { runRegionInpaint } from '../../providers/inpaintAdapter';
 import { useAppStore, type InspectorTab } from '../../store/useAppStore';
 import { buildPuppetStripArtifacts } from '../../webgl/puppetRenderer';
 import {
@@ -92,6 +112,7 @@ import { NormalMapPreview } from './NormalMapPreview';
 import { PaletteLutWorkshop } from './PaletteLutWorkshop';
 import { ParallaxWorkshop } from './ParallaxWorkshop';
 import { PipBiomePreview } from './PipBiomePreview';
+import { PixelMicroEditorToolbar } from './PixelMicroEditorToolbar';
 import { PuppetWarpEditor } from './PuppetWarpEditor';
 import { ShaderStudio } from './ShaderStudio';
 import { SocketEditor } from './SocketEditor';
@@ -156,6 +177,18 @@ function paletteVariantsFromNode(node?: SpriteNode): PaletteVariant[] {
   }));
 }
 
+function isEditableInputTarget(target: EventTarget | null): boolean {
+  if (!(target instanceof HTMLElement)) return false;
+  const tag = target.tagName;
+  return (
+    tag === 'INPUT' ||
+    tag === 'TEXTAREA' ||
+    tag === 'SELECT' ||
+    target.isContentEditable ||
+    Boolean(target.closest('[contenteditable="true"]'))
+  );
+}
+
 function rgbToUpperHex(r: number, g: number, b: number): string {
   const h = (n: number) =>
     Math.max(0, Math.min(255, Math.round(n)))
@@ -214,6 +247,7 @@ export function PostProcessInspector({
   const [drawerCollapsed, setDrawerCollapsed] = useState(false);
   const [backdrop, setBackdrop] = useState<InspectorBackdrop>('checkerboard');
   const [isProcessing, setIsProcessing] = useState(false);
+  const [processedReady, setProcessedReady] = useState(false);
   const [aiProgress, setAiProgress] = useState<{ phase: string; progress: number } | null>(null);
   const [workerError, setWorkerError] = useState<string | null>(null);
   const [pivotPlaceMode, setPivotPlaceMode] = useState(false);
@@ -266,6 +300,40 @@ export function PostProcessInspector({
     detectedGrid?: DetectedGrid;
     orphanStats?: { removedIslands: number; cleanedSpecks: number };
   }>({});
+
+  // M31C: Screen 4A Surgical Pixel Micro-Editor & Region-Masked Inpainting state
+  const [activePixelTool, setActivePixelTool] = useState<PixelTool | null>(null);
+  const [mirrorX, setMirrorX] = useState(false);
+  const [brushSize, setBrushSize] = useState<PixelBrushSize>(1);
+  const [activeColorHex, setActiveColorHex] = useState<string>(
+    () => activeProject?.artBible.palette[0] ?? '#FFCD75',
+  );
+  const [freeColorUnlocked, setFreeColorUnlocked] = useState(false);
+  const pixelUndoStackRef = useRef(new PixelUndoStack(50));
+  const [undoState, setUndoState] = useState({ canUndo: false, canRedo: false });
+  const inpaintMaskRef = useRef<Uint8Array>(new Uint8Array(0));
+  const [maskedPixelCount, setMaskedPixelCount] = useState(0);
+  const maskOverlayCanvasRef = useRef<HTMLCanvasElement | null>(null);
+  const [hoverTexel, setHoverTexel] = useState<{ x: number; y: number } | null>(null);
+  const [inpaintPrompt, setInpaintPrompt] = useState('');
+  const [inpaintProviderId, setInpaintProviderId] = useState<string>('offline-mock');
+  const [inpaintSnapPalette, setInpaintSnapPalette] = useState(true);
+  const [inpaintBusy, setInpaintBusy] = useState(false);
+  const [inpaintStatus, setInpaintStatus] = useState<string | null>(null);
+  const [inpaintError, setInpaintError] = useState<string | null>(null);
+  const [manualPixelEditCount, setManualPixelEditCount] = useState<number>(
+    () => targetNode?.manualPixelEditCount ?? 0,
+  );
+  const manualPixelEditCountRef = useRef<number>(targetNode?.manualPixelEditCount ?? 0);
+  const [inpaintHistory, setInpaintHistory] = useState<InpaintHistoryEntry[]>(
+    () => targetNode?.inpaintHistory ?? [],
+  );
+  const inpaintHistoryRef = useRef<InpaintHistoryEntry[]>(targetNode?.inpaintHistory ?? []);
+  const preservedPipelineKeyRef = useRef<string | null>(null);
+  const strokeSnapshotRef = useRef<Uint8ClampedArray | null>(null);
+  const strokeDirtyRef = useRef(false);
+  const lastTexelRef = useRef<{ x: number; y: number } | null>(null);
+  const activeStrokeToolRef = useRef<PixelTool | null>(null);
 
   const rawCanvasRef = useRef<HTMLCanvasElement | null>(null);
   const processedCanvasRef = useRef<HTMLCanvasElement | null>(null);
@@ -357,7 +425,7 @@ export function PostProcessInspector({
     }
   }, [initialTab, targetNodeId]);
 
-  // Sync initial assetClass, autoTileConfig, sockets, vfxFlipbook, parallaxScene & bitmapFont ONLY when targetNodeId changes
+  // Sync initial assetClass, autoTileConfig, sockets, vfxFlipbook, parallaxScene, bitmapFont & M31 metadata ONLY when targetNodeId changes
   useEffect(() => {
     const node = latestNodeRef.current;
     if (!targetNodeId || !node) return;
@@ -368,6 +436,18 @@ export function PostProcessInspector({
     setParallaxSceneConfig(node.parallaxScene ?? createDefaultParallaxSceneConfig());
     setBitmapFontConfig(node.bitmapFont ?? createDefaultBitmapFontConfig());
     setShaderConfig(node.shaderConfig ?? createDefaultShaderConfig());
+    pixelUndoStackRef.current.clear();
+    setUndoState({ canUndo: false, canRedo: false });
+    inpaintMaskRef.current = new Uint8Array(0);
+    setMaskedPixelCount(0);
+    setInpaintStatus(null);
+    setInpaintError(null);
+    const edits = node.manualPixelEditCount ?? 0;
+    const history = node.inpaintHistory ?? [];
+    manualPixelEditCountRef.current = edits;
+    inpaintHistoryRef.current = history;
+    setManualPixelEditCount(edits);
+    setInpaintHistory(history);
   }, [targetNodeId]);
 
   // Auto-infer tile / ui-panel when enabling Seamless Tile or 9-Slice on unclassified sprite
@@ -474,11 +554,12 @@ export function PostProcessInspector({
     [activeProject?.artBible.artMode],
   );
 
-  // Load raw source image from Dexie when targetNode changes
+  // Load raw source image (and any persisted manual/inpainted processed blob) from Dexie when targetNode changes
   useEffect(() => {
     if (!targetNodeId || !targetImageBlobId) return;
     let cancelled = false;
     setRawSheetBuffer(null);
+    setProcessedReady(false);
 
     void repository.getBlob(targetImageBlobId).then(async (blobRecord) => {
       if (cancelled || !blobRecord) return;
@@ -486,10 +567,66 @@ export function PostProcessInspector({
       if (cancelled) return;
       rawImageRef.current = decoded;
       setRawSize({ width: decoded.width, height: decoded.height });
-      setRawLoadRev((rev) => rev + 1);
       setRawSheetBuffer({ width: decoded.width, height: decoded.height, data: decoded.rgba });
-      setActiveSpriteBuffer({ width: decoded.width, height: decoded.height, data: decoded.rgba });
       drawCanvasBuffer(rawCanvasRef.current, decoded.rgba, decoded.width, decoded.height);
+
+      const nodeSnapshot = latestNodeRef.current;
+      const projectSnapshot = latestProjectRef.current;
+      const hasPersistedPixelEdits = Boolean(
+        nodeSnapshot?.id === targetNodeId &&
+        nodeSnapshot.processedBlobId &&
+        ((nodeSnapshot.manualPixelEditCount ?? 0) > 0 ||
+          (nodeSnapshot.inpaintHistory?.length ?? 0) > 0),
+      );
+
+      if (hasPersistedPixelEdits && nodeSnapshot?.processedBlobId && projectSnapshot) {
+        const procBlob = await repository.getBlob(nodeSnapshot.processedBlobId);
+        if (!cancelled && procBlob) {
+          const procDecoded = await decodeBlobFlexible(procBlob.bytes);
+          if (!cancelled) {
+            const effectiveCfg =
+              nodeSnapshot.postProcessConfig ??
+              createDefaultPostProcessConfig(
+                projectSnapshot.artBible.targetWidth,
+                projectSnapshot.artBible.targetHeight,
+              );
+            const scopePipelineKey = JSON.stringify({ ...effectiveCfg, pivotNorm: undefined });
+            preservedPipelineKeyRef.current = `${targetNodeId}:${scopePipelineKey}`;
+            const pngBytes = encodeRgbaToPngBytes(
+              procDecoded.rgba,
+              procDecoded.width,
+              procDecoded.height,
+            );
+            processedArtifactRef.current = {
+              rgba: procDecoded.rgba,
+              width: procDecoded.width,
+              height: procDecoded.height,
+              pngBytes,
+              pipelineKey: scopePipelineKey,
+            };
+            inpaintMaskRef.current = new Uint8Array(procDecoded.width * procDecoded.height);
+            setProcessedSize({ width: procDecoded.width, height: procDecoded.height });
+            setActiveSpriteBuffer({
+              width: procDecoded.width,
+              height: procDecoded.height,
+              data: procDecoded.rgba,
+            });
+            drawCanvasBuffer(
+              processedCanvasRef.current,
+              procDecoded.rgba,
+              procDecoded.width,
+              procDecoded.height,
+            );
+            setProcessedReady(true);
+            setRawLoadRev((rev) => rev + 1);
+            return;
+          }
+        }
+      }
+
+      preservedPipelineKeyRef.current = null;
+      setActiveSpriteBuffer({ width: decoded.width, height: decoded.height, data: decoded.rgba });
+      setRawLoadRev((rev) => rev + 1);
     });
 
     return () => {
@@ -500,9 +637,17 @@ export function PostProcessInspector({
   // Execute post-processing pipeline in Dedicated Worker whenever pixel pipeline params change
   useEffect(() => {
     if (!activeProject || !targetNodeId) return;
+    if (
+      preservedPipelineKeyRef.current === `${targetNodeId}:${pipelineKey}` &&
+      processedArtifactRef.current
+    ) {
+      setProcessedReady(true);
+      return;
+    }
     let cancelled = false;
     const guard = requestGuardRef.current;
     const startedProjectId = activeProject.id;
+    setProcessedReady(false);
 
     const timer = window.setTimeout(() => {
       const raw = rawImageRef.current;
@@ -607,6 +752,7 @@ export function PostProcessInspector({
           }
           if (!cancelled && guard.isCurrent(token)) {
             setIsProcessing(false);
+            setProcessedReady(true);
           }
         })
         .catch((error: unknown) => {
@@ -616,6 +762,7 @@ export function PostProcessInspector({
           );
           setAiProgress(null);
           setIsProcessing(false);
+          setProcessedReady(true);
         });
     }, 60);
 
@@ -653,6 +800,18 @@ export function PostProcessInspector({
         processedArtifactRef.current.width,
         processedArtifactRef.current.height,
       );
+      if (
+        maskOverlayCanvasRef.current &&
+        inpaintMaskRef.current.length ===
+          processedArtifactRef.current.width * processedArtifactRef.current.height
+      ) {
+        const overlay = maskToOverlayRgba(
+          inpaintMaskRef.current,
+          processedArtifactRef.current.width,
+          processedArtifactRef.current.height,
+        );
+        drawCanvasBuffer(maskOverlayCanvasRef.current, overlay.data, overlay.width, overlay.height);
+      }
     }
   }, [inspectorTab, drawCanvasBuffer]);
 
@@ -711,6 +870,476 @@ export function PostProcessInspector({
     draggingPivotRef.current = false;
     if (e.currentTarget.hasPointerCapture(e.pointerId)) {
       e.currentTarget.releasePointerCapture(e.pointerId);
+    }
+  };
+
+  const syncUndoState = useCallback(() => {
+    setUndoState({
+      canUndo: pixelUndoStackRef.current.canUndo,
+      canRedo: pixelUndoStackRef.current.canRedo,
+    });
+  }, []);
+
+  const redrawMaskOverlay = useCallback((mask: Uint8Array, width: number, height: number) => {
+    const overlayCanvas = maskOverlayCanvasRef.current;
+    if (!overlayCanvas) return;
+    overlayCanvas.width = width;
+    overlayCanvas.height = height;
+    const ctx = overlayCanvas.getContext('2d');
+    if (!ctx) return;
+    ctx.clearRect(0, 0, width, height);
+    if (mask.length !== width * height) return;
+    const overlayBuf = maskToOverlayRgba(mask, width, height);
+    ctx.putImageData(new ImageData(new Uint8ClampedArray(overlayBuf.data), width, height), 0, 0);
+  }, []);
+
+  const ensureInpaintMaskSized = useCallback((width: number, height: number): Uint8Array => {
+    const needed = width * height;
+    if (inpaintMaskRef.current.length !== needed) {
+      inpaintMaskRef.current = new Uint8Array(needed);
+      setMaskedPixelCount(0);
+    }
+    return inpaintMaskRef.current;
+  }, []);
+
+  const getWorkingProcessedBuffer = useCallback((): RgbaBuffer | null => {
+    const cached = processedArtifactRef.current;
+    if (cached) {
+      return { width: cached.width, height: cached.height, data: cached.rgba };
+    }
+    const active = activeSpriteBuffer;
+    if (!active) return null;
+    const copy = new Uint8ClampedArray(active.data);
+    const pngBytes = encodeRgbaToPngBytes(copy, active.width, active.height);
+    processedArtifactRef.current = {
+      rgba: copy,
+      width: active.width,
+      height: active.height,
+      pngBytes,
+      pipelineKey,
+    };
+    return { width: active.width, height: active.height, data: copy };
+  }, [activeSpriteBuffer, pipelineKey]);
+
+  const applyAndCommitProcessedBuffer = useCallback(
+    (
+      rgba: Uint8ClampedArray,
+      width: number,
+      height: number,
+      opts: {
+        commitToDb: boolean;
+        editCount?: number;
+        history?: readonly InpaintHistoryEntry[];
+      },
+    ) => {
+      const copy = new Uint8ClampedArray(rgba);
+      const pngBytes = encodeRgbaToPngBytes(copy, width, height);
+      processedArtifactRef.current = {
+        rgba: copy,
+        width,
+        height,
+        pngBytes,
+        pipelineKey,
+      };
+      if (targetNodeId) {
+        preservedPipelineKeyRef.current = `${targetNodeId}:${pipelineKey}`;
+      }
+      requestGuardRef.current.invalidate();
+      drawCanvasBuffer(processedCanvasRef.current, copy, width, height);
+      setProcessedSize({ width, height });
+      setProcessedReady(true);
+      setActiveSpriteBuffer({ width, height, data: copy });
+
+      if (!opts.commitToDb || !targetNodeId || !activeProject) return;
+      const blob = rgbaToPngBlob(copy, width, height);
+      const nextEditCount = opts.editCount ?? manualPixelEditCountRef.current;
+      const nextHistory = opts.history ?? inpaintHistoryRef.current;
+      void repository
+        .commitProcessedSpritePixels(targetNodeId, blob, {
+          manualPixelEditCount: nextEditCount,
+          inpaintHistory: nextHistory,
+          postProcessConfig: latestConfigRef.current,
+          recipeArtBibleHash: computeArtBibleHash(activeProject.artBible),
+          assetClass: latestAssetClassRef.current,
+        })
+        .then(() => refreshSpriteNodes(activeProject.id))
+        .catch((err: unknown) => {
+          setWorkerError(err instanceof Error ? err.message : 'Failed to persist pixel edit.');
+        });
+    },
+    [activeProject, drawCanvasBuffer, pipelineKey, refreshSpriteNodes, targetNodeId],
+  );
+
+  const handleSelectPixelTool = useCallback((tool: PixelTool | null) => {
+    setActivePixelTool(tool);
+    if (tool !== null) {
+      setPivotPlaceMode(false);
+    }
+  }, []);
+
+  const handlePixelUndo = useCallback(() => {
+    const buf = getWorkingProcessedBuffer();
+    if (!buf) return;
+    const restored = pixelUndoStackRef.current.undo(buf.data);
+    if (!restored) return;
+    syncUndoState();
+    applyAndCommitProcessedBuffer(restored, buf.width, buf.height, {
+      commitToDb: true,
+    });
+  }, [applyAndCommitProcessedBuffer, getWorkingProcessedBuffer, syncUndoState]);
+
+  const handlePixelRedo = useCallback(() => {
+    const buf = getWorkingProcessedBuffer();
+    if (!buf) return;
+    const restored = pixelUndoStackRef.current.redo(buf.data);
+    if (!restored) return;
+    syncUndoState();
+    applyAndCommitProcessedBuffer(restored, buf.width, buf.height, {
+      commitToDb: true,
+    });
+  }, [applyAndCommitProcessedBuffer, getWorkingProcessedBuffer, syncUndoState]);
+
+  const handleClearInpaintMask = useCallback(() => {
+    inpaintMaskRef.current.fill(0);
+    setMaskedPixelCount(0);
+    setInpaintStatus(null);
+    setInpaintError(null);
+    redrawMaskOverlay(inpaintMaskRef.current, processedSize.width, processedSize.height);
+  }, [processedSize.height, processedSize.width, redrawMaskOverlay]);
+
+  const inpaintProviders = useMemo(() => {
+    const candidates = providers.filter(
+      (p) =>
+        p.enabled &&
+        (p.kind === 'mock' ||
+          p.kind === 'gemini' ||
+          p.kind === 'antigravity-bridge' ||
+          p.kind === 'comfyui' ||
+          p.kind === 'antigravity-agent'),
+    );
+    return candidates.length > 0 ? candidates : providers;
+  }, [providers]);
+
+  useEffect(() => {
+    if (inpaintProviders.length === 0) return;
+    if (inpaintProviders.some((p) => p.id === inpaintProviderId)) return;
+    const liveCandidate =
+      inpaintProviders.find((p) => p.kind === 'gemini' && p.apiKey.trim().length > 0) ??
+      inpaintProviders.find((p) => p.kind === 'antigravity-bridge') ??
+      inpaintProviders[0];
+    if (liveCandidate) {
+      setInpaintProviderId(liveCandidate.id);
+    }
+  }, [inpaintProviderId, inpaintProviders]);
+
+  const handleRunRegionInpaint = useCallback(async () => {
+    if (!activeProject || !targetNode) return;
+    const buf = getWorkingProcessedBuffer();
+    if (!buf) return;
+    const mask = ensureInpaintMaskSized(buf.width, buf.height);
+    const maskedCount = countMaskedPixels(mask);
+    if (maskedCount === 0) return;
+
+    const provider =
+      inpaintProviders.find((p) => p.id === inpaintProviderId) ?? inpaintProviders[0];
+    if (!provider) {
+      setInpaintError('No inpaint provider configured.');
+      return;
+    }
+
+    setInpaintBusy(true);
+    setInpaintError(null);
+    setInpaintStatus(null);
+
+    try {
+      const goldenReferencePngs = await Promise.all(
+        activeProject.artBible.goldenReferenceBlobIds.slice(0, 3).map(async (blobId) => {
+          const rec = await repository.getBlob(blobId);
+          if (!rec) return null;
+          return {
+            mimeType: rec.mimeType || 'image/png',
+            bytes: new Uint8Array(await rec.bytes.arrayBuffer()),
+          };
+        }),
+      );
+
+      const res = await runRegionInpaint(
+        buf,
+        mask,
+        inpaintPrompt,
+        activeProject.artBible,
+        provider,
+        {
+          snapToPalette: inpaintSnapPalette,
+          seed: targetNode.generationMeta.seed,
+          goldenReferencePngs: goldenReferencePngs.filter(
+            (item): item is NonNullable<typeof item> => item !== null,
+          ),
+        },
+      );
+
+      pixelUndoStackRef.current.pushBeforeEdit(buf.data);
+      syncUndoState();
+
+      mask.fill(0);
+      setMaskedPixelCount(0);
+      redrawMaskOverlay(mask, buf.width, buf.height);
+
+      const nextEntry: InpaintHistoryEntry = {
+        prompt: inpaintPrompt.trim() || 'refine painted area matching Art Bible style',
+        maskedPixels: res.maskedPixels,
+        timestamp: Date.now(),
+      };
+      const nextHistory = [...inpaintHistoryRef.current, nextEntry];
+      inpaintHistoryRef.current = nextHistory;
+      setInpaintHistory(nextHistory);
+
+      applyAndCommitProcessedBuffer(res.buffer.data, res.buffer.width, res.buffer.height, {
+        commitToDb: true,
+        history: nextHistory,
+      });
+      setInpaintStatus(`Inpainted ${res.maskedPixels} px via ${res.providerLabel}`);
+    } catch (err) {
+      setInpaintError(err instanceof Error ? err.message : 'Region inpaint failed.');
+    } finally {
+      setInpaintBusy(false);
+    }
+  }, [
+    activeProject,
+    applyAndCommitProcessedBuffer,
+    ensureInpaintMaskSized,
+    getWorkingProcessedBuffer,
+    inpaintPrompt,
+    inpaintProviderId,
+    inpaintProviders,
+    inpaintSnapPalette,
+    redrawMaskOverlay,
+    syncUndoState,
+    targetNode,
+  ]);
+
+  useEffect(() => {
+    if (inspectorTab !== 'postprocess') return;
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (isEditableInputTarget(e.target) || isEditableInputTarget(document.activeElement)) return;
+      if (e.altKey) return;
+
+      const isMod = e.metaKey || e.ctrlKey;
+      if (isMod) {
+        if (e.key.toLowerCase() === 'z') {
+          e.preventDefault();
+          if (e.shiftKey) {
+            handlePixelRedo();
+          } else {
+            handlePixelUndo();
+          }
+        }
+        return;
+      }
+
+      const key = e.key.toLowerCase();
+      if (key === 'b') {
+        e.preventDefault();
+        handleSelectPixelTool('pencil');
+      } else if (key === 'e') {
+        e.preventDefault();
+        handleSelectPixelTool('eraser');
+      } else if (key === 'i') {
+        e.preventDefault();
+        handleSelectPixelTool('eyedropper');
+      } else if (key === 'g') {
+        e.preventDefault();
+        handleSelectPixelTool('fill');
+      } else if (key === 'k') {
+        e.preventDefault();
+        handleSelectPixelTool('mask-brush');
+      } else if (key === 'm') {
+        e.preventDefault();
+        setMirrorX((prev) => !prev);
+      } else if (key === 'v' || e.key === 'Escape') {
+        if (activePixelTool !== null) {
+          e.preventDefault();
+          handleSelectPixelTool(null);
+        }
+      }
+    };
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, [activePixelTool, handlePixelRedo, handlePixelUndo, handleSelectPixelTool, inspectorTab]);
+
+  const handleCanvasSurfacePointerDown = (e: ReactPointerEvent<HTMLDivElement>) => {
+    if (activePixelTool === null) {
+      handlePivotSurfacePointerDown(e);
+      return;
+    }
+    if (e.button !== 0) return;
+    const buf = getWorkingProcessedBuffer();
+    if (!buf) return;
+
+    e.preventDefault();
+    try {
+      e.currentTarget.setPointerCapture(e.pointerId);
+    } catch {
+      // Synthetic pointer dispatches may lack active pointerId capture
+    }
+
+    const pt = mapClientToTexel(
+      e.clientX,
+      e.clientY,
+      e.currentTarget.getBoundingClientRect(),
+      buf.width,
+      buf.height,
+    );
+    setHoverTexel(pt);
+
+    if (activePixelTool === 'eyedropper') {
+      const sampled = samplePixelRgba(buf, pt.x, pt.y);
+      if (sampled && sampled[3] > 0) {
+        setActiveColorHex(rgbaColorToHex(sampled));
+      }
+      return;
+    }
+
+    if (activePixelTool === 'fill') {
+      const prevCopy = new Uint8ClampedArray(buf.data);
+      const fillRgba = hexToRgbaColor(activeColorHex, 255);
+      const filled = floodFillRgba(buf, pt.x, pt.y, fillRgba);
+      if (filled > 0) {
+        pixelUndoStackRef.current.pushBeforeEdit(prevCopy);
+        syncUndoState();
+        const nextEdits = manualPixelEditCountRef.current + 1;
+        manualPixelEditCountRef.current = nextEdits;
+        setManualPixelEditCount(nextEdits);
+        applyAndCommitProcessedBuffer(buf.data, buf.width, buf.height, {
+          commitToDb: true,
+          editCount: nextEdits,
+        });
+      }
+      return;
+    }
+
+    if (activePixelTool === 'mask-brush' || activePixelTool === 'mask-eraser') {
+      const mask = ensureInpaintMaskSized(buf.width, buf.height);
+      activeStrokeToolRef.current = activePixelTool;
+      lastTexelRef.current = pt;
+      paintMaskPixel(
+        mask,
+        buf.width,
+        buf.height,
+        pt.x,
+        pt.y,
+        activePixelTool === 'mask-brush' ? 1 : 0,
+        brushSize,
+        mirrorX,
+      );
+      setMaskedPixelCount(countMaskedPixels(mask));
+      setInpaintError(null);
+      setInpaintStatus(null);
+      redrawMaskOverlay(mask, buf.width, buf.height);
+      return;
+    }
+
+    // Pencil or Eraser stroke
+    strokeSnapshotRef.current = new Uint8ClampedArray(buf.data);
+    strokeDirtyRef.current = true;
+    activeStrokeToolRef.current = activePixelTool;
+    lastTexelRef.current = pt;
+    const strokeColor =
+      activePixelTool === 'eraser' ? ([0, 0, 0, 0] as const) : hexToRgbaColor(activeColorHex, 255);
+    plotPixel(buf, pt.x, pt.y, {
+      color: strokeColor,
+      mirrorX,
+      brushSize,
+    });
+    drawCanvasBuffer(processedCanvasRef.current, buf.data, buf.width, buf.height);
+  };
+
+  const handleCanvasSurfacePointerMove = (e: ReactPointerEvent<HTMLDivElement>) => {
+    if (activePixelTool === null) {
+      handlePivotSurfacePointerMove(e);
+      return;
+    }
+    const buf = getWorkingProcessedBuffer();
+    if (!buf) return;
+    const pt = mapClientToTexel(
+      e.clientX,
+      e.clientY,
+      e.currentTarget.getBoundingClientRect(),
+      buf.width,
+      buf.height,
+    );
+    setHoverTexel(pt);
+
+    const strokeTool = activeStrokeToolRef.current;
+    const prevPt = lastTexelRef.current;
+    if (!strokeTool || !prevPt) return;
+
+    if (strokeTool === 'mask-brush' || strokeTool === 'mask-eraser') {
+      const mask = ensureInpaintMaskSized(buf.width, buf.height);
+      paintMaskLine(
+        mask,
+        buf.width,
+        buf.height,
+        prevPt.x,
+        prevPt.y,
+        pt.x,
+        pt.y,
+        strokeTool === 'mask-brush' ? 1 : 0,
+        brushSize,
+        mirrorX,
+      );
+      lastTexelRef.current = pt;
+      setMaskedPixelCount(countMaskedPixels(mask));
+      redrawMaskOverlay(mask, buf.width, buf.height);
+      return;
+    }
+
+    if (strokeTool === 'pencil' || strokeTool === 'eraser') {
+      const strokeColor =
+        strokeTool === 'eraser' ? ([0, 0, 0, 0] as const) : hexToRgbaColor(activeColorHex, 255);
+      plotBresenhamLine(buf, prevPt.x, prevPt.y, pt.x, pt.y, {
+        color: strokeColor,
+        mirrorX,
+        brushSize,
+      });
+      lastTexelRef.current = pt;
+      drawCanvasBuffer(processedCanvasRef.current, buf.data, buf.width, buf.height);
+    }
+  };
+
+  const handleCanvasSurfacePointerUp = (e: ReactPointerEvent<HTMLDivElement>) => {
+    if (activePixelTool === null && !activeStrokeToolRef.current) {
+      handlePivotSurfacePointerUp(e);
+      return;
+    }
+    if (e.currentTarget.hasPointerCapture(e.pointerId)) {
+      try {
+        e.currentTarget.releasePointerCapture(e.pointerId);
+      } catch {
+        // Ignore capture release errors on synthetic events
+      }
+    }
+
+    const strokeTool = activeStrokeToolRef.current;
+    activeStrokeToolRef.current = null;
+    lastTexelRef.current = null;
+
+    if (strokeTool && strokeDirtyRef.current && strokeSnapshotRef.current) {
+      const snapshot = strokeSnapshotRef.current;
+      strokeSnapshotRef.current = null;
+      strokeDirtyRef.current = false;
+      const buf = getWorkingProcessedBuffer();
+      if (buf) {
+        pixelUndoStackRef.current.pushBeforeEdit(snapshot);
+        syncUndoState();
+        const nextEdits = manualPixelEditCountRef.current + 1;
+        manualPixelEditCountRef.current = nextEdits;
+        setManualPixelEditCount(nextEdits);
+        applyAndCommitProcessedBuffer(buf.data, buf.width, buf.height, {
+          commitToDb: true,
+          editCount: nextEdits,
+        });
+      }
     }
   };
 
@@ -904,6 +1533,8 @@ export function PostProcessInspector({
       ...(targetNode.parallaxScene ? { parallaxScene: parallaxSceneConfig } : {}),
       ...(targetNode.bitmapFont ? { bitmapFont: bitmapFontConfig } : {}),
       ...(targetNode.shaderConfig ? { shaderConfig } : {}),
+      ...(manualPixelEditCount > 0 ? { manualPixelEditCount } : {}),
+      ...(inpaintHistory.length > 0 ? { inpaintHistory } : {}),
       recipeArtBibleHash: computeArtBibleHash(activeProject.artBible),
       assetClass,
     });
@@ -1269,6 +1900,8 @@ export function PostProcessInspector({
     <div
       data-testid="postprocess-inspector"
       data-recipe-synced={String(Boolean(targetNode.recipeArtBibleHash))}
+      data-pixel-edit-count={String(manualPixelEditCount)}
+      data-inpaint-count={String(inpaintHistory.length)}
       className="flex flex-1 flex-col overflow-hidden"
     >
       <div className="flex flex-wrap items-center justify-between gap-2 border-b border-[var(--border-hairline)] bg-[var(--bg-panel)] px-4 py-2">
@@ -1599,16 +2232,50 @@ export function PostProcessInspector({
                 : 'lg:grid-cols-[minmax(0,1fr)_288px]'
             }`}
           >
-            {/* Left: Canvas-First Viewport with Floating CanvasHud & PiP Biome */}
+            {/* Left: Canvas-First Viewport with Floating CanvasHud, Micro-Editor & PiP Biome */}
             <section
               ref={canvasWellRef}
               data-testid="inspector-canvas-well"
               className={`relative flex min-w-0 flex-1 flex-col overflow-hidden ${backdropClass}`}
               style={backdropStyle}
             >
-              <div className="flex flex-1 items-center justify-center overflow-auto p-6 pb-20">
+              <PixelMicroEditorToolbar
+                activeTool={activePixelTool}
+                onSelectTool={handleSelectPixelTool}
+                mirrorX={mirrorX}
+                onToggleMirrorX={() => setMirrorX((m) => !m)}
+                brushSize={brushSize}
+                onChangeBrushSize={setBrushSize}
+                canUndo={undoState.canUndo}
+                canRedo={undoState.canRedo}
+                onUndo={handlePixelUndo}
+                onRedo={handlePixelRedo}
+                paletteHex={activeProject.artBible.palette}
+                activeColorHex={activeColorHex}
+                onSelectColorHex={setActiveColorHex}
+                freeColorUnlocked={freeColorUnlocked}
+                onToggleFreeColor={() => setFreeColorUnlocked((u) => !u)}
+                maskedPixelCount={maskedPixelCount}
+                inpaintPrompt={inpaintPrompt}
+                onChangeInpaintPrompt={setInpaintPrompt}
+                inpaintProviders={inpaintProviders}
+                inpaintProviderId={inpaintProviderId}
+                onChangeInpaintProviderId={setInpaintProviderId}
+                snapToPalette={inpaintSnapPalette}
+                onToggleSnapToPalette={() => setInpaintSnapPalette((s) => !s)}
+                onClearMask={handleClearInpaintMask}
+                onRunInpaint={() => void handleRunRegionInpaint()}
+                inpaintBusy={inpaintBusy}
+                inpaintStatus={inpaintStatus}
+                inpaintError={inpaintError}
+              />
+
+              <div
+                className="flex flex-1 items-center justify-center overflow-auto p-6 pt-14 pb-28"
+                onPointerLeave={() => setHoverTexel(null)}
+              >
                 <BeforeAfterWipe
-                  enabled={wipeEnabled}
+                  enabled={wipeEnabled && activePixelTool === null}
                   percent={splitPercent}
                   onChangePercent={setSplitPercent}
                   onToggleEnabled={() => setWipeEnabled((w) => !w)}
@@ -1617,10 +2284,10 @@ export function PostProcessInspector({
                   afterLabel="Processed"
                   widthPx={stageW}
                   heightPx={stageH}
-                  disabledDrag={pivotPlaceMode}
-                  onSurfacePointerDown={handlePivotSurfacePointerDown}
-                  onSurfacePointerMove={handlePivotSurfacePointerMove}
-                  onSurfacePointerUp={handlePivotSurfacePointerUp}
+                  disabledDrag={pivotPlaceMode || activePixelTool !== null}
+                  onSurfacePointerDown={handleCanvasSurfacePointerDown}
+                  onSurfacePointerMove={handleCanvasSurfacePointerMove}
+                  onSurfacePointerUp={handleCanvasSurfacePointerUp}
                   className="shadow-2xl ring-1 ring-slate-600/80"
                   before={
                     <canvas
@@ -1634,12 +2301,53 @@ export function PostProcessInspector({
                     <canvas
                       ref={processedCanvasRef}
                       data-testid="processed-preview-canvas"
+                      data-ready={String(processedReady)}
                       className="h-full w-full"
                       style={{ imageRendering: inspectorImageRendering }}
                     />
                   }
                   overlay={
                     <>
+                      <canvas
+                        ref={maskOverlayCanvasRef}
+                        data-testid="inpaint-mask-canvas"
+                        className="pointer-events-none absolute inset-0 h-full w-full"
+                        style={{ imageRendering: 'pixelated' }}
+                      />
+
+                      {mirrorX && activePixelTool !== null && (
+                        <div
+                          data-testid="mirror-x-guide"
+                          className="pointer-events-none absolute top-0 bottom-0 left-1/2 w-px -translate-x-1/2 border-l border-dashed border-cyan-400/75"
+                        />
+                      )}
+
+                      {hoverTexel && activePixelTool !== null && (
+                        <>
+                          <div
+                            data-testid="pixel-hover-reticle"
+                            className="pointer-events-none absolute border border-[#F5B82E] shadow-[0_0_2px_#000]"
+                            style={{
+                              left: `${(Math.max(0, hoverTexel.x - Math.floor(brushSize / 2)) / Math.max(1, processedSize.width)) * 100}%`,
+                              top: `${(Math.max(0, hoverTexel.y - Math.floor(brushSize / 2)) / Math.max(1, processedSize.height)) * 100}%`,
+                              width: `${(brushSize / Math.max(1, processedSize.width)) * 100}%`,
+                              height: `${(brushSize / Math.max(1, processedSize.height)) * 100}%`,
+                            }}
+                          />
+                          {mirrorX && (
+                            <div
+                              className="pointer-events-none absolute border border-cyan-300/85 shadow-[0_0_2px_#000]"
+                              style={{
+                                left: `${(Math.max(0, processedSize.width - 1 - hoverTexel.x - Math.floor(brushSize / 2)) / Math.max(1, processedSize.width)) * 100}%`,
+                                top: `${(Math.max(0, hoverTexel.y - Math.floor(brushSize / 2)) / Math.max(1, processedSize.height)) * 100}%`,
+                                width: `${(brushSize / Math.max(1, processedSize.width)) * 100}%`,
+                                height: `${(brushSize / Math.max(1, processedSize.height)) * 100}%`,
+                              }}
+                            />
+                          )}
+                        </>
+                      )}
+
                       {showPixelGrid && zoomPercent >= 200 && (
                         <div
                           className="pointer-events-none absolute inset-0"
@@ -2399,7 +3107,11 @@ export function PostProcessInspector({
                     type="button"
                     data-testid="pivot-place-mode-btn"
                     aria-pressed={pivotPlaceMode}
-                    onClick={() => setPivotPlaceMode(!pivotPlaceMode)}
+                    onClick={() => {
+                      const nextPivot = !pivotPlaceMode;
+                      setPivotPlaceMode(nextPivot);
+                      if (nextPivot) setActivePixelTool(null);
+                    }}
                     className={`flex w-full items-center justify-center gap-1.5 rounded border px-2.5 py-1.5 text-xs font-medium ${
                       pivotPlaceMode
                         ? 'border-amber-400/60 bg-amber-500/20 text-amber-200'

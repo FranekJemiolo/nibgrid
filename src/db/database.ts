@@ -26,10 +26,13 @@ import {
   SpriteNodeSchema,
   createDefaultArtBible,
   type ArtBible,
+  type AssetClass,
   type AudioAsset,
   type AudioBindings,
   type BitmapFontConfig,
   type BlobRecord,
+  type InpaintHistoryEntry,
+  type PostProcessConfig,
   type Project,
   type ProviderConfig,
   type ShaderConfig,
@@ -387,6 +390,83 @@ export class NibgridRepository {
         if (!node) return;
         await this.database.spriteNodes.delete(nodeId);
         await this.cleanupOrphanedBlobsInTx();
+      },
+    );
+  }
+
+  /**
+   * Atomically persists edited/inpainted PNG bytes onto `SpriteNode.processedBlobId`
+   * with SHA-256 deduplication and orphan blob garbage collection.
+   */
+  async commitProcessedSpritePixels(
+    nodeId: string,
+    pngBlob: Blob,
+    updates: {
+      manualPixelEditCount?: number;
+      inpaintHistory?: readonly InpaintHistoryEntry[];
+      postProcessConfig?: PostProcessConfig;
+      recipeArtBibleHash?: string;
+      assetClass?: AssetClass;
+    } = {},
+  ): Promise<SpriteNode> {
+    const bytes = new Uint8Array(await pngBlob.arrayBuffer());
+    const mimeType = pngBlob.type || 'image/png';
+    const sha256 = await sha256Bytes(bytes);
+
+    return this.database.transaction(
+      'rw',
+      [
+        this.database.blobs,
+        this.database.spriteNodes,
+        this.database.projects,
+        this.database.audioAssets,
+        this.database.vaultItems,
+      ],
+      async () => {
+        const existingNode = await this.database.spriteNodes.get(nodeId);
+        if (!existingNode) {
+          throw new Error(`SpriteNode "${nodeId}" not found.`);
+        }
+
+        let blobRecord = await this.database.blobs.where('sha256').equals(sha256).first();
+        if (!blobRecord) {
+          const copy = new Uint8Array(bytes.byteLength);
+          copy.set(bytes);
+          blobRecord = BlobRecordSchema.parse({
+            id: createId(),
+            mimeType,
+            bytes: new Blob([copy.buffer], { type: mimeType }),
+            sha256,
+            createdAt: nowIso(),
+          });
+          await this.database.blobs.put(blobRecord);
+        }
+
+        const nextNode = SpriteNodeSchema.parse({
+          ...existingNode,
+          processedBlobId: blobRecord.id,
+          ...(updates.assetClass !== undefined ? { assetClass: updates.assetClass } : {}),
+          ...(updates.postProcessConfig !== undefined
+            ? { postProcessConfig: updates.postProcessConfig }
+            : {}),
+          ...(updates.recipeArtBibleHash !== undefined
+            ? { recipeArtBibleHash: updates.recipeArtBibleHash }
+            : {}),
+          ...(updates.manualPixelEditCount !== undefined
+            ? { manualPixelEditCount: updates.manualPixelEditCount }
+            : {}),
+          ...(updates.inpaintHistory !== undefined
+            ? { inpaintHistory: [...updates.inpaintHistory] }
+            : {}),
+        });
+
+        await this.database.spriteNodes.put(nextNode);
+        await this.database.projects
+          .where('id')
+          .equals(nextNode.projectId)
+          .modify({ updatedAt: nowIso() });
+        await this.cleanupOrphanedBlobsInTx();
+        return nextNode;
       },
     );
   }

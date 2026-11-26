@@ -641,6 +641,13 @@ export function createDefaultShaderConfig(presetId = 'hit_flash'): ShaderConfig 
   });
 }
 
+export const InpaintHistoryEntrySchema = z.object({
+  prompt: z.string().min(1).max(400),
+  maskedPixels: z.number().int().positive(),
+  timestamp: z.number().int().nonnegative(),
+});
+export type InpaintHistoryEntry = z.infer<typeof InpaintHistoryEntrySchema>;
+
 export const SpriteNodeSchema = z.object({
   id: z.string().min(1),
   projectId: z.string().min(1),
@@ -653,6 +660,8 @@ export const SpriteNodeSchema = z.object({
   parallaxScene: ParallaxSceneConfigSchema.optional(),
   bitmapFont: BitmapFontConfigSchema.optional(),
   shaderConfig: ShaderConfigSchema.optional(),
+  inpaintHistory: z.array(InpaintHistoryEntrySchema).optional(),
+  manualPixelEditCount: z.number().int().nonnegative().optional(),
   imageBlobId: z.string().min(1),
   maskBlobId: z.string().min(1).optional(),
   processedBlobId: z.string().min(1).optional(),

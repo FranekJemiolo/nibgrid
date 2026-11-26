@@ -10,6 +10,7 @@ import {
   CollisionLayerShapeSchema,
   DimensionSchema,
   HexColorSchema,
+  InpaintHistoryEntrySchema,
   LightingSchema,
   MlsModeSchema,
   NineSliceConfigSchema,
@@ -29,6 +30,7 @@ import {
   type AutoTileConfig,
   type BitmapFontConfig,
   type CollisionLayerShape,
+  type InpaintHistoryEntry,
   type NineSliceConfig,
   type NormalMapConfig,
   type PaletteLutConfig,
@@ -132,6 +134,8 @@ export const AssetRecipeSchema = z.object({
   parallaxScene: ParallaxSceneConfigSchema.optional(),
   bitmapFont: BitmapFontConfigSchema.optional(),
   shaderConfig: ShaderConfigSchema.optional(),
+  inpaintHistory: z.array(InpaintHistoryEntrySchema).optional(),
+  manualPixelEditCount: z.number().int().nonnegative().optional(),
 });
 
 export type AssetRecipe = z.infer<typeof AssetRecipeSchema>;
@@ -172,6 +176,8 @@ export interface BuildAssetRecipeInput {
   parallaxScene?: ParallaxSceneConfig;
   bitmapFont?: BitmapFontConfig;
   shaderConfig?: ShaderConfig;
+  inpaintHistory?: readonly InpaintHistoryEntry[];
+  manualPixelEditCount?: number;
 }
 
 const SENSITIVE_KEY_PATTERNS: readonly RegExp[] = [
@@ -274,6 +280,14 @@ export function buildAssetRecipe(input: BuildAssetRecipeInput): AssetRecipe {
     ...(() => {
       const sockList = input.sockets ?? node.sockets;
       return sockList && sockList.length > 0 ? { sockets: [...sockList] } : {};
+    })(),
+    ...(() => {
+      const edits = input.manualPixelEditCount ?? node.manualPixelEditCount;
+      return edits !== undefined && edits > 0 ? { manualPixelEditCount: edits } : {};
+    })(),
+    ...(() => {
+      const history = input.inpaintHistory ?? node.inpaintHistory;
+      return history && history.length > 0 ? { inpaintHistory: [...history] } : {};
     })(),
   });
 

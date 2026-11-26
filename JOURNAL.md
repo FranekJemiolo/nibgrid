@@ -549,3 +549,19 @@
 - **WebRTC Transport & Loopback Factory (`src/p2p/webrtcTransfer.ts`):** Implemented `P2pSenderSession` and `P2pReceiverSession` with `64 KiB` DataChannel backpressure, configurable ICE servers, and `createInMemoryLoopbackPeerFactory()` for zero-network CI verification.
 - **P2P Transfer Modal (`src/ui/share/P2pTransferModal.tsx`, `src/App.tsx`, `src/ui/hub/ProjectHub.tsx`, `src/ui/vault/VaultAndBrowserView.tsx`, `src/ui/command/CommandPalette.tsx`):** Added Send/Receive tabs keeping sessions live across tab toggles, inline SVG QR visualizers, live progress, SHA-256 Verified badges, and 1-click snapshot import.
 - **Verification:** Added `tests/unit/m30-p2p-protocol.test.ts` (100 KiB chunking/reassembly, 1-bit flip corruption rejection, SDP codec round-trip, full loopback transfer) and `tests/e2e/m30-p2p-e2e.spec.ts` verifying full Offer/Answer transfer & project import via injected `RTCPeerConnection` loopback.
+
+## Milestone 31A: Pure-TS Surgical Pixel Editor Core, Mask Composite & Atomic Commit
+
+- **Pure-TS Raster & Mask Core (`src/processing/pixelEditorCore.ts`, `src/processing/inpaintMask.ts`):** Implemented `plotPixel`, `plotBresenhamLine` with `mirrorX`, iterative `floodFillRgba`, `PixelUndoStack(50)`, `mapClientToTexel`, `paintMaskLine`, `maskToRgbaBuffer`, `maskToOverlayRgba`, `compositeInpaintResult`, and `snapMaskedPixelsToPalette`.
+- **Schema, Recipe & Atomic Dexie Persist (`src/domain/schemas.ts`, `src/export/recipeBuilder.ts`, `src/db/database.ts`):** Added `inpaintHistory` and `manualPixelEditCount` to `SpriteNodeSchema` and `AssetRecipeSchema`, plus `NibgridRepository.commitProcessedSpritePixels()` with SHA-256 deduplication and inline orphan blob cleanup.
+- **Verification:** Added `tests/unit/m31a-pixel-editor-core.test.ts` covering continuous mirrored diagonals, enclosed 4-connected flood fill, 3→2→1 undo/redo + depth cap, byte-identical unmasked composite preservation, and atomic IndexedDB persistence with zero orphan blobs.
+
+## Milestone 31B: Region-Masked AI Inpainting Adapter & Offline Mock Mode
+
+- **Inpaint Adapter (`src/providers/inpaintAdapter.ts`):** Implemented `estimateInpaintCost()`, `buildGeminiInpaintRequest()` attaching original + binary mask PNGs with Art Bible lock tokens, deterministic Offline Mock `$0.00` mode, nearest-neighbor alignment + strict `compositeInpaintResult()` merging, and automatic secret redaction across Gemini BYOK, Antigravity Bridge, and ComfyUI.
+- **Verification:** Added `tests/unit/m31b-inpaint-adapter.test.ts` asserting Gemini payload structure, Offline Mock byte-identical unmasked pixel preservation, `AIzaSyINPAINT999` secret stripping on HTTP `401`/`429`, and masked Gemini PNG compositing.
+
+## Milestone 31C: Screen 4A Pixel Micro-Editor & Region-Masked Inpainting UI
+
+- **Screen 4A Toolbar & Canvas Integration (`src/ui/inspector/PixelMicroEditorToolbar.tsx`, `src/ui/inspector/PostProcessInspector.tsx`):** Added floating tool rail (`Pencil`, `Eraser`, `Eyedropper`, `Flood Fill`, `Mirror-X`, `Mask Brush`/`Mask Eraser`, `1–3px` brush size, `Undo`/`Redo`), bottom Art Bible swatch strip (+ `Unlock Free Color`), top-center Inpaint Action Bar, HiDPI pointer-to-texel mapping, editable-input keyboard shortcut isolation, reload preservation of edited blobs, and atomic Dexie commit.
+- **Verification:** Added `tests/e2e/m31c-micro-editor-e2e.spec.ts` covering Pencil + Mirror-X at `dpr: 1` & `dpr: 2`, `Cmd+Z` / `Cmd+Shift+Z`, keyboard shortcut isolation inside `inpaint-prompt-input`, intercepted Gemini masked inpainting, `.recipe.json` metadata export, hard-reload persistence, and zero orphan blobs.

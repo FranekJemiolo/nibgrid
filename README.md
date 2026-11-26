@@ -1,6 +1,6 @@
 # Nibgrid
 
-Local-first, zero-server Bring-Your-Own-Key / Bring-Your-Own-Model (BYOK/BYOM) Progressive Web App for turning hand-drawn sketches and vocal hums into style-locked, engine-ready 2D game sprites, 4-view turnarounds, normal maps, animations, auto-tiles, mesh-tracked sockets, VFX flipbooks, parallax backgrounds, bitmap fonts & damage numerals, colliders, UI panels, Godot 4 `.gdshader` + `ShaderMaterial` `.tres` shaders, `.tscn` + typed `.gd` prefabs & live `res://` sync, reusable Global Asset Vault libraries, `.nibgrid.zip` snapshots, zero-server `#share=` URL/Pack Feeds, WebRTC P2P direct transfers, and audio.
+Local-first, zero-server Bring-Your-Own-Key / Bring-Your-Own-Model (BYOK/BYOM) Progressive Web App for turning hand-drawn sketches and vocal hums into style-locked, engine-ready 2D game sprites, 4-view turnarounds, normal maps, animations, auto-tiles, mesh-tracked sockets, VFX flipbooks, parallax backgrounds, bitmap fonts & damage numerals, colliders, UI panels, Godot 4 `.gdshader` + `ShaderMaterial` `.tres` shaders, `.tscn` + typed `.gd` prefabs & live `res://` sync, surgical pixel micro-editing & region-masked AI inpainting, reusable Global Asset Vault libraries, `.nibgrid.zip` snapshots, zero-server `#share=` URL/Pack Feeds, WebRTC P2P direct transfers, and audio.
 
 **Live App (GitHub Pages):** https://franekjemiolo.github.io/nibgrid/
 
@@ -42,6 +42,7 @@ Local-first, zero-server Bring-Your-Own-Key / Bring-Your-Own-Model (BYOK/BYOM) P
   - [2.23 Reuse Cross-Project Assets & Export `.nibgrid.zip` Snapshots (Asset Vault)](#223-reuse-cross-project-assets--export-nibgridzip-snapshots-asset-vault)
   - [2.24 Share Zero-Server `#share=` Recipes & Import Static Pack Feeds (Sharing)](#224-share-zero-server-share-recipes--import-static-pack-feeds-sharing)
   - [2.25 Transfer Snapshots Browser-to-Browser via WebRTC P2P (`NIB-O1:` / `NIB-A1:`)](#225-transfer-snapshots-browser-to-browser-via-webrtc-p2p-nib-o1--nib-a1)
+  - [2.26 Polish Sprites via Surgical Pixel Micro-Editor & Region Inpainting (Screen 4A)](#226-polish-sprites-via-surgical-pixel-micro-editor--region-inpainting-screen-4a)
 - [Part 3 — Engine Drop-In Integration Examples](#part-3--engine-drop-in-integration-examples)
 - [Architecture Summary](#architecture-summary)
 - [Development & Verification](#development--verification)
@@ -79,6 +80,7 @@ Local-first, zero-server Bring-Your-Own-Key / Bring-Your-Own-Model (BYOK/BYOM) P
 | Cross-Project Vault & Portable Project Snapshots  | `Vault` (`Project Browser` / `Global Vault`) | `$0.00 Local` (SHA-256 Dexie Deduplication) | 1-click promoted sprites/shaders/fonts/VFX/SFX/palettes + `.nibgrid.zip` snapshots                  |
 | Zero-Server URL Recipe Links & Static Pack Feeds  | `Shader Studio` / `Vault` → `Pack Feeds`     | `$0.00` Static URLs & CORS Feeds            | Compressed `#share=v1.` re-bakeable links + signed `.nibgrid-pack.zip` starter packs                |
 | Direct Browser-to-Browser WebRTC Binary Transfer  | `Projects` / `Vault` → `Share via P2P`       | `$0.00 Local` (Non-Trickle DataChannel)     | Scannable `NIB-O1:` / `NIB-A1:` QR/SDP handshake + 16 KiB chunked SHA-256 verified `.nibgrid.zip`   |
+| Surgical Pixel Fixes & Region-Masked Inpainting   | `Post-Process` (Screen 4A) Floating Rail     | `$0.00` Local Edits / `$0.00` Mock / BYOK   | Byte-preserved unmasked pixels + atomic Dexie commit (`manualPixelEditCount` / `inpaintHistory`)    |
 
 ---
 
@@ -633,6 +635,18 @@ flowchart LR
 
 ---
 
+### 2.26 Polish Sprites via Surgical Pixel Micro-Editor & Region Inpainting (Screen 4A)
+
+**When to use it:** Close the final 5% polish gap directly inside Screen 4A—fixing stray pixels, asymmetrical eyes, or edge artifacts in seconds without leaving Nibgrid, or repainting only a specific visor/weapon zone while keeping every unmasked pixel byte-for-byte untouched.
+
+**Click-by-Click:**
+
+1. **Pixel Micro-Editor Rail (`Pencil (B)`, `Eraser (E)`, `Eyedropper (I)`, `Flood Fill (G)`, `Mirror-X (M)`):** On any processed sprite in **Screen 4A**, pick an Art Bible swatch from the bottom palette strip (or click **`Unlock Free Color`**), toggle **`Mirror-X (M)`** for live bilateral symmetry with a center dashed guide, select `1px`/`2px`/`3px` brush size, and draw directly at any zoom level (`Cmd/Ctrl+Z` / `Cmd/Ctrl+Shift+Z` supports 50-step Undo/Redo).
+2. **Region-Masked AI Inpaint (`Inpaint Mask Brush (K)`):** Paint a translucent red mask strictly over the area you want regenerated (such as a helmet visor or blade), enter a local prompt in the **Inpaint Action Bar** (e.g., `"add glowing visor"`), choose **Offline Mock (`$0.00`)**, **Antigravity Bridge**, or **Gemini BYOK**, optionally keep **`Snap`** checked to quantize regenerated pixels to your Art Bible palette, and click **`Inpaint Region`**.
+3. **Guaranteed Byte Preservation & Reload Durability:** Nibgrid merges ONLY masked pixels (`compositeInpaintResult`) so all unmasked pixels remain 100% byte-identical, persists updates atomically to IndexedDB (`commitProcessedSpritePixels`), and records `manualPixelEditCount` and `inpaintHistory` inside `asset.recipe.json` exports.
+
+---
+
 ## Part 3 — Engine Drop-In Integration Examples
 
 ### Godot 4 (`4.2+`)
@@ -790,6 +804,7 @@ const pop = new BitmapText({
 - **Global Asset Vault, Smart Browser & `.nibgrid.zip` Snapshots (`#/vault`):** Promote and reuse sprites, `.gdshader` presets, bitmap fonts, VFX flipbooks, SFX packs, and Art Bibles across projects via Dexie v4 `vaultItems` (`vaultSchema.ts`) with content-addressed `storeBlobDeduplicated()` and orphan-safe garbage collection (`findOrphanBlobIds`); browse & batch-promote/remap assets in `VaultAndBrowserView.tsx`; and export/import SHA-256-verified, credential-free `.nibgrid.zip` project snapshots (`projectSnapshot.ts`).
 - **Zero-Server `#share=v1.` URL Recipes & Static GitHub Pack Feeds:** Encode self-contained recipes into URL fragments via `zlib` level-9 compression, safe bounded inflation (`inflateWithLimit`), and Base64URL (`recipeUrlCodec.ts`, `ShareRecipeModal.tsx`) for instant boot-time inspection and re-baking; fetch CORS-friendly static pack catalogs (`packFeedClient.ts`, `PackFeedBrowser.tsx`) with SHA-256 ZIP integrity checks (`public/packs/starter-catalog.json` + `retro-rpg-starter.nibgrid-pack.zip`).
 - **Zero-Server WebRTC P2P Direct Transfer:** Stream `.nibgrid.zip` snapshots directly between browsers with zero signaling backend using non-trickle `zlib`+Base64URL `NIB-O1:` / `NIB-A1:` SDP codes and built-in QR code generation (`sdpCodec.ts`), backpressure-controlled `16 KiB` DataChannel framing + `SHA-256` manifest verification (`p2pProtocol.ts`, `webrtcTransfer.ts`), and `P2pTransferModal.tsx`.
+- **Surgical Pixel Micro-Editor & Region-Masked Inpainting (Screen 4A):** Draw Bresenham strokes with optional horizontal symmetry (`Mirror-X`), 4-connected flood fill, eyedropper, and 50-step `PixelUndoStack` in pure TS (`pixelEditorCore.ts`); paint binary inpaint masks and merge Gemini BYOK / Antigravity Bridge / ComfyUI / Offline Mock regenerations strictly within masked texels (`inpaintMask.ts`, `inpaintAdapter.ts`) while guaranteeing 100% byte-identical preservation of unmasked pixels; and persist edits atomically (`commitProcessedSpritePixels`) with HiDPI texel mapping (`PixelMicroEditorToolbar.tsx`, `PostProcessInspector.tsx`).
 
 ---
 
