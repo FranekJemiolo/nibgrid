@@ -44,40 +44,30 @@ test.describe('M22C: 2D VFX Flipbook & Particle Sheet Baker (Screen 4K)', () => 
 
     // Scrub Spread & Turbulence via ScrubInput pointer drag
     const spreadScrub = page.getByTestId('vfx-spread-scrub');
+    await spreadScrub.scrollIntoViewIfNeeded();
     const spreadBefore = Number(await spreadScrub.getAttribute('data-value'));
     const spreadBox = await spreadScrub.boundingBox();
     expect(spreadBox).not.toBeNull();
-    await page.mouse.move(
-      spreadBox!.x + spreadBox!.width / 2,
-      spreadBox!.y + Math.min(12, spreadBox!.height / 2),
-    );
+    const spreadY = spreadBox!.y + spreadBox!.height / 2;
+    await page.mouse.move(spreadBox!.x + spreadBox!.width / 2, spreadY);
     await page.mouse.down();
-    await page.mouse.move(
-      spreadBox!.x + spreadBox!.width / 2 - 20,
-      spreadBox!.y + Math.min(12, spreadBox!.height / 2),
-      { steps: 6 },
-    );
+    await page.mouse.move(spreadBox!.x + spreadBox!.width / 2 - 24, spreadY, { steps: 8 });
     await page.mouse.up();
+    await expect(spreadScrub).not.toHaveAttribute('data-value', String(spreadBefore));
     const spreadAfter = Number(await spreadScrub.getAttribute('data-value'));
-    expect(spreadAfter).not.toBe(spreadBefore);
 
     const turbScrub = page.getByTestId('vfx-turbulence-scrub');
+    await turbScrub.scrollIntoViewIfNeeded();
     const turbBefore = Number(await turbScrub.getAttribute('data-value'));
     const turbBox = await turbScrub.boundingBox();
     expect(turbBox).not.toBeNull();
-    await page.mouse.move(
-      turbBox!.x + turbBox!.width / 2,
-      turbBox!.y + Math.min(12, turbBox!.height / 2),
-    );
+    const turbY = turbBox!.y + turbBox!.height / 2;
+    await page.mouse.move(turbBox!.x + turbBox!.width / 2, turbY);
     await page.mouse.down();
-    await page.mouse.move(
-      turbBox!.x + turbBox!.width / 2 + 28,
-      turbBox!.y + Math.min(12, turbBox!.height / 2),
-      { steps: 6 },
-    );
+    await page.mouse.move(turbBox!.x + turbBox!.width / 2 + 28, turbY, { steps: 8 });
     await page.mouse.up();
+    await expect(turbScrub).not.toHaveAttribute('data-value', String(turbBefore));
     const turbAfter = Number(await turbScrub.getAttribute('data-value'));
-    expect(turbAfter).not.toBe(turbBefore);
 
     // Toggle Play/Pause and assert non-empty live flipbook canvas pixels
     await page.getByTestId('vfx-play-toggle').click();

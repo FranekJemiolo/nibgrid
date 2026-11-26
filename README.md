@@ -1,6 +1,6 @@
 # Nibgrid
 
-Local-first, zero-server Bring-Your-Own-Key / Bring-Your-Own-Model (BYOK/BYOM) Progressive Web App for turning hand-drawn sketches and vocal hums into style-locked, engine-ready 2D game sprites, 4-view turnarounds, normal maps, animations, auto-tiles, mesh-tracked sockets, VFX flipbooks, parallax backgrounds, bitmap fonts & damage numerals, colliders, UI panels, Godot 4 `.gdshader` + `ShaderMaterial` `.tres` shaders, `.tscn` + typed `.gd` prefabs & live `res://` sync, and audio.
+Local-first, zero-server Bring-Your-Own-Key / Bring-Your-Own-Model (BYOK/BYOM) Progressive Web App for turning hand-drawn sketches and vocal hums into style-locked, engine-ready 2D game sprites, 4-view turnarounds, normal maps, animations, auto-tiles, mesh-tracked sockets, VFX flipbooks, parallax backgrounds, bitmap fonts & damage numerals, colliders, UI panels, Godot 4 `.gdshader` + `ShaderMaterial` `.tres` shaders, `.tscn` + typed `.gd` prefabs & live `res://` sync, reusable Global Asset Vault libraries, `.nibgrid.zip` snapshots, zero-server `#share=` URL/Pack Feeds, WebRTC P2P direct transfers, and audio.
 
 **Live App (GitHub Pages):** https://franekjemiolo.github.io/nibgrid/
 
@@ -39,6 +39,9 @@ Local-first, zero-server Bring-Your-Own-Key / Bring-Your-Own-Model (BYOK/BYOM) P
   - [2.20 Build Full Entities + Typed GDScript from One Prompt (AI Director)](#220-build-full-entities--typed-gdscript-from-one-prompt-ai-director)
   - [2.21 Author Live Godot 4 `.gdshader` & `ShaderMaterial` `.tres` FX (Screen 4N)](#221-author-live-godot-4-gdshader--shadermaterial-tres-fx-screen-4n)
   - [2.22 End-to-End Godot 4 AI Foundry Workflow (Prompt → Shader → `res://` Sync)](#222-end-to-end-godot-4-ai-foundry-workflow-prompt--shader--res-sync)
+  - [2.23 Reuse Cross-Project Assets & Export `.nibgrid.zip` Snapshots (Asset Vault)](#223-reuse-cross-project-assets--export-nibgridzip-snapshots-asset-vault)
+  - [2.24 Share Zero-Server `#share=` Recipes & Import Static Pack Feeds (Sharing)](#224-share-zero-server-share-recipes--import-static-pack-feeds-sharing)
+  - [2.25 Transfer Snapshots Browser-to-Browser via WebRTC P2P (`NIB-O1:` / `NIB-A1:`)](#225-transfer-snapshots-browser-to-browser-via-webrtc-p2p-nib-o1--nib-a1)
 - [Part 3 — Engine Drop-In Integration Examples](#part-3--engine-drop-in-integration-examples)
 - [Architecture Summary](#architecture-summary)
 - [Development & Verification](#development--verification)
@@ -48,31 +51,34 @@ Local-first, zero-server Bring-Your-Own-Key / Bring-Your-Own-Model (BYOK/BYOM) P
 
 ## Use-Case Matrix: What Can You Build with Nibgrid?
 
-| Use Case                                          | Screen / Tab                           | Compute Cost                               | Exported Output                                                                                     |
-| :------------------------------------------------ | :------------------------------------- | :----------------------------------------- | :-------------------------------------------------------------------------------------------------- |
-| Character Concept-to-Sprite & Pose Branches       | `Art Bible` + `Sprite Studio`          | `$0.00` Mock / Handoff or BYOK             | Branching PNG nodes + `asset.recipe.json`                                                           |
-| Pixel-Art Cleanup, De-Mixel & OKLab Sel-Out       | `Post-Process` (Screen 4A)             | `$0.00 Local` (Web Worker)                 | Crisp alpha PNG, pivot metadata, `.zip`                                                             |
-| Dynamic 2D Bevel & Normal Maps                    | `2D Lighting & Normal Map` (Screen 4B) | `$0.00 Local` (WebGL2 + EDT)               | Godot (`+Y`) / DirectX (`-Y`) `_n.png`                                                              |
-| Single-Sprite Idle, Breathe & Recoil Loops        | `Puppet Warp Animator` (Screen 4C)     | `$0.00 Local` (WebGL2 MLS)                 | Horizontal `_strip.png` + frame JSON + `.zip`                                                       |
-| Seamless Environment Tiles (Ground, Brick, Water) | `Tile & 9-Slice` → `Seamless Tile`     | `$0.00 Local` wrap + optional BYOK inpaint | Wrapping PNG + toroidal `gl.REPEAT` `_n.png`                                                        |
-| Responsive UI Buttons, Frames & Dialog Boxes      | `Tile & 9-Slice` → `9-Slice UI Panel`  | `$0.00 Local`                              | `_stylebox.tres`, `_nineslice_phaser.json`, Pixi JSON                                               |
-| Multi-Faction Enemy & Armor Recolor Shaders       | `Palette-Swap & LUT` (Screen 4E)       | `$0.00 Local` (OKLCH ramps)                | `_idx.png`, `_lut.png`, `.gdshader`, Pixi v8 Filter                                                 |
-| 1× Biome Contrast Audit & Combat Hit-Flash Feel   | `Game Sandbox` (Screen 4F)             | `$0.00 Local` (Canvas2D)                   | Rec.709 contrast telemetry + SFX bindings                                                           |
-| 2D Physics Hulls, Hitboxes & Hurtboxes            | `Collider & Hitbox` (Screen 4G)        | `$0.00 Local` (Marching Squares + RDP)     | Godot `_collider.tres`, Phaser / Matter `_matter.json`                                              |
-| Multi-Engine Texture & Animation Atlases          | `Atlas Packer` (Screen 5)              | `$0.00 Local` (BSSF MaxRects)              | `atlas_0.png`, `_n.png`, `atlas_frames.tres`, `atlas.json`, `atlas_pixi.json`, `atlas_physics.json` |
-| Procedural SFX, Google Lyria 3 Music & Gemini TTS | `Audio Foundry` (Screen 6)             | `$0.00 Local` or Single Gemini Key         | 16-bit WAV + 1/4/6× variations + `.audio.recipe.json`                                               |
-| Mic Hum-to-Laser, Engine Rev or Chiptune Melody   | `Audio Foundry` → `Mic Sketch`         | `$0.00 Local` or Single Gemini Key         | Contour-locked WAVs + `audioSketch` recipe                                                          |
-| Project-Wide Asset Drift Audit & Batch Re-Bake    | `Audit` (Screen 7)                     | `$0.00 Local`                              | Readiness `0–100` matrix + reversible batch fixes                                                   |
-| 4-View Directional Character Turnarounds          | `Turnaround Slicer` (Screen 4H)        | `$0.00 Local` (BFS Auto-Slicer)            | 4 linked `directionGroupId` nodes + shared pivot                                                    |
-| Asset-Class Workspaces, `1×` PiP & Quick-Switch   | Screen 4 HUD + `Cmd/Ctrl+K` Palette    | `$0.00 Local` (Canvas2D + Drop Router)     | Class-aware tabs, `BeforeAfterWipe`, drag-drop import                                               |
-| Blob-47 & Wang-16 Terrain Tilemaps                | `Auto-Tile` (Screen 4I)                | `$0.00 Local` (Worker SDF Compositor)      | Packed sheet PNG, Godot `_tileset.tres`, Tiled `.tsx`                                               |
-| Deforming Weapon, Muzzle & Exhaust Sockets        | `Attachment Sockets` (Screen 4J)       | `$0.00 Local` (Barycentric MLS Binding)    | `_sockets.json`, Godot `Marker2D` `.tscn`, Phaser/Pixi JSON                                         |
-| Procedural Sparks, Smoke, Rings & Dissolve VFX    | `VFX Baker` (Screen 4K)                | `$0.00 Local` (Worker FBM Synthesizer)     | Packed `_vfx_sheet.png`, Godot `GPUParticles2D`, Pixi JSON                                          |
-| Multi-Layer Parallax Vistas & Aerial Depth Haze   | `Parallax BG` (Screen 4L)              | `$0.00 Local` or BYOK / Bridge Stack       | Horizontal seamless band PNGs, Godot `Parallax2D` `.tscn`, Phaser/Pixi JSON                         |
-| Palette-Locked Bitmap Fonts & Damage Numerals     | `Bitmap Font` (Screen 4M)              | `$0.00 Local` (Worker PoT Packer)          | `<slug>.png`, AngelCode `.fnt` + `.xml`, `<slug>.recipe.json`                                       |
-| Godot 4 `.tscn` Prefabs & Live `res://` Sync      | `Entities` (Entity Hub) + Sync Pill    | `$0.00 Local` (FSAA + SHA-256 Diff)        | `.tscn`, `_frames.tres`, `_anims.tres`, `CanvasTexture`, lossless `.png.import`                     |
-| Prompt-to-Entity AI Director + Typed GDScript     | `Entities` → `+ Prompt-to-Entity (AI)` | `$0.00` Mock or `~$0.04` Gemini BYOK       | Sprite, hull, snapped sockets, SFX pack, typed `.gd` controller + wired `.tscn`                     |
-| AI Godot 4 Shaders & Live WebGL2 Uniform FX       | `Shader Studio` (Screen 4N)            | `$0.00` Presets or `~$0.001` Gemini Flash  | `<slug>.gdshader`, `<slug>_mat.tres` (`ShaderMaterial`), live WebGL2 preview, wired `.tscn`         |
+| Use Case                                          | Screen / Tab                                 | Compute Cost                                | Exported Output                                                                                     |
+| :------------------------------------------------ | :------------------------------------------- | :------------------------------------------ | :-------------------------------------------------------------------------------------------------- |
+| Character Concept-to-Sprite & Pose Branches       | `Art Bible` + `Sprite Studio`                | `$0.00` Mock / Handoff or BYOK              | Branching PNG nodes + `asset.recipe.json`                                                           |
+| Pixel-Art Cleanup, De-Mixel & OKLab Sel-Out       | `Post-Process` (Screen 4A)                   | `$0.00 Local` (Web Worker)                  | Crisp alpha PNG, pivot metadata, `.zip`                                                             |
+| Dynamic 2D Bevel & Normal Maps                    | `2D Lighting & Normal Map` (Screen 4B)       | `$0.00 Local` (WebGL2 + EDT)                | Godot (`+Y`) / DirectX (`-Y`) `_n.png`                                                              |
+| Single-Sprite Idle, Breathe & Recoil Loops        | `Puppet Warp Animator` (Screen 4C)           | `$0.00 Local` (WebGL2 MLS)                  | Horizontal `_strip.png` + frame JSON + `.zip`                                                       |
+| Seamless Environment Tiles (Ground, Brick, Water) | `Tile & 9-Slice` → `Seamless Tile`           | `$0.00 Local` wrap + optional BYOK inpaint  | Wrapping PNG + toroidal `gl.REPEAT` `_n.png`                                                        |
+| Responsive UI Buttons, Frames & Dialog Boxes      | `Tile & 9-Slice` → `9-Slice UI Panel`        | `$0.00 Local`                               | `_stylebox.tres`, `_nineslice_phaser.json`, Pixi JSON                                               |
+| Multi-Faction Enemy & Armor Recolor Shaders       | `Palette-Swap & LUT` (Screen 4E)             | `$0.00 Local` (OKLCH ramps)                 | `_idx.png`, `_lut.png`, `.gdshader`, Pixi v8 Filter                                                 |
+| 1× Biome Contrast Audit & Combat Hit-Flash Feel   | `Game Sandbox` (Screen 4F)                   | `$0.00 Local` (Canvas2D)                    | Rec.709 contrast telemetry + SFX bindings                                                           |
+| 2D Physics Hulls, Hitboxes & Hurtboxes            | `Collider & Hitbox` (Screen 4G)              | `$0.00 Local` (Marching Squares + RDP)      | Godot `_collider.tres`, Phaser / Matter `_matter.json`                                              |
+| Multi-Engine Texture & Animation Atlases          | `Atlas Packer` (Screen 5)                    | `$0.00 Local` (BSSF MaxRects)               | `atlas_0.png`, `_n.png`, `atlas_frames.tres`, `atlas.json`, `atlas_pixi.json`, `atlas_physics.json` |
+| Procedural SFX, Google Lyria 3 Music & Gemini TTS | `Audio Foundry` (Screen 6)                   | `$0.00 Local` or Single Gemini Key          | 16-bit WAV + 1/4/6× variations + `.audio.recipe.json`                                               |
+| Mic Hum-to-Laser, Engine Rev or Chiptune Melody   | `Audio Foundry` → `Mic Sketch`               | `$0.00 Local` or Single Gemini Key          | Contour-locked WAVs + `audioSketch` recipe                                                          |
+| Project-Wide Asset Drift Audit & Batch Re-Bake    | `Audit` (Screen 7)                           | `$0.00 Local`                               | Readiness `0–100` matrix + reversible batch fixes                                                   |
+| 4-View Directional Character Turnarounds          | `Turnaround Slicer` (Screen 4H)              | `$0.00 Local` (BFS Auto-Slicer)             | 4 linked `directionGroupId` nodes + shared pivot                                                    |
+| Asset-Class Workspaces, `1×` PiP & Quick-Switch   | Screen 4 HUD + `Cmd/Ctrl+K` Palette          | `$0.00 Local` (Canvas2D + Drop Router)      | Class-aware tabs, `BeforeAfterWipe`, drag-drop import                                               |
+| Blob-47 & Wang-16 Terrain Tilemaps                | `Auto-Tile` (Screen 4I)                      | `$0.00 Local` (Worker SDF Compositor)       | Packed sheet PNG, Godot `_tileset.tres`, Tiled `.tsx`                                               |
+| Deforming Weapon, Muzzle & Exhaust Sockets        | `Attachment Sockets` (Screen 4J)             | `$0.00 Local` (Barycentric MLS Binding)     | `_sockets.json`, Godot `Marker2D` `.tscn`, Phaser/Pixi JSON                                         |
+| Procedural Sparks, Smoke, Rings & Dissolve VFX    | `VFX Baker` (Screen 4K)                      | `$0.00 Local` (Worker FBM Synthesizer)      | Packed `_vfx_sheet.png`, Godot `GPUParticles2D`, Pixi JSON                                          |
+| Multi-Layer Parallax Vistas & Aerial Depth Haze   | `Parallax BG` (Screen 4L)                    | `$0.00 Local` or BYOK / Bridge Stack        | Horizontal seamless band PNGs, Godot `Parallax2D` `.tscn`, Phaser/Pixi JSON                         |
+| Palette-Locked Bitmap Fonts & Damage Numerals     | `Bitmap Font` (Screen 4M)                    | `$0.00 Local` (Worker PoT Packer)           | `<slug>.png`, AngelCode `.fnt` + `.xml`, `<slug>.recipe.json`                                       |
+| Godot 4 `.tscn` Prefabs & Live `res://` Sync      | `Entities` (Entity Hub) + Sync Pill          | `$0.00 Local` (FSAA + SHA-256 Diff)         | `.tscn`, `_frames.tres`, `_anims.tres`, `CanvasTexture`, lossless `.png.import`                     |
+| Prompt-to-Entity AI Director + Typed GDScript     | `Entities` → `+ Prompt-to-Entity (AI)`       | `$0.00` Mock or `~$0.04` Gemini BYOK        | Sprite, hull, snapped sockets, SFX pack, typed `.gd` controller + wired `.tscn`                     |
+| AI Godot 4 Shaders & Live WebGL2 Uniform FX       | `Shader Studio` (Screen 4N)                  | `$0.00` Presets or `~$0.001` Gemini Flash   | `<slug>.gdshader`, `<slug>_mat.tres` (`ShaderMaterial`), live WebGL2 preview, wired `.tscn`         |
+| Cross-Project Vault & Portable Project Snapshots  | `Vault` (`Project Browser` / `Global Vault`) | `$0.00 Local` (SHA-256 Dexie Deduplication) | 1-click promoted sprites/shaders/fonts/VFX/SFX/palettes + `.nibgrid.zip` snapshots                  |
+| Zero-Server URL Recipe Links & Static Pack Feeds  | `Shader Studio` / `Vault` → `Pack Feeds`     | `$0.00` Static URLs & CORS Feeds            | Compressed `#share=v1.` re-bakeable links + signed `.nibgrid-pack.zip` starter packs                |
+| Direct Browser-to-Browser WebRTC Binary Transfer  | `Projects` / `Vault` → `Share via P2P`       | `$0.00 Local` (Non-Trickle DataChannel)     | Scannable `NIB-O1:` / `NIB-A1:` QR/SDP handshake + 16 KiB chunked SHA-256 verified `.nibgrid.zip`   |
 
 ---
 
@@ -581,6 +587,52 @@ flowchart LR
 
 ---
 
+### 2.23 Reuse Cross-Project Assets & Export `.nibgrid.zip` Snapshots (Asset Vault)
+
+**When to use it:** Once you tune an Art Bible, `Pixel Outline` `.gdshader`, damage-numeral font, hit-ring VFX recipe, or hero sprite in one project, promote it into the **Global Asset Vault** for instant reuse across any future Nibgrid project—and back up or move complete projects (sprites, colliders, sockets, audio, entities, and deduplicated blobs) with zero API keys via `.nibgrid.zip`.
+
+**Click-by-Click:**
+
+1. Open **`Vault`** in the top header (`#/vault`, or `Cmd/Ctrl+K` → `Open Global Asset Vault`).
+2. In **`Project Browser`**, filter assets by **`Search`**, **Asset Class**, **Physics Body**, or **Coverage**, click **`Promote to Vault`** on individual sprites (or select multiple for bulk promotion / batch Art Bible palette remapping), or click **`Promote to Vault`** inside **Shader Studio (Screen 4N)**.
+3. Switch to any other Nibgrid project, open **`Vault`** → **`Global Vault`**, filter by kind (`sprite`, `shader`, `bmfont`, `vfx`, `sfx`, `art-bible`), and click **`Import to Project`** in one click (duplicate PNG/WAV payloads are skipped automatically via SHA-256 hash lookup in IndexedDB).
+4. Click **`Export .nibgrid.zip`** to save a self-contained portable snapshot verified by `manifest.json` SHA-256 digests (`schemaVersion`, stripped of any API credentials), or click **`Import .nibgrid.zip`** to hydrate a full clone on any machine.
+
+---
+
+### 2.24 Share Zero-Server `#share=` Recipes & Import Static Pack Feeds (Sharing)
+
+**When to use it:** Share parameterized shaders, VFX emitters, bitmap fonts, or procedural SFX directly inside a URL fragment (`#share=v1.`) with zero server storage, or subscribe to static GitHub / CDN `.json` catalogs of community `.nibgrid-pack.zip` starter packs.
+
+```mermaid
+flowchart LR
+  R["Shader / VFX / Font / SFX Recipe"] -->|"zlib L9 + Base64URL (<= 8 KiB)"| H["#share=v1.... URL Fragment"]
+  H -->|"Opened on GitHub Pages"| M["Shared Recipe Detected Modal<br/>Live WebGL2 / Canvas Re-Bake"]
+  F["Static catalog.json + .nibgrid-pack.zip"] -->|"CORS Fetch + SHA-256 Verify"| P["Pack Feeds Tab<br/>1-Click Vault & Project Import"]
+  Z["Portable .nibgrid.zip Snapshot"] -->|"16 KiB Chunks over WebRTC DataChannel"| Q["Peer Browser<br/>SHA-256 Verified Import"]
+```
+
+**Click-by-Click:**
+
+1. **Instant `#share=v1.` Recipe Links:** In **Shader Studio** (or any supported recipe tool), click **`Copy #share= Link`** to compress the recipe JSON (`zlib` level 9 + URL-safe Base64URL under `8,192` chars) into an offline `#share=v1.` URL.
+2. **Zero-Server Receiver Re-Bake:** Opening any `#share=v1.` URL immediately pops open **Shared Recipe Detected**, validates and runs a deterministic preview check (e.g., WebGL2 GLSL transpile check), and lets you click **`Save to Vault`** or **`Import into <Project>`** (`Create Project & Import` when no project is open).
+3. **Static Pack Feeds (`Vault` → `Pack Feeds`):** Browse the bundled **`Retro RPG Starter Pack`** (`packs/starter-catalog.json`) or add any CORS-friendly catalog URL, then click **Import Pack** to verify the archive SHA-256 and install its sprites and shaders into both your active project and **Global Vault**.
+
+---
+
+### 2.25 Transfer Snapshots Browser-to-Browser via WebRTC P2P (`NIB-O1:` / `NIB-A1:`)
+
+**When to use it:** Beam a multi-megabyte `.nibgrid.zip` project directly from one developer laptop to another over a local network or the internet—with zero signaling server, zero cloud upload, and QR codes for fast signaling exchange.
+
+**Click-by-Click:**
+
+1. Click **`Share via P2P`** from **`Projects`**, **`Vault`**, or via `Cmd/Ctrl+K` → `Direct P2P Transfer`.
+2. **Sender (`Send Snapshot (.nibgrid.zip)`):** Choose your project and click **`Create Offer (NIB-O1)`**. Copy the compressed non-trickle `NIB-O1:...` code (or scan its generated SVG QR code) and send it to your teammate over chat.
+3. **Receiver (`Receive Snapshot`):** Paste the `NIB-O1:` offer, click **`Generate Answer (NIB-A1)`**, and send back the compact `NIB-A1:...` response.
+4. **Sender:** Paste the `NIB-A1:` answer and click **`Connect & Send Snapshot`**. Nibgrid streams the `.nibgrid.zip` bytes in flow-controlled `16 KiB` DataChannel frames, verifies the payload `SHA-256` checksum on arrival, and activates **`Import into Nibgrid`** on the receiver.
+
+---
+
 ## Part 3 — Engine Drop-In Integration Examples
 
 ### Godot 4 (`4.2+`)
@@ -735,6 +787,9 @@ const pop = new BitmapText({
 - **Entity Hub, Godot 4 `.tscn` Prefab Assembler & Live `res://` Sync:** Group `SpriteNode` clips, optional Sobel normal maps, M16 colliders/hitboxes, M21 sockets, and M14/M15 WAVs into Dexie v3 `EntityDefinition` records (`entitySchema.ts`) without duplicating blobs; assemble lossless `.png.import` sidecars, `CanvasTexture`, `SpriteFrames`, synchronized `AnimationLibrary`, and complete `.tscn` scenes in pure TS (`godotPrefabAssembler.ts`); inspect cards & `.tscn Preview` (`EntityHubView.tsx`); and stream SHA-256-diffed writes (`syncDiff.ts`) straight to a bound local Godot project via the File System Access API or `fflate` ZIP fallback (`fsaaSyncEngine.ts`, `GodotSyncPill.tsx`).
 - **GenAI Prompt-to-Entity Director & Typed GDScript Generator:** Plan structured `EntityDirectorBlueprint` specs (`entityDirectorBlueprint.ts`) via Gemini Flash JSON `responseSchema`, Antigravity Bridge, or `$0.00` Offline Mock; execute an abort-safe 6-stage pipeline (`entityDirector.ts`) generating sprites, M16 hulls, opaque-bound M21 sockets (`resolveSocketHintsToPixels()`), LUFS-trimmed procedural SFX, and Godot 4.3+ typed `.gd` controllers (`gdscriptGenerator.ts`, `validateAndCompileGdScript()` rejections of Godot 3 tokens) inside `EntityDirectorModal.tsx`, wired straight into `<slug>.tscn` and `Sync to Godot`.
 - **Godot 4 `canvas_item` `.gdshader` Studio & Live WebGL2 Preview (Screen 4N):** Strip code fences, extract typed `uniform` metadata (`hint_range`, `source_color`), reject Godot 3 tokens (`hint_color`), and transpile Godot 4 vertex/fragment shaders into `#version 300 es` GLSL (`gdshaderTranspiler.ts`); author via five curated offline presets (`gdshaderPresets.ts`) or Gemini Flash BYOK / Antigravity Bridge (`shaderGenerator.ts`); audition live 60 FPS WebGL2 uniform scrubbing, syntax diagnostics, and `.gdshader` / `ShaderMaterial .tres` previews (`ShaderStudio.tsx`); and export `.zip` bundles (`shaderExporters.ts`, `zipPackager.ts`) or auto-wire `material = ExtResource(...)` onto `AnimatedSprite2D` inside M25 `.tscn` prefabs (`godotPrefabAssembler.ts`).
+- **Global Asset Vault, Smart Browser & `.nibgrid.zip` Snapshots (`#/vault`):** Promote and reuse sprites, `.gdshader` presets, bitmap fonts, VFX flipbooks, SFX packs, and Art Bibles across projects via Dexie v4 `vaultItems` (`vaultSchema.ts`) with content-addressed `storeBlobDeduplicated()` and orphan-safe garbage collection (`findOrphanBlobIds`); browse & batch-promote/remap assets in `VaultAndBrowserView.tsx`; and export/import SHA-256-verified, credential-free `.nibgrid.zip` project snapshots (`projectSnapshot.ts`).
+- **Zero-Server `#share=v1.` URL Recipes & Static GitHub Pack Feeds:** Encode self-contained recipes into URL fragments via `zlib` level-9 compression, safe bounded inflation (`inflateWithLimit`), and Base64URL (`recipeUrlCodec.ts`, `ShareRecipeModal.tsx`) for instant boot-time inspection and re-baking; fetch CORS-friendly static pack catalogs (`packFeedClient.ts`, `PackFeedBrowser.tsx`) with SHA-256 ZIP integrity checks (`public/packs/starter-catalog.json` + `retro-rpg-starter.nibgrid-pack.zip`).
+- **Zero-Server WebRTC P2P Direct Transfer:** Stream `.nibgrid.zip` snapshots directly between browsers with zero signaling backend using non-trickle `zlib`+Base64URL `NIB-O1:` / `NIB-A1:` SDP codes and built-in QR code generation (`sdpCodec.ts`), backpressure-controlled `16 KiB` DataChannel framing + `SHA-256` manifest verification (`p2pProtocol.ts`, `webrtcTransfer.ts`), and `P2pTransferModal.tsx`.
 
 ---
 
