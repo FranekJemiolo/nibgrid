@@ -182,6 +182,14 @@ test.describe('M21C: Interactive Attachment Sockets Editor & Screen 4 Integratio
       await page.getByTestId('socket-preset-muzzle').click();
       const svgOverlay = page.getByTestId('socket-svg-overlay');
       const muzzleMarker = page.getByTestId('socket-marker-muzzle');
+      await expect(muzzleMarker).toBeVisible();
+      await svgOverlay.scrollIntoViewIfNeeded();
+      await page.evaluate(
+        () =>
+          new Promise<void>((resolve) =>
+            requestAnimationFrame(() => requestAnimationFrame(() => resolve())),
+          ),
+      );
       const svgBox = await svgOverlay.boundingBox();
       const muzzleBox = await muzzleMarker.boundingBox();
       expect(svgBox).not.toBeNull();

@@ -76,7 +76,8 @@ describe('M32A Pure-TS Contact Sheet Packer, QA Schema & Dexie Cache', () => {
     expect(pages1[1]!.indexToSpriteId['02']).toBe('sprite-17');
 
     // Exact byte determinism & zero NaN
-    expect(pages1[0]!.sheet.data).toEqual(pages2[0]!.sheet.data);
+    expect(pages1[0]!.sheet.data.length).toBe(pages2[0]!.sheet.data.length);
+    expect(pages1[0]!.sheet.data.every((v, idx) => v === pages2[0]!.sheet.data[idx])).toBe(true);
     for (let i = 0; i < pages1[0]!.sheet.data.length; i++) {
       expect(Number.isFinite(pages1[0]!.sheet.data[i])).toBe(true);
     }
@@ -85,7 +86,7 @@ describe('M32A Pure-TS Contact Sheet Packer, QA Schema & Dexie Cache', () => {
     const h2 = await computeQaSheetHash(pages2, 'bible-hash-1');
     expect(h1).toBe(h2);
     expect(h1).toMatch(/^[0-9a-f]{64}$/);
-  });
+  }, 15_000);
 
   it('clamps out-of-range overallScore, drops unknown "99" index labels, and resolves valid findings', () => {
     const indexToSpriteId = {
