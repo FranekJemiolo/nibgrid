@@ -535,7 +535,9 @@ export function PostProcessInspector({
             ...existing,
             assetClass: latestAssetClassRef.current,
             puppetAnim: latestPuppetRef.current,
-            ...(latestNineSliceRef.current.enabled ? { nineSlice: latestNineSliceRef.current } : {}),
+            ...(latestNineSliceRef.current.enabled
+              ? { nineSlice: latestNineSliceRef.current }
+              : {}),
             ...(persistedLut ? { paletteLut: persistedLut } : {}),
             ...(latestCollisionShapesRef.current.length > 0
               ? { collisionShapes: latestCollisionShapesRef.current }
