@@ -1,5 +1,16 @@
 import Dexie, { type Table } from 'dexie';
 import {
+  buildArtBibleVaultItem,
+  buildBmfontVaultItem,
+  buildSfxVaultItem,
+  buildShaderVaultItem,
+  buildSpriteVaultItem,
+  buildVfxVaultItem,
+  parseVaultPayload,
+  VaultItemSchema,
+  type VaultItem,
+} from '../domain/vaultSchema';
+import {
   EntityDefinitionSchema,
   GodotSyncTargetMetaSchema,
   type EntityDefinition,
@@ -17,10 +28,13 @@ import {
   type ArtBible,
   type AudioAsset,
   type AudioBindings,
+  type BitmapFontConfig,
   type BlobRecord,
   type Project,
   type ProviderConfig,
+  type ShaderConfig,
   type SpriteNode,
+  type VfxFlipbookConfig,
 } from '../domain/schemas';
 import { sha256Bytes } from '../processing/hash';
 
@@ -40,6 +54,7 @@ export class NibgridDatabase extends Dexie {
   audioAssets!: Table<AudioAsset, string>;
   entities!: Table<EntityDefinition, string>;
   syncTargets!: Table<GodotSyncTargetRecord, string>;
+  vaultItems!: Table<VaultItem, string>;
 
   constructor(dbName = 'nibgrid-db') {
     super(dbName);
@@ -64,6 +79,16 @@ export class NibgridDatabase extends Dexie {
       audioAssets: 'id, projectId, presetId, createdAt',
       entities: '&id, projectId, slug',
       syncTargets: '&projectId',
+    });
+    this.version(4).stores({
+      projects: 'id, updatedAt, name',
+      blobs: 'id, sha256, createdAt',
+      spriteNodes: 'id, projectId, parentId, [projectId+createdAt]',
+      providerConfigs: 'id, kind, updatedAt',
+      audioAssets: 'id, projectId, presetId, createdAt',
+      entities: '&id, projectId, slug',
+      syncTargets: '&projectId',
+      vaultItems: '&id, kind, name, createdAt',
     });
   }
 }
@@ -247,6 +272,35 @@ export class NibgridRepository {
     return record;
   }
 
+  async storeBlobDeduplicated(
+    input: Blob | Uint8Array,
+    explicitMimeType = 'application/octet-stream',
+  ): Promise<BlobRecord> {
+    const bytes = input instanceof Uint8Array ? input : new Uint8Array(await input.arrayBuffer());
+    const mimeType =
+      input instanceof Uint8Array
+        ? explicitMimeType
+        : explicitMimeType || input.type || 'application/octet-stream';
+    const sha256 = await sha256Bytes(bytes);
+
+    const existing = await this.database.blobs.where('sha256').equals(sha256).first();
+    if (existing) {
+      return BlobRecordSchema.parse(existing);
+    }
+
+    const copy = new Uint8Array(bytes.byteLength);
+    copy.set(bytes);
+    const record = BlobRecordSchema.parse({
+      id: createId(),
+      mimeType,
+      bytes: new Blob([copy.buffer], { type: mimeType }),
+      sha256,
+      createdAt: nowIso(),
+    });
+    await this.database.blobs.put(record);
+    return record;
+  }
+
   async getBlob(blobId: string): Promise<BlobRecord | undefined> {
     const found = await this.database.blobs.get(blobId);
     if (!found) return undefined;
@@ -301,6 +355,7 @@ export class NibgridRepository {
         this.database.projects,
         this.database.audioAssets,
         this.database.blobs,
+        this.database.vaultItems,
       ],
       async () => {
         const existing = await this.database.spriteNodes.get(validated.id);
@@ -325,6 +380,7 @@ export class NibgridRepository {
         this.database.projects,
         this.database.audioAssets,
         this.database.blobs,
+        this.database.vaultItems,
       ],
       async () => {
         const node = await this.database.spriteNodes.get(nodeId);
@@ -351,6 +407,7 @@ export class NibgridRepository {
         this.database.spriteNodes,
         this.database.projects,
         this.database.blobs,
+        this.database.vaultItems,
       ],
       async () => {
         const existing = await this.database.audioAssets.get(validated.id);
@@ -374,6 +431,7 @@ export class NibgridRepository {
       this.database.projects,
       this.database.spriteNodes,
       this.database.blobs,
+      this.database.vaultItems,
       async () => {
         const found = await this.database.audioAssets.get(assetId);
         if (!found) return;
@@ -449,6 +507,215 @@ export class NibgridRepository {
     await this.database.syncTargets.delete(projectId);
   }
 
+  async listVaultItems(): Promise<VaultItem[]> {
+    const rows = await this.database.vaultItems.orderBy('createdAt').reverse().toArray();
+    return rows.map((row) => VaultItemSchema.parse(row));
+  }
+
+  async getVaultItem(id: string): Promise<VaultItem | undefined> {
+    const found = await this.database.vaultItems.get(id);
+    return found ? VaultItemSchema.parse(found) : undefined;
+  }
+
+  async saveVaultItem(item: VaultItem): Promise<VaultItem> {
+    const validated = VaultItemSchema.parse(item);
+    await this.database.vaultItems.put(validated);
+    return validated;
+  }
+
+  async deleteVaultItem(id: string): Promise<void> {
+    await this.database.transaction(
+      'rw',
+      [
+        this.database.vaultItems,
+        this.database.projects,
+        this.database.spriteNodes,
+        this.database.audioAssets,
+        this.database.blobs,
+      ],
+      async () => {
+        const found = await this.database.vaultItems.get(id);
+        if (!found) return;
+        await this.database.vaultItems.delete(id);
+        await this.cleanupOrphanedBlobsInTx();
+      },
+    );
+  }
+
+  async promoteSpriteNodeToVault(
+    node: SpriteNode,
+    options?: {
+      readonly name?: string;
+      readonly tags?: readonly string[];
+      readonly sourceProjectName?: string;
+    },
+  ): Promise<VaultItem> {
+    const label =
+      options?.name?.trim() ||
+      node.generationMeta.promptDelta.trim() ||
+      `${node.kind} #${node.generationMeta.seed}`;
+    const item = buildSpriteVaultItem({
+      id: createId(),
+      name: label.slice(0, 120),
+      node,
+      tags: options?.tags,
+      sourceProjectName: options?.sourceProjectName,
+    });
+    return this.saveVaultItem(item);
+  }
+
+  async promoteShaderToVault(
+    name: string,
+    shaderConfig: ShaderConfig,
+    options?: { readonly tags?: readonly string[]; readonly sourceProjectName?: string },
+  ): Promise<VaultItem> {
+    const item = buildShaderVaultItem({
+      id: createId(),
+      name: name.trim().slice(0, 120) || `Shader (${shaderConfig.presetId})`,
+      shaderConfig,
+      tags: options?.tags,
+      sourceProjectName: options?.sourceProjectName,
+    });
+    return this.saveVaultItem(item);
+  }
+
+  async promoteBmfontToVault(
+    name: string,
+    bitmapFont: BitmapFontConfig,
+    options?: { readonly tags?: readonly string[]; readonly sourceProjectName?: string },
+  ): Promise<VaultItem> {
+    const item = buildBmfontVaultItem({
+      id: createId(),
+      name: name.trim().slice(0, 120) || bitmapFont.fontName,
+      bitmapFont,
+      tags: options?.tags,
+      sourceProjectName: options?.sourceProjectName,
+    });
+    return this.saveVaultItem(item);
+  }
+
+  async promoteVfxToVault(
+    name: string,
+    vfxFlipbook: VfxFlipbookConfig,
+    options?: { readonly tags?: readonly string[]; readonly sourceProjectName?: string },
+  ): Promise<VaultItem> {
+    const item = buildVfxVaultItem({
+      id: createId(),
+      name: name.trim().slice(0, 120) || `VFX (${vfxFlipbook.archetype})`,
+      vfxFlipbook,
+      tags: options?.tags,
+      sourceProjectName: options?.sourceProjectName,
+    });
+    return this.saveVaultItem(item);
+  }
+
+  async promoteSfxToVault(
+    asset: AudioAsset,
+    options?: {
+      readonly name?: string;
+      readonly tags?: readonly string[];
+      readonly sourceProjectName?: string;
+    },
+  ): Promise<VaultItem> {
+    const item = buildSfxVaultItem({
+      id: createId(),
+      name: (options?.name?.trim() || asset.name).slice(0, 120),
+      audioAsset: asset,
+      tags: options?.tags,
+      sourceProjectName: options?.sourceProjectName,
+    });
+    return this.saveVaultItem(item);
+  }
+
+  async promoteArtBibleToVault(
+    name: string,
+    artBible: ArtBible,
+    options?: { readonly tags?: readonly string[]; readonly sourceProjectName?: string },
+  ): Promise<VaultItem> {
+    const item = buildArtBibleVaultItem({
+      id: createId(),
+      name: name.trim().slice(0, 120) || 'Art Bible Style Lock',
+      artBible,
+      tags: options?.tags,
+      sourceProjectName: options?.sourceProjectName,
+    });
+    return this.saveVaultItem(item);
+  }
+
+  async importVaultItemToProject(
+    vaultItemId: string,
+    targetProjectId: string,
+    options?: { readonly targetSpriteNodeId?: string },
+  ): Promise<{
+    readonly kind: VaultItem['kind'];
+    readonly spriteNode?: SpriteNode;
+    readonly audioAsset?: AudioAsset;
+  }> {
+    const vaultItem = await this.getVaultItem(vaultItemId);
+    if (!vaultItem) {
+      throw new Error(`Vault item "${vaultItemId}" not found.`);
+    }
+    const targetProject = await this.getProject(targetProjectId);
+    if (!targetProject) {
+      throw new Error(`Target project "${targetProjectId}" not found.`);
+    }
+
+    const payload = parseVaultPayload(vaultItem);
+    if (payload.kind === 'sprite') {
+      const clonedNode = SpriteNodeSchema.parse({
+        ...payload.node,
+        id: createId(),
+        projectId: targetProjectId,
+        parentId: null,
+        generationMeta: {
+          ...payload.node.generationMeta,
+          promptDelta: payload.node.generationMeta.promptDelta || vaultItem.name,
+          createdAt: nowIso(),
+        },
+      });
+      const saved = await this.saveSpriteNode(clonedNode);
+      return { kind: 'sprite', spriteNode: saved };
+    }
+
+    if (payload.kind === 'sfx') {
+      const clonedAudio = AudioAssetSchema.parse({
+        ...payload.audioAsset,
+        id: createId(),
+        projectId: targetProjectId,
+        createdAt: nowIso(),
+      });
+      const saved = await this.saveAudioAsset(clonedAudio);
+      return { kind: 'sfx', audioAsset: saved };
+    }
+
+    if (payload.kind === 'art-bible') {
+      await this.updateProjectArtBible(targetProjectId, payload.artBible);
+      return { kind: 'art-bible' };
+    }
+
+    // shader | bmfont | vfx apply to a selected or latest sprite node in the project
+    const projectNodes = await this.listSpriteNodes(targetProjectId);
+    const chosenNode =
+      (options?.targetSpriteNodeId
+        ? projectNodes.find((n) => n.id === options.targetSpriteNodeId)
+        : undefined) ?? projectNodes[projectNodes.length - 1];
+
+    if (!chosenNode) {
+      throw new Error(
+        `Create or import a sprite in "${targetProject.name}" before applying "${vaultItem.name}".`,
+      );
+    }
+
+    const updatedNode = SpriteNodeSchema.parse({
+      ...chosenNode,
+      ...(payload.kind === 'shader' ? { shaderConfig: payload.shaderConfig } : {}),
+      ...(payload.kind === 'bmfont' ? { bitmapFont: payload.bitmapFont } : {}),
+      ...(payload.kind === 'vfx' ? { vfxFlipbook: payload.vfxFlipbook } : {}),
+    });
+    const saved = await this.saveSpriteNode(updatedNode);
+    return { kind: payload.kind, spriteNode: saved };
+  }
+
   async deleteProjectCascade(projectId: string): Promise<void> {
     await this.database.transaction(
       'rw',
@@ -459,6 +726,7 @@ export class NibgridRepository {
         this.database.entities,
         this.database.syncTargets,
         this.database.blobs,
+        this.database.vaultItems,
       ],
       async () => {
         await this.database.spriteNodes.where('projectId').equals(projectId).delete();
@@ -474,10 +742,13 @@ export class NibgridRepository {
   async cleanupOrphanedBlobs(): Promise<number> {
     return this.database.transaction(
       'rw',
-      this.database.projects,
-      this.database.spriteNodes,
-      this.database.audioAssets,
-      this.database.blobs,
+      [
+        this.database.projects,
+        this.database.spriteNodes,
+        this.database.audioAssets,
+        this.database.blobs,
+        this.database.vaultItems,
+      ],
       async () => this.cleanupOrphanedBlobsInTx(),
     );
   }
@@ -528,6 +799,16 @@ export async function findOrphanBlobIds(database: NibgridDatabase = db): Promise
     referencedBlobIds.add(asset.wavBlobId);
     for (const varBlobId of asset.variationBlobIds) {
       referencedBlobIds.add(varBlobId);
+    }
+  }
+
+  const allVaultItems = await database.vaultItems.toArray();
+  for (const item of allVaultItems) {
+    for (const blobId of item.blobIds ?? []) {
+      referencedBlobIds.add(blobId);
+    }
+    if (item.previewBlobId) {
+      referencedBlobIds.add(item.previewBlobId);
     }
   }
 

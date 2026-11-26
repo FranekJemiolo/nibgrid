@@ -1,0 +1,17 @@
+{
+  "feedTitle": "Nibgrid Official Starter Packs",
+  "description": "Static CC0 sprites, Godot 4 shaders, and pixel bitmap fonts ready for 1-click import.",
+  "packs": [
+    {
+      "id": "retro-rpg-starter",
+      "title": "Retro RPG Starter Pack",
+      "author": "Nibgrid",
+      "license": "CC0-1.0",
+      "description": "64x64 Red Cat Hero sprite with Hit Flash, Golden Metallic Sheen .gdshader, and 5x7 Damage Numerals font.",
+      "tags": ["character", "shader", "bmfont", "cc0"],
+      "assetCount": 3,
+      "zipUrl": "./retro-rpg-starter.nibgrid-pack.zip",
+      "sha256": "eb29b1c06e5b16df5ae1a6d3e212dc6503bd8439f6c7ebb03860d2c29e1b1785"
+    }
+  ]
+}

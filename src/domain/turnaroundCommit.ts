@@ -152,7 +152,13 @@ export async function deleteTurnaroundDirectionGroup(
 ): Promise<number> {
   return database.transaction(
     'rw',
-    [database.projects, database.spriteNodes, database.audioAssets, database.blobs],
+    [
+      database.projects,
+      database.spriteNodes,
+      database.audioAssets,
+      database.blobs,
+      database.vaultItems,
+    ],
     async () => {
       const allNodes = await database.spriteNodes.toArray();
       const victimIds = allNodes

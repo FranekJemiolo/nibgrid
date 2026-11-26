@@ -5,11 +5,13 @@ import {
   Code2,
   Download,
   FileArchive,
+  Link2,
   Pause,
   Play,
   RotateCcw,
   Save,
   Sparkles,
+  Vault,
 } from 'lucide-react';
 import { strToU8 } from 'fflate';
 import type {
@@ -32,6 +34,7 @@ import { encodeRgbaToPngBytes } from '../../processing/png';
 import { computeArtBibleHash } from '../../processing/projectAudit';
 import type { RgbaBuffer } from '../../processing/types';
 import { estimateShaderGenerationCost, generateGdShader } from '../../providers/shaderGenerator';
+import { useAppStore } from '../../store/useAppStore';
 import {
   compileWebGlProgram,
   createWebGlTexture2D,
@@ -168,6 +171,8 @@ export function ShaderStudio({
   const [genError, setGenError] = useState<string | null>(null);
   const [glCompileError, setGlCompileError] = useState<string | null>(null);
   const [webglUnavailable, setWebglUnavailable] = useState(false);
+  const promoteShaderToVault = useAppStore((s) => s.promoteShaderToVault);
+  const openShareModal = useAppStore((s) => s.openShareModal);
 
   const elapsedTimeRef = useRef(0);
   const lastFrameTsRef = useRef<number | null>(null);
@@ -484,6 +489,20 @@ export function ShaderStudio({
       setIsSaving(false);
     }
   }, [onSaveToProject, shaderConfig]);
+
+  const handlePromoteShaderToVault = useCallback(async () => {
+    try {
+      const label = shaderConfig.prompt.trim()
+        ? shaderConfig.prompt.trim().slice(0, 48)
+        : `${slug} (${shaderConfig.presetId})`;
+      await promoteShaderToVault(label, shaderConfig, {
+        sourceProjectName: project.name,
+      });
+      setStatusNotice(`Promoted "${label}" to Global Asset Vault.`);
+    } catch (err) {
+      setGenError(err instanceof Error ? err.message : 'Failed to promote shader to Vault.');
+    }
+  }, [project.name, promoteShaderToVault, shaderConfig, slug]);
 
   const handleDownloadShaderFile = useCallback(() => {
     const content = shaderConfig.gdshaderSource.endsWith('\n')
@@ -903,6 +922,34 @@ export function ShaderStudio({
             >
               <Save className="h-3.5 w-3.5" />
               {isSaving ? 'Saving…' : 'Save Shader to Node'}
+            </button>
+            <button
+              type="button"
+              data-testid="shader-promote-vault-btn"
+              onClick={() => void handlePromoteShaderToVault()}
+              className="inline-flex items-center gap-1.5 rounded border border-amber-500/40 bg-amber-500/15 px-2.5 py-1.5 font-medium text-amber-200 hover:bg-amber-500/25"
+              title="Promote this .gdshader preset & uniforms to Global Asset Vault"
+            >
+              <Vault className="h-3.5 w-3.5" />
+              Promote to Vault
+            </button>
+            <button
+              type="button"
+              data-testid="shader-share-link-btn"
+              onClick={() =>
+                openShareModal({
+                  kind: 'shader',
+                  name: shaderConfig.prompt.trim()
+                    ? shaderConfig.prompt.trim().slice(0, 48)
+                    : `${slug} (${shaderConfig.presetId})`,
+                  shaderConfig,
+                })
+              }
+              className="inline-flex items-center gap-1.5 rounded border border-[#2A2A2E] bg-[#121214] px-2.5 py-1.5 font-medium text-zinc-200 hover:border-zinc-500"
+              title="Generate compressed #share=v1. URL link"
+            >
+              <Link2 className="h-3.5 w-3.5 text-amber-400" />
+              Copy #share= Link
             </button>
             {statusNotice && (
               <span data-testid="shader-status-notice" className="text-[11px] text-zinc-300">

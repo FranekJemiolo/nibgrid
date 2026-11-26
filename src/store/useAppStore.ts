@@ -8,8 +8,11 @@ import type {
   AudioBindings,
   Project,
   ProviderConfig,
+  ShaderConfig,
   SpriteNode,
 } from '../domain/schemas';
+import type { VaultItem } from '../domain/vaultSchema';
+import type { ShareableRecipe } from '../share/recipeUrlCodec';
 
 export type InspectorTab =
   | 'postprocess'
@@ -35,7 +38,8 @@ export type ScreenRoute =
   | { screen: 'atlas'; projectId: string }
   | { screen: 'audio'; projectId: string }
   | { screen: 'audit'; projectId: string }
-  | { screen: 'entities'; projectId: string };
+  | { screen: 'entities'; projectId: string }
+  | { screen: 'vault'; projectId?: string };
 
 const VALID_INSPECTOR_TABS = new Set<InspectorTab>([
   'postprocess',
@@ -94,6 +98,13 @@ export function parseHashRoute(hash: string): ScreenRoute {
   if (entitiesMatch?.[1]) {
     return { screen: 'entities', projectId: entitiesMatch[1] };
   }
+  const projectVaultMatch = /^\/project\/([^/]+)\/vault$/.exec(path);
+  if (projectVaultMatch?.[1]) {
+    return { screen: 'vault', projectId: projectVaultMatch[1] };
+  }
+  if (path === '/vault') {
+    return { screen: 'vault' };
+  }
   return { screen: 'hub' };
 }
 
@@ -120,6 +131,9 @@ export function formatHashRoute(route: ScreenRoute): string {
   if (route.screen === 'entities') {
     return `#/project/${route.projectId}/entities`;
   }
+  if (route.screen === 'vault') {
+    return route.projectId ? `#/project/${route.projectId}/vault` : '#/vault';
+  }
   return '#/';
 }
 
@@ -131,6 +145,9 @@ interface AppState {
   audioAssets: AudioAsset[];
   entities: EntityDefinition[];
   syncTarget: GodotSyncTargetRecord | null;
+  vaultItems: VaultItem[];
+  outgoingShareRecipe: ShareableRecipe | null;
+  p2pOpen: boolean;
   providers: ProviderConfig[];
   selectedProviderId: string;
   studioAdherence: AdherenceLevel;
@@ -142,6 +159,9 @@ interface AppState {
   initialize: () => Promise<void>;
   navigate: (route: ScreenRoute) => Promise<void>;
   setVaultOpen: (open: boolean) => void;
+  setP2pOpen: (open: boolean) => void;
+  openShareModal: (recipe: ShareableRecipe) => void;
+  closeShareModal: () => void;
   clearError: () => void;
 
   refreshProjects: () => Promise<void>;
@@ -170,6 +190,22 @@ interface AppState {
   saveEntityRecord: (entity: EntityDefinition) => Promise<EntityDefinition>;
   deleteEntityRecord: (entityId: string, projectId: string) => Promise<void>;
   refreshSyncTarget: (projectId: string) => Promise<void>;
+
+  refreshVaultItems: () => Promise<void>;
+  deleteVaultItemRecord: (vaultItemId: string) => Promise<void>;
+  promoteSpriteToVault: (
+    node: SpriteNode,
+    options?: { name?: string; tags?: readonly string[]; sourceProjectName?: string },
+  ) => Promise<VaultItem>;
+  promoteShaderToVault: (
+    name: string,
+    shaderConfig: ShaderConfig,
+    options?: { tags?: readonly string[]; sourceProjectName?: string },
+  ) => Promise<VaultItem>;
+  importVaultItemToActiveProject: (
+    vaultItemId: string,
+    options?: { targetSpriteNodeId?: string },
+  ) => Promise<{ kind: VaultItem['kind']; spriteNode?: SpriteNode; audioAsset?: AudioAsset }>;
 }
 
 let projectWriteQueue: Promise<void> = Promise.resolve();
@@ -191,6 +227,9 @@ export const useAppStore = create<AppState>((set, get) => ({
   audioAssets: [],
   entities: [],
   syncTarget: null,
+  vaultItems: [],
+  outgoingShareRecipe: null,
+  p2pOpen: false,
   providers: [],
   selectedProviderId: OFFLINE_MOCK_PROVIDER_ID,
   studioAdherence: 'balanced',
@@ -203,13 +242,54 @@ export const useAppStore = create<AppState>((set, get) => ({
     set({ isLoading: true, errorMessage: null });
     try {
       await repository.cleanupOrphanedBlobs();
-      const [projects, providers] = await Promise.all([
+      const [projects, providers, vaultItems] = await Promise.all([
         repository.listProjectsWithCounts(),
         repository.listProviderConfigs(),
+        repository.listVaultItems(),
       ]);
 
       const initialRoute: ScreenRoute =
         typeof window !== 'undefined' ? parseHashRoute(window.location.hash) : { screen: 'hub' };
+
+      if (initialRoute.screen === 'vault') {
+        const project = initialRoute.projectId
+          ? await repository.getProject(initialRoute.projectId)
+          : undefined;
+        if (project) {
+          const [spriteNodes, audioAssets, entities, syncTarget] = await Promise.all([
+            repository.listSpriteNodes(project.id),
+            repository.listAudioAssets(project.id),
+            repository.listEntities(project.id),
+            repository.getSyncTarget(project.id),
+          ]);
+          set({
+            route: initialRoute,
+            projects,
+            providers,
+            vaultItems,
+            activeProject: project,
+            spriteNodes,
+            audioAssets,
+            entities,
+            syncTarget: syncTarget ?? null,
+            isLoading: false,
+          });
+          return;
+        }
+        set({
+          route: { screen: 'vault' },
+          projects,
+          providers,
+          vaultItems,
+          activeProject: null,
+          spriteNodes: [],
+          audioAssets: [],
+          entities: [],
+          syncTarget: null,
+          isLoading: false,
+        });
+        return;
+      }
 
       if (initialRoute.screen !== 'hub') {
         const project = await repository.getProject(initialRoute.projectId);
@@ -224,6 +304,7 @@ export const useAppStore = create<AppState>((set, get) => ({
             route: initialRoute,
             projects,
             providers,
+            vaultItems,
             activeProject: project,
             spriteNodes,
             audioAssets,
@@ -233,7 +314,7 @@ export const useAppStore = create<AppState>((set, get) => ({
           });
           return;
         }
-        if (typeof window !== 'undefined') {
+        if (typeof window !== 'undefined' && !window.location.hash.startsWith('#share=')) {
           window.location.hash = '#/';
         }
       }
@@ -242,6 +323,7 @@ export const useAppStore = create<AppState>((set, get) => ({
         route: { screen: 'hub' },
         projects,
         providers,
+        vaultItems,
         activeProject: null,
         spriteNodes: [],
         audioAssets: [],
@@ -260,9 +342,50 @@ export const useAppStore = create<AppState>((set, get) => ({
   navigate: async (route) => {
     if (typeof window !== 'undefined') {
       const targetHash = formatHashRoute(route);
-      if (window.location.hash !== targetHash) {
+      if (window.location.hash !== targetHash && !window.location.hash.startsWith('#share=')) {
         window.location.hash = targetHash;
       }
+    }
+
+    if (route.screen === 'vault') {
+      const [projects, vaultItems] = await Promise.all([
+        repository.listProjectsWithCounts(),
+        repository.listVaultItems(),
+      ]);
+      const targetProjectId = route.projectId ?? get().activeProject?.id;
+      const project = targetProjectId ? await repository.getProject(targetProjectId) : undefined;
+      if (project) {
+        const [spriteNodes, audioAssets, entities, syncTarget] = await Promise.all([
+          repository.listSpriteNodes(project.id),
+          repository.listAudioAssets(project.id),
+          repository.listEntities(project.id),
+          repository.getSyncTarget(project.id),
+        ]);
+        set({
+          route: { screen: 'vault', projectId: project.id },
+          projects,
+          vaultItems,
+          activeProject: project,
+          spriteNodes,
+          audioAssets,
+          entities,
+          syncTarget: syncTarget ?? null,
+          errorMessage: null,
+        });
+      } else {
+        set({
+          route: { screen: 'vault' },
+          projects,
+          vaultItems,
+          activeProject: null,
+          spriteNodes: [],
+          audioAssets: [],
+          entities: [],
+          syncTarget: null,
+          errorMessage: null,
+        });
+      }
+      return;
     }
 
     if (route.screen === 'hub') {
@@ -320,6 +443,9 @@ export const useAppStore = create<AppState>((set, get) => ({
   },
 
   setVaultOpen: (open) => set({ vaultOpen: open }),
+  setP2pOpen: (open) => set({ p2pOpen: open }),
+  openShareModal: (recipe) => set({ outgoingShareRecipe: recipe }),
+  closeShareModal: () => set({ outgoingShareRecipe: null }),
   clearError: () => set({ errorMessage: null }),
 
   refreshProjects: async () => {
@@ -529,5 +655,61 @@ export const useAppStore = create<AppState>((set, get) => ({
   refreshSyncTarget: async (projectId) => {
     const target = await repository.getSyncTarget(projectId);
     set({ syncTarget: target ?? null });
+  },
+
+  refreshVaultItems: async () => {
+    const vaultItems = await repository.listVaultItems();
+    set({ vaultItems });
+  },
+
+  deleteVaultItemRecord: async (vaultItemId) => {
+    await repository.deleteVaultItem(vaultItemId);
+    const vaultItems = await repository.listVaultItems();
+    set({ vaultItems });
+  },
+
+  promoteSpriteToVault: async (node, options) => {
+    const saved = await repository.promoteSpriteNodeToVault(node, {
+      ...options,
+      sourceProjectName: options?.sourceProjectName ?? get().activeProject?.name,
+    });
+    const vaultItems = await repository.listVaultItems();
+    set({ vaultItems });
+    return saved;
+  },
+
+  promoteShaderToVault: async (name, shaderConfig, options) => {
+    const saved = await repository.promoteShaderToVault(name, shaderConfig, {
+      ...options,
+      sourceProjectName: options?.sourceProjectName ?? get().activeProject?.name,
+    });
+    const vaultItems = await repository.listVaultItems();
+    set({ vaultItems });
+    return saved;
+  },
+
+  importVaultItemToActiveProject: async (vaultItemId, options) => {
+    const activeProject = get().activeProject;
+    if (!activeProject) {
+      throw new Error('Select or open a project before importing from the Global Vault.');
+    }
+    const result = await repository.importVaultItemToProject(
+      vaultItemId,
+      activeProject.id,
+      options,
+    );
+    const [spriteNodes, audioAssets, projects, updatedProject] = await Promise.all([
+      repository.listSpriteNodes(activeProject.id),
+      repository.listAudioAssets(activeProject.id),
+      repository.listProjectsWithCounts(),
+      repository.getProject(activeProject.id),
+    ]);
+    set({
+      spriteNodes,
+      audioAssets,
+      projects,
+      ...(updatedProject ? { activeProject: updatedProject } : {}),
+    });
+    return result;
   },
 }));

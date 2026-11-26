@@ -528,3 +528,24 @@
 - **Inspector Tab Bar Layout (`src/ui/inspector/PostProcessInspector.tsx`, `tests/e2e/m19-ux-polish.spec.ts`):** Switched horizontal primary inspector tab buttons to `meta.shortLabel` with `whitespace-nowrap` and full `title={meta.label}` tooltip so adding `'shader'` never wraps the tab strip onto a second row on `1280×720` Linux runners, and added `scrollIntoViewIfNeeded()` before scrubbing `scrub-alpha-threshold`.
 - **CI Hardening (`.github/workflows/ci.yml`):** Added `python3 -m unittest tests/unit/test_nibgrid_bridge.py -v` to the GitHub Actions `verify` job.
 - **README Workflow Showcase (`README.md`, `docs/demo/25b-director-gdscript-preview.png`, `docs/demo/26-godot-shader-studio.png`, `docs/demo/26b-shader-material-tres.png`):** Re-captured transparent Red Cat Warrior Shader Studio (`Metallic Sheen` + `Pixel Outline` `.tres`) and Prompt-to-Entity `.gd Script` previews and documented the full M26 → M27 → M25 Godot 4 workflow.
+
+## Milestone 28: Global Asset Vault, Smart Asset Browser & Portable `.nibgrid.zip` Snapshots
+
+- **Vault Schema & Dexie v4 (`src/domain/vaultSchema.ts`, `src/db/database.ts`):** Added `vaultItems` table migration, `storeBlobDeduplicated()` SHA-256 reuse, cross-project `promoteSpriteNodeToVault()` / `promoteShaderToVault()` / `importVaultItemToProject()`, and `findOrphanBlobIds()` + `cleanupOrphanedBlobsInTx()` scanning across `vaultItems`.
+- **Portable `.nibgrid.zip` Snapshot Codec (`src/sync/projectSnapshot.ts`):** Implemented pure-TS `exportProjectSnapshot()` and `parseAndVerifyProjectSnapshot()` (deduplicated `blobs/<sha256>.bin`, Zod-validated `manifest.json`, pre-DB SHA-256 verification), plus atomic `importProjectSnapshotToDb()` ID remapping.
+- **Vault UI & Batch Actions (`src/ui/vault/VaultAndBrowserView.tsx`, `src/store/useAppStore.ts`, `src/App.tsx`, `src/ui/hub/ProjectHub.tsx`, `src/ui/inspector/ShaderStudio.tsx`, `src/ui/command/CommandPalette.tsx`):** Added Global Asset Vault, Project Browser filters, bulk **Promote to Vault** and Worker-backed **Batch Re-Palette**, and 1-click `.nibgrid.zip` export/import.
+- **Verification:** Added `tests/unit/m28-vault-snapshot.test.ts` (round-trip snapshot, 1-byte corruption rejection, delete-source-project Vault durability + zero orphans after Vault delete) and `tests/e2e/m28-vault-e2e.spec.ts` (cross-project Vault promotion & reuse + `.nibgrid.zip` round-trip & reload persistence).
+
+## Milestone 29: Zero-Server URL-Hash Recipe Sharing (`#share=`) & Static GitHub Pack Feeds
+
+- **Pure-TS URL Recipe Codec (`src/share/recipeUrlCodec.ts`):** Added Base64URL + zlib compression (`#share=v1.`) with `8192`-char limit and `65536`-byte bounded `Unzlib` decompression across `shader`, `vfx`, `bmfont`, `procedural-sfx`, and `art-bible` recipes.
+- **Static Pack Feed Client & Offline Starter Pack (`src/share/packFeedClient.ts`, `public/packs/starter-catalog.json`, `public/packs/retro-rpg-starter.nibgrid-pack.zip`):** Implemented static `catalog.json` loading, relative ZIP resolution, SHA-256 verification, atomic project/Vault pack import, and custom feed `localStorage` persistence.
+- **UI Integration (`src/ui/share/ShareRecipeModal.tsx`, `src/ui/share/PackFeedBrowser.tsx`, `src/ui/inspector/ShaderStudio.tsx`, `src/ui/vault/VaultAndBrowserView.tsx`, `src/App.tsx`):** Added `#share=` link generation in Screen 4N, boot/`hashchange` **Shared Recipe Detected** modal with live WebGL2/pure-TS re-bake check, and **Pack Feeds** browser tab.
+- **Verification:** Added `tests/unit/m29-url-pack-share.test.ts` and `tests/e2e/m29-share-feed-e2e.spec.ts` covering URL share generation, boot re-bake & import, and offline `starter-catalog.json` pack import.
+
+## Milestone 30: Zero-Server WebRTC P2P Direct Asset & Project Transfer
+
+- **Pure-TS Protocol & SDP Codec (`src/p2p/p2pProtocol.ts`, `src/p2p/sdpCodec.ts`):** Implemented `16 KiB` big-endian chunk framing, `P2pReassembler` end-to-end SHA-256 verification, and compressed non-trickle `NIB-O1:` / `NIB-A1:` SDP codecs.
+- **WebRTC Transport & Loopback Factory (`src/p2p/webrtcTransfer.ts`):** Implemented `P2pSenderSession` and `P2pReceiverSession` with `64 KiB` DataChannel backpressure, configurable ICE servers, and `createInMemoryLoopbackPeerFactory()` for zero-network CI verification.
+- **P2P Transfer Modal (`src/ui/share/P2pTransferModal.tsx`, `src/App.tsx`, `src/ui/hub/ProjectHub.tsx`, `src/ui/vault/VaultAndBrowserView.tsx`, `src/ui/command/CommandPalette.tsx`):** Added Send/Receive tabs keeping sessions live across tab toggles, inline SVG QR visualizers, live progress, SHA-256 Verified badges, and 1-click snapshot import.
+- **Verification:** Added `tests/unit/m30-p2p-protocol.test.ts` (100 KiB chunking/reassembly, 1-bit flip corruption rejection, SDP codec round-trip, full loopback transfer) and `tests/e2e/m30-p2p-e2e.spec.ts` verifying full Offer/Answer transfer & project import via injected `RTCPeerConnection` loopback.

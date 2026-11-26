@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import {
+  Archive,
   BookOpen,
   Boxes,
   ClipboardCheck,
@@ -24,18 +25,25 @@ import { GodotSyncPill } from './ui/entities/GodotSyncPill';
 import { ProjectHub } from './ui/hub/ProjectHub';
 import { ProviderVaultModal } from './ui/hub/ProviderVaultModal';
 import { PostProcessInspector } from './ui/inspector/PostProcessInspector';
+import { P2pTransferModal } from './ui/share/P2pTransferModal';
+import { ShareRecipeModal } from './ui/share/ShareRecipeModal';
 import { SpriteStudio } from './ui/studio/SpriteStudio';
+import { VaultAndBrowserView } from './ui/vault/VaultAndBrowserView';
 
 export function App() {
   const {
     route,
     activeProject,
     vaultOpen,
+    p2pOpen,
+    outgoingShareRecipe,
     isLoading,
     errorMessage,
     initialize,
     navigate,
     setVaultOpen,
+    setP2pOpen,
+    closeShareModal,
     clearError,
   } = useAppStore();
   const [paletteOpen, setPaletteOpen] = useState(false);
@@ -159,6 +167,21 @@ export function App() {
 
           <button
             type="button"
+            data-testid="nav-asset-vault"
+            onClick={() =>
+              void navigate({
+                screen: 'vault',
+                ...(activeProject ? { projectId: activeProject.id } : {}),
+              })
+            }
+            className={navButtonClass(route.screen === 'vault')}
+          >
+            <Archive className="h-3.5 w-3.5" />
+            Vault
+          </button>
+
+          <button
+            type="button"
             data-testid="nav-provider-vault"
             onClick={() => setVaultOpen(!vaultOpen)}
             className={navButtonClass(vaultOpen)}
@@ -216,12 +239,16 @@ export function App() {
           <AuditMatrixView />
         ) : route.screen === 'entities' ? (
           <EntityHubView />
+        ) : route.screen === 'vault' ? (
+          <VaultAndBrowserView />
         ) : (
           <SpriteStudio />
         )}
       </main>
 
       <ProviderVaultModal />
+      <P2pTransferModal open={p2pOpen} onClose={() => setP2pOpen(false)} />
+      <ShareRecipeModal outgoingRecipe={outgoingShareRecipe} onCloseOutgoing={closeShareModal} />
       <CommandPalette open={paletteOpen} onOpenChange={setPaletteOpen} />
       <UniversalDropOverlay />
     </div>

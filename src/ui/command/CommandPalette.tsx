@@ -15,7 +15,8 @@ const CATEGORY_LABEL: Record<CommandCategory, string> = {
 };
 
 export function CommandPalette({ open, onOpenChange }: CommandPaletteProps) {
-  const { route, activeProject, spriteNodes, audioAssets, navigate, setVaultOpen } = useAppStore();
+  const { route, activeProject, spriteNodes, audioAssets, navigate, setVaultOpen, setP2pOpen } =
+    useAppStore();
 
   const [query, setQuery] = useState('');
   const [selectedIndex, setSelectedIndex] = useState(0);
@@ -330,12 +331,45 @@ export function CommandPalette({ open, onOpenChange }: CommandPaletteProps) {
         execute: () => navigate({ screen: 'hub' }),
       },
       {
+        id: 'nav-asset-vault',
+        title: 'Global Asset Vault & Smart Browser',
+        subtitle: 'Cross-project sprites, shaders, batch re-palette & .nibgrid.zip snapshots',
+        category: 'navigation',
+        keywords: ['vault', 'library', 'snapshot', 'nibgrid.zip', 'browser', 'reuse'],
+        execute: () =>
+          navigate({
+            screen: 'vault',
+            ...(activeProject ? { projectId: activeProject.id } : {}),
+          }),
+      },
+      {
+        id: 'nav-pack-feeds',
+        title: 'Browse Static GitHub Pack Feeds',
+        subtitle: 'Load starter-catalog.json or custom GitHub Pages .nibgrid-pack.zip feeds',
+        category: 'navigation',
+        keywords: ['pack', 'feed', 'catalog', 'starter', 'github', 'share'],
+        execute: () =>
+          navigate({
+            screen: 'vault',
+            ...(activeProject ? { projectId: activeProject.id } : {}),
+          }),
+      },
+      {
         id: 'act-provider-vault',
         title: 'Open Provider Vault (BYOK / Bridge)',
         subtitle: 'Manage local bridges, ComfyUI, and API providers',
         category: 'action',
         keywords: ['provider', 'vault', 'api', 'key', 'bridge'],
         execute: () => setVaultOpen(true),
+      },
+      {
+        id: 'act-p2p-transfer',
+        title: 'Share / Transfer via WebRTC P2P',
+        subtitle:
+          'Send or receive .nibgrid.zip project snapshots browser-to-browser with SHA-256 check',
+        category: 'action',
+        keywords: ['p2p', 'webrtc', 'transfer', 'qr', 'share', 'offer', 'answer'],
+        execute: () => setP2pOpen(true),
       },
     );
 
@@ -373,7 +407,15 @@ export function CommandPalette({ open, onOpenChange }: CommandPaletteProps) {
     }
 
     return list;
-  }, [activeProject, activeOrLatestNodeId, spriteNodes, audioAssets, navigate, setVaultOpen]);
+  }, [
+    activeProject,
+    activeOrLatestNodeId,
+    spriteNodes,
+    audioAssets,
+    navigate,
+    setVaultOpen,
+    setP2pOpen,
+  ]);
 
   const ranked = useMemo(() => rankCommands(query, commands), [query, commands]);
   const safeSelectedIdx =

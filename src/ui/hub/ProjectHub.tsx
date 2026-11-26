@@ -1,6 +1,18 @@
-import { useState, type FormEvent } from 'react';
-import { BookOpen, FolderPlus, Layers, Paintbrush, Trash2 } from 'lucide-react';
+import { useRef, useState, type FormEvent } from 'react';
+import {
+  BookOpen,
+  Download,
+  FolderPlus,
+  Layers,
+  Paintbrush,
+  Radio,
+  Trash2,
+  Upload,
+} from 'lucide-react';
+import { db } from '../../db/database';
+import { triggerBlobDownload } from '../../export/zipPackager';
 import { useAppStore } from '../../store/useAppStore';
+import { exportProjectSnapshotFromDb, importProjectSnapshotToDb } from '../../sync/projectSnapshot';
 
 const PROJECTION_LABELS: Record<string, string> = {
   'top-down': 'Top-Down',
@@ -15,10 +27,44 @@ const ART_MODE_LABELS: Record<string, string> = {
 };
 
 export function ProjectHub() {
-  const { projects, createProject, deleteProject, navigate } = useAppStore();
+  const { projects, createProject, deleteProject, navigate, refreshProjects, setP2pOpen } =
+    useAppStore();
   const [newName, setNewName] = useState('');
   const [formError, setFormError] = useState<string | null>(null);
+  const [hubNotice, setHubNotice] = useState<string | null>(null);
   const [isCreating, setIsCreating] = useState(false);
+  const importSnapshotRef = useRef<HTMLInputElement | null>(null);
+
+  const handleImportSnapshot = async (file: File | undefined) => {
+    if (!file) return;
+    setFormError(null);
+    setHubNotice(null);
+    try {
+      const bytes = new Uint8Array(await file.arrayBuffer());
+      const res = await importProjectSnapshotToDb(db, bytes);
+      await refreshProjects();
+      setHubNotice(
+        `Imported "${res.project.name}" (${res.spriteCount} sprites, ${res.audioCount} audio).`,
+      );
+    } catch (error) {
+      setFormError(error instanceof Error ? error.message : 'Failed to import .nibgrid.zip.');
+    } finally {
+      if (importSnapshotRef.current) importSnapshotRef.current.value = '';
+    }
+  };
+
+  const handleExportSnapshot = async (projectId: string) => {
+    setFormError(null);
+    try {
+      const { filename, bytes } = await exportProjectSnapshotFromDb(db, projectId);
+      const copy = new Uint8Array(bytes.byteLength);
+      copy.set(bytes);
+      triggerBlobDownload(new Blob([copy.buffer], { type: 'application/zip' }), filename);
+      setHubNotice(`Exported portable snapshot ${filename}.`);
+    } catch (error) {
+      setFormError(error instanceof Error ? error.message : 'Failed to export .nibgrid.zip.');
+    }
+  };
 
   const handleCreate = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -72,9 +118,40 @@ export function ProjectHub() {
               <FolderPlus className="h-4 w-4" />
               New Project
             </button>
+            <input
+              ref={importSnapshotRef}
+              type="file"
+              accept=".zip,.nibgrid.zip"
+              data-testid="hub-import-snapshot-input"
+              onChange={(e) => void handleImportSnapshot(e.target.files?.[0])}
+              className="hidden"
+            />
+            <button
+              type="button"
+              data-testid="hub-import-snapshot-btn"
+              onClick={() => importSnapshotRef.current?.click()}
+              className="inline-flex items-center gap-1.5 rounded-md border border-slate-700 bg-slate-800 px-3 py-2 text-xs font-medium text-slate-200 hover:bg-slate-700"
+            >
+              <Upload className="h-3.5 w-3.5" />
+              Import .nibgrid.zip
+            </button>
+            <button
+              type="button"
+              data-testid="hub-p2p-btn"
+              onClick={() => setP2pOpen(true)}
+              className="inline-flex items-center gap-1.5 rounded-md border border-amber-500/40 bg-amber-500/15 px-3 py-2 text-xs font-medium text-amber-200 hover:bg-amber-500/25"
+            >
+              <Radio className="h-3.5 w-3.5" />
+              Share via P2P
+            </button>
           </form>
         </div>
         {formError && <p className="mt-2 text-xs text-rose-400">{formError}</p>}
+        {hubNotice && (
+          <p data-testid="hub-snapshot-notice" className="mt-2 text-xs text-emerald-300">
+            {hubNotice}
+          </p>
+        )}
       </section>
 
       {projects.length === 0 ? (
@@ -160,6 +237,16 @@ export function ProjectHub() {
                 >
                   <Paintbrush className="h-3.5 w-3.5" />
                   Studio
+                </button>
+                <button
+                  type="button"
+                  data-testid={`export-snapshot-${project.id}`}
+                  onClick={() => void handleExportSnapshot(project.id)}
+                  className="rounded-md border border-slate-700 bg-slate-800 p-1.5 text-slate-300 hover:bg-slate-700 hover:text-white"
+                  aria-label={`Export ${project.name} snapshot`}
+                  title="Export .nibgrid.zip snapshot"
+                >
+                  <Download className="h-3.5 w-3.5" />
                 </button>
                 <button
                   type="button"

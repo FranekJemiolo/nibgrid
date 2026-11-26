@@ -518,7 +518,13 @@ export async function rollbackBatchRun(
 
   return database.transaction(
     'rw',
-    [database.spriteNodes, database.audioAssets, database.projects, database.blobs],
+    [
+      database.spriteNodes,
+      database.audioAssets,
+      database.projects,
+      database.blobs,
+      database.vaultItems,
+    ],
     async () => {
       for (let i = rollbackManifest.length - 1; i >= 0; i--) {
         const snap = rollbackManifest[i]!;
@@ -589,7 +595,13 @@ export async function rollbackBatchRun(
 export async function cleanupSupersededBatchBlobs(database: NibgridDatabase): Promise<number> {
   return database.transaction(
     'rw',
-    [database.projects, database.spriteNodes, database.audioAssets, database.blobs],
+    [
+      database.projects,
+      database.spriteNodes,
+      database.audioAssets,
+      database.blobs,
+      database.vaultItems,
+    ],
     async () => {
       const orphans = await findOrphanBlobIds(database);
       if (orphans.length > 0) {
