@@ -12,6 +12,7 @@ import type {
   SpriteNode,
 } from '../domain/schemas';
 import type { VaultItem } from '../domain/vaultSchema';
+import type { PixelTool } from '../processing/pixelEditorCore';
 import type { ShareableRecipe } from '../share/recipeUrlCodec';
 
 export type InspectorTab =
@@ -34,12 +35,27 @@ export type ScreenRoute =
   | { screen: 'hub' }
   | { screen: 'bible'; projectId: string }
   | { screen: 'studio'; projectId: string }
-  | { screen: 'inspector'; projectId: string; nodeId: string; initialTab?: InspectorTab }
+  | {
+      screen: 'inspector';
+      projectId: string;
+      nodeId: string;
+      initialTab?: InspectorTab;
+      initialPixelTool?: PixelTool;
+    }
   | { screen: 'atlas'; projectId: string }
   | { screen: 'audio'; projectId: string }
   | { screen: 'audit'; projectId: string }
   | { screen: 'entities'; projectId: string }
   | { screen: 'vault'; projectId?: string };
+
+const VALID_PIXEL_TOOLS = new Set<PixelTool>([
+  'pencil',
+  'eraser',
+  'eyedropper',
+  'fill',
+  'mask-brush',
+  'mask-eraser',
+]);
 
 const VALID_INSPECTOR_TABS = new Set<InspectorTab>([
   'postprocess',
@@ -75,11 +91,14 @@ export function parseHashRoute(hash: string): ScreenRoute {
     const params = query ? new URLSearchParams(query) : null;
     const rawTab = params?.get('tab') as InspectorTab | null;
     const initialTab = rawTab && VALID_INSPECTOR_TABS.has(rawTab) ? rawTab : undefined;
+    const rawTool = params?.get('tool') as PixelTool | null;
+    const initialPixelTool = rawTool && VALID_PIXEL_TOOLS.has(rawTool) ? rawTool : undefined;
     return {
       screen: 'inspector',
       projectId: inspectorMatch[1],
       nodeId: inspectorMatch[2],
       ...(initialTab ? { initialTab } : {}),
+      ...(initialPixelTool ? { initialPixelTool } : {}),
     };
   }
   const atlasMatch = /^\/project\/([^/]+)\/atlas$/.exec(path);
@@ -117,7 +136,11 @@ export function formatHashRoute(route: ScreenRoute): string {
   }
   if (route.screen === 'inspector') {
     const base = `#/project/${route.projectId}/inspector/${route.nodeId}`;
-    return route.initialTab ? `${base}?tab=${route.initialTab}` : base;
+    const sp = new URLSearchParams();
+    if (route.initialTab) sp.set('tab', route.initialTab);
+    if (route.initialPixelTool) sp.set('tool', route.initialPixelTool);
+    const qs = sp.toString();
+    return qs ? `${base}?${qs}` : base;
   }
   if (route.screen === 'atlas') {
     return `#/project/${route.projectId}/atlas`;

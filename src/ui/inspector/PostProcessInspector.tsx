@@ -220,9 +220,11 @@ function paletteVariantsToConfig(
 export function PostProcessInspector({
   nodeId,
   initialTab,
+  initialPixelTool,
 }: {
   nodeId: string;
   initialTab?: InspectorTab;
+  initialPixelTool?: PixelTool;
 }) {
   const { activeProject, spriteNodes, providers, refreshSpriteNodes, navigate } = useAppStore();
 
@@ -302,7 +304,9 @@ export function PostProcessInspector({
   }>({});
 
   // M31C: Screen 4A Surgical Pixel Micro-Editor & Region-Masked Inpainting state
-  const [activePixelTool, setActivePixelTool] = useState<PixelTool | null>(null);
+  const [activePixelTool, setActivePixelTool] = useState<PixelTool | null>(
+    () => initialPixelTool ?? null,
+  );
   const [mirrorX, setMirrorX] = useState(false);
   const [brushSize, setBrushSize] = useState<PixelBrushSize>(1);
   const [activeColorHex, setActiveColorHex] = useState<string>(
@@ -423,7 +427,11 @@ export function PostProcessInspector({
     } else if (latestNodeRef.current?.turnaroundMeta?.isTurnaroundSheet) {
       setInspectorTab('turnaround');
     }
-  }, [initialTab, targetNodeId]);
+    if (initialPixelTool !== undefined) {
+      setActivePixelTool(initialPixelTool);
+      setPivotPlaceMode(false);
+    }
+  }, [initialTab, initialPixelTool, targetNodeId]);
 
   // Sync initial assetClass, autoTileConfig, sockets, vfxFlipbook, parallaxScene, bitmapFont & M31 metadata ONLY when targetNodeId changes
   useEffect(() => {

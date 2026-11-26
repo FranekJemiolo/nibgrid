@@ -40,6 +40,10 @@ import {
   type VfxFlipbookConfig,
 } from '../domain/schemas';
 import { sha256Bytes } from '../processing/hash';
+import {
+  StoredQaReportRecordSchema,
+  type StoredQaReportRecord,
+} from '../processing/artDirectorQaSchema';
 
 export const OFFLINE_MOCK_PROVIDER_ID = 'offline-mock';
 export const ANTIGRAVITY_AGENT_PROVIDER_ID = 'antigravity-agent';
@@ -58,6 +62,7 @@ export class NibgridDatabase extends Dexie {
   entities!: Table<EntityDefinition, string>;
   syncTargets!: Table<GodotSyncTargetRecord, string>;
   vaultItems!: Table<VaultItem, string>;
+  qaReports!: Table<StoredQaReportRecord, string>;
 
   constructor(dbName = 'nibgrid-db') {
     super(dbName);
@@ -92,6 +97,17 @@ export class NibgridDatabase extends Dexie {
       entities: '&id, projectId, slug',
       syncTargets: '&projectId',
       vaultItems: '&id, kind, name, createdAt',
+    });
+    this.version(5).stores({
+      projects: 'id, updatedAt, name',
+      blobs: 'id, sha256, createdAt',
+      spriteNodes: 'id, projectId, parentId, [projectId+createdAt]',
+      providerConfigs: 'id, kind, updatedAt',
+      audioAssets: 'id, projectId, presetId, createdAt',
+      entities: '&id, projectId, slug',
+      syncTargets: '&projectId',
+      vaultItems: '&id, kind, name, createdAt',
+      qaReports: '&projectId, sheetHash',
     });
   }
 }
@@ -384,11 +400,13 @@ export class NibgridRepository {
         this.database.audioAssets,
         this.database.blobs,
         this.database.vaultItems,
+        this.database.qaReports,
       ],
       async () => {
         const node = await this.database.spriteNodes.get(nodeId);
         if (!node) return;
         await this.database.spriteNodes.delete(nodeId);
+        await this.database.qaReports.delete(node.projectId);
         await this.cleanupOrphanedBlobsInTx();
       },
     );
@@ -807,16 +825,33 @@ export class NibgridRepository {
         this.database.syncTargets,
         this.database.blobs,
         this.database.vaultItems,
+        this.database.qaReports,
       ],
       async () => {
         await this.database.spriteNodes.where('projectId').equals(projectId).delete();
         await this.database.audioAssets.where('projectId').equals(projectId).delete();
         await this.database.entities.where('projectId').equals(projectId).delete();
         await this.database.syncTargets.delete(projectId);
+        await this.database.qaReports.delete(projectId);
         await this.database.projects.delete(projectId);
         await this.cleanupOrphanedBlobsInTx();
       },
     );
+  }
+
+  async getQaReport(projectId: string): Promise<StoredQaReportRecord | undefined> {
+    const found = await this.database.qaReports.get(projectId);
+    return found ? StoredQaReportRecordSchema.parse(found) : undefined;
+  }
+
+  async saveQaReport(record: StoredQaReportRecord): Promise<StoredQaReportRecord> {
+    const validated = StoredQaReportRecordSchema.parse(record);
+    await this.database.qaReports.put(validated);
+    return validated;
+  }
+
+  async deleteQaReport(projectId: string): Promise<void> {
+    await this.database.qaReports.delete(projectId);
   }
 
   async cleanupOrphanedBlobs(): Promise<number> {

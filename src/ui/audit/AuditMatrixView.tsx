@@ -24,10 +24,17 @@ import {
   type AuditCheckId,
   type AuditSeverity,
 } from '../../processing/projectAudit';
+import type { ArtDirectorFinding, ArtDirectorQaReport } from '../../processing/artDirectorQaSchema';
+import {
+  computeQaSheetHash,
+  packQaContactSheets,
+  type QaSpriteEntry,
+} from '../../processing/qaContactSheet';
 import { BIOME_PRESETS, generateBiomeTile, type BiomeId } from '../../processing/sandboxBiomes';
 import type { RgbaBuffer } from '../../processing/types';
 import { useAppStore, type InspectorTab } from '../../store/useAppStore';
 import { BlobImage } from '../components/BlobImage';
+import { ArtDirectorQaPanel } from './ArtDirectorQaPanel';
 import { BatchRunnerDrawer } from './BatchRunnerDrawer';
 
 type AuditFilterMode = 'all' | 'fail' | 'warn' | 'stale' | 'sprites' | 'audio';
@@ -75,6 +82,7 @@ export function AuditMatrixView() {
     activeProject,
     spriteNodes,
     audioAssets,
+    providers,
     refreshSpriteNodes,
     refreshAudioAssets,
     navigate,
@@ -95,6 +103,9 @@ export function AuditMatrixView() {
 
   const [decodedSprites, setDecodedSprites] = useState<Record<string, RgbaBuffer>>({});
   const [decodedAudioPcm, setDecodedAudioPcm] = useState<Record<string, PcmBuffer>>({});
+  const [goldenRefBuffer, setGoldenRefBuffer] = useState<RgbaBuffer | null>(null);
+  const [qaReport, setQaReport] = useState<ArtDirectorQaReport | null>(null);
+  const [qaFromCache, setQaFromCache] = useState<boolean>(false);
   const [isDecoding, setIsDecoding] = useState<boolean>(false);
 
   const [isRunningBatch, setIsRunningBatch] = useState<boolean>(false);
@@ -178,16 +189,113 @@ export function AuditMatrixView() {
       }
 
       if (!cancelled) {
-        setDecodedSprites(nextSprites);
-        setDecodedAudioPcm(nextAudio);
-        setIsDecoding(false);
+        let nextRef: RgbaBuffer | null = null;
+        const refBlobId = activeProject?.artBible.goldenReferenceBlobIds[0];
+        if (refBlobId) {
+          const cachedRef = spriteCacheRef.current.get(refBlobId);
+          if (cachedRef) {
+            nextRef = cachedRef;
+          } else {
+            const rec = await repository.getBlob(refBlobId);
+            if (rec && !cancelled) {
+              try {
+                nextRef = await decodeSpriteBlobToRgba(rec.bytes);
+                spriteCacheRef.current.set(refBlobId, nextRef);
+              } catch {
+                nextRef = null;
+              }
+            }
+          }
+        }
+        if (!cancelled) {
+          setGoldenRefBuffer(nextRef);
+          setDecodedSprites(nextSprites);
+          setDecodedAudioPcm(nextAudio);
+          setIsDecoding(false);
+        }
       }
     })();
 
     return () => {
       cancelled = true;
     };
-  }, [auditableSprites, audioAssets]);
+  }, [activeProject?.artBible.goldenReferenceBlobIds, auditableSprites, audioAssets]);
+
+  const qaEntries = useMemo<QaSpriteEntry[]>(() => {
+    const list: QaSpriteEntry[] = [];
+    if (goldenRefBuffer && activeProject?.artBible.goldenReferenceBlobIds[0]) {
+      list.push({
+        spriteId: `ref:${activeProject.artBible.goldenReferenceBlobIds[0]}`,
+        slug: '00-golden-reference',
+        isGoldenRef: true,
+        buffer: goldenRefBuffer,
+      });
+    }
+    for (const node of auditableSprites) {
+      const blobId = node.processedBlobId ?? node.imageBlobId;
+      const buf = decodedSprites[blobId];
+      if (!buf) continue;
+      list.push({
+        spriteId: node.id,
+        slug: `${node.kind}-${String(node.generationMeta.seed).padStart(4, '0')}-${node.id.slice(0, 6)}`,
+        buffer: buf,
+      });
+    }
+    return list;
+  }, [
+    activeProject?.artBible.goldenReferenceBlobIds,
+    auditableSprites,
+    decodedSprites,
+    goldenRefBuffer,
+  ]);
+
+  // Hydrate cached Visual QA report from Dexie on project load / sprite update
+  useEffect(() => {
+    if (!activeProject) {
+      setQaReport(null);
+      setQaFromCache(false);
+      return;
+    }
+    let cancelled = false;
+    void (async () => {
+      const cached = await repository.getQaReport(activeProject.id);
+      if (cancelled) return;
+      if (!cached) {
+        setQaReport(null);
+        setQaFromCache(false);
+        return;
+      }
+      if (qaEntries.length > 0) {
+        const sheets = packQaContactSheets(qaEntries);
+        const currentHash = await computeQaSheetHash(
+          sheets,
+          computeArtBibleHash(activeProject.artBible),
+        );
+        if (!cancelled) {
+          setQaReport(cached);
+          setQaFromCache(cached.sheetHash === currentHash);
+        }
+      } else {
+        setQaReport(cached);
+        setQaFromCache(true);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [activeProject, qaEntries]);
+
+  const qaFindingBySpriteId = useMemo(() => {
+    const map = new Map<string, ArtDirectorFinding>();
+    for (const finding of qaReport?.findings ?? []) {
+      const prev = map.get(finding.spriteId);
+      const rank = (s: AuditSeverity) => (s === 'fail' ? 3 : s === 'warn' ? 2 : 1);
+      if (!prev || rank(finding.severity) > rank(prev.severity)) {
+        map.set(finding.spriteId, finding);
+      }
+    }
+    return map;
+  }, [qaReport]);
 
   const biomeTile = useMemo(() => generateBiomeTile(biomeId, 64), [biomeId]);
 
@@ -382,6 +490,39 @@ export function AuditMatrixView() {
     });
   };
 
+  const handleFixQaFinding = (finding: ArtDirectorFinding) => {
+    if (!activeProject) return;
+    if (finding.suggestedFix === 'regenerate') {
+      void navigate({ screen: 'studio', projectId: activeProject.id });
+      return;
+    }
+    if (finding.suggestedFix === 'sandbox-1x') {
+      void navigate({
+        screen: 'inspector',
+        projectId: activeProject.id,
+        nodeId: finding.spriteId,
+        initialTab: 'sandbox',
+      });
+      return;
+    }
+    if (finding.suggestedFix === 'micro-editor') {
+      void navigate({
+        screen: 'inspector',
+        projectId: activeProject.id,
+        nodeId: finding.spriteId,
+        initialTab: 'postprocess',
+        initialPixelTool: 'pencil',
+      });
+      return;
+    }
+    void navigate({
+      screen: 'inspector',
+      projectId: activeProject.id,
+      nodeId: finding.spriteId,
+      initialTab: 'postprocess',
+    });
+  };
+
   if (!activeProject) {
     return (
       <div className="mx-auto mt-8 max-w-xl rounded-xl border border-slate-800 bg-slate-900 p-6 text-center text-sm text-slate-300">
@@ -527,6 +668,20 @@ export function AuditMatrixView() {
           </div>
         </div>
 
+        {/* M32: Vision-LLM Art Director Visual QA Panel */}
+        <ArtDirectorQaPanel
+          project={activeProject}
+          entries={qaEntries}
+          providers={providers}
+          report={qaReport}
+          fromCache={qaFromCache}
+          onReportUpdated={(nextReport, cached) => {
+            setQaReport(nextReport);
+            setQaFromCache(cached);
+          }}
+          onFixFinding={handleFixQaFinding}
+        />
+
         {/* Matrix Table */}
         <div className="flex-1 overflow-auto p-4">
           {visibleRows.length === 0 ? (
@@ -546,6 +701,7 @@ export function AuditMatrixView() {
                       {col.label}
                     </th>
                   ))}
+                  <th className="px-2 py-2">Visual QA</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-800/70">
@@ -623,6 +779,35 @@ export function AuditMatrixView() {
                           </td>
                         );
                       })}
+                      <td className="px-2 py-2">
+                        {(() => {
+                          if (row.assetKind !== 'sprite') {
+                            return <span className="text-[11px] text-slate-600">—</span>;
+                          }
+                          const qaFinding = qaFindingBySpriteId.get(row.assetId);
+                          if (!qaFinding) {
+                            return <span className="text-[11px] text-slate-600">—</span>;
+                          }
+                          const label =
+                            qaFinding.severity === 'fail'
+                              ? 'Fail'
+                              : qaFinding.severity === 'warn'
+                                ? 'Warn'
+                                : 'Pass';
+                          return (
+                            <button
+                              type="button"
+                              data-testid={`audit-cell-${row.assetId}-visualQa`}
+                              data-severity={qaFinding.severity}
+                              title={`${qaFinding.summary} (Click to fix)`}
+                              onClick={() => handleFixQaFinding(qaFinding)}
+                              className={`rounded border px-2 py-0.5 font-mono text-[10px] font-medium whitespace-nowrap ${SEVERITY_BADGE_CLASSES[qaFinding.severity]}`}
+                            >
+                              {label}
+                            </button>
+                          );
+                        })()}
+                      </td>
                     </tr>
                   );
                 })}

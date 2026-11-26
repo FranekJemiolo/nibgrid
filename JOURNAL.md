@@ -565,3 +565,19 @@
 
 - **Screen 4A Toolbar & Canvas Integration (`src/ui/inspector/PixelMicroEditorToolbar.tsx`, `src/ui/inspector/PostProcessInspector.tsx`):** Added floating tool rail (`Pencil`, `Eraser`, `Eyedropper`, `Flood Fill`, `Mirror-X`, `Mask Brush`/`Mask Eraser`, `1–3px` brush size, `Undo`/`Redo`), bottom Art Bible swatch strip (+ `Unlock Free Color`), top-center Inpaint Action Bar, HiDPI pointer-to-texel mapping, editable-input keyboard shortcut isolation, reload preservation of edited blobs, and atomic Dexie commit.
 - **Verification:** Added `tests/e2e/m31c-micro-editor-e2e.spec.ts` covering Pencil + Mirror-X at `dpr: 1` & `dpr: 2`, `Cmd+Z` / `Cmd+Shift+Z`, keyboard shortcut isolation inside `inpaint-prompt-input`, intercepted Gemini masked inpainting, `.recipe.json` metadata export, hard-reload persistence, and zero orphan blobs.
+
+## Milestone 32A: Pure-TS QA Contact Sheet Packer, Schema & Dexie v5 Cache
+
+- **Contact Sheet Packer & Schema (`src/processing/qaContactSheet.ts`, `src/processing/artDirectorQaSchema.ts`, `src/db/database.ts`):** Implemented `packQaContactSheets()` with paginated `REF`-pinned `#808080` sheets, `pixelGlyphTable.ts` `5×7` index stamps, binary silhouette previews, SHA-256 `computeQaSheetHash()`, `parseAndResolveQaReport()` clamping + hallucination filtering, and Dexie v5 `qaReports` caching/cleanup.
+- **Verification:** Added `tests/unit/m32a-qa-contact-sheet.test.ts` validating 17-sprite pagination, byte determinism, score clamping, invalid `"99"` label drop, and Dexie cache/cascade deletion with zero orphan blobs.
+
+## Milestone 32B: Gemini Flash Vision QA Adapter & Pure-TS Offline Heuristics
+
+- **Vision QA Adapter (`src/providers/artDirectorQa.ts`):** Implemented `estimateArtDirectorQaCost()`, `buildGeminiVisionQaRequest()`, `runOfflineHeuristicQa()` (silhouette fill ratio, edge-vs-interior luminance contrast, left/right luminance balance), and `runArtDirectorQaPass()` with SHA-256 Dexie cache hit short-circuiting, Gemini / Antigravity Bridge routing, and secret redaction.
+- **Verification:** Added `tests/unit/m32b-art-director-qa.test.ts` verifying Vision payload schema, opposing light detection offline, `AIzaSyQA999` secret redaction on HTTP `401`/`429`, and zero duplicate network requests on cache hit.
+
+## Milestone 32C: Audit Matrix Art Director QA Panel, Deep-Link Fixes & Smart Filter
+
+- **Audit Matrix & Deep-Link Wiring (`src/ui/audit/ArtDirectorQaPanel.tsx`, `src/ui/audit/AuditMatrixView.tsx`, `src/store/useAppStore.ts`, `src/App.tsx`, `src/ui/inspector/PostProcessInspector.tsx`):** Added clickable contact sheet preview canvas, `Run Visual QA Pass (AI)` with transparent cost + `Cached` badges, per-sprite `Visual QA` column badges, and `?tool=pencil` Micro-Editor deep-link routing.
+- **Smart Browser Filter (`src/ui/vault/VaultAndBrowserView.tsx`):** Added `Visual QA Warnings` filter chip + status option and per-card `qa:*` badges.
+- **Verification:** Added `tests/e2e/m32c-art-director-e2e.spec.ts` covering contact sheet rendering, intercepted Gemini Vision QA findings, `Fix in Micro-Editor` navigation, M28 `Visual QA Warnings` filtering, hard-reload IndexedDB cache restoration, and zero orphan blobs.

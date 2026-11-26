@@ -230,7 +230,11 @@ export function App() {
         ) : route.screen === 'bible' ? (
           <ArtBibleEditor />
         ) : route.screen === 'inspector' ? (
-          <PostProcessInspector nodeId={route.nodeId} initialTab={route.initialTab} />
+          <PostProcessInspector
+            nodeId={route.nodeId}
+            initialTab={route.initialTab}
+            initialPixelTool={route.initialPixelTool}
+          />
         ) : route.screen === 'atlas' ? (
           <AtlasWorkshop />
         ) : route.screen === 'audio' ? (

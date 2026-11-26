@@ -371,3 +371,17 @@ All image-manipulation stages operate on raw `Uint8ClampedArray` buffers in `src
 ## 65. Screen 4A Surgical Pixel Micro-Editor & Region-Masked Inpainting UI (Milestone 31C)
 
 - **Floating Micro-Editor Rail, Palette Strip & Inpaint Action Bar (`src/ui/inspector/PixelMicroEditorToolbar.tsx`, `src/ui/inspector/PostProcessInspector.tsx`):** Integrates `Pencil (B)`, `Eraser (E)`, `Eyedropper (I)`, `Flood Fill (G)`, `Mirror-X (M)` guide/symmetry, `Mask Brush (K)` / `Mask Eraser`, `1–3px` stamps, `Cmd/Ctrl+Z` / `Cmd/Ctrl+Shift+Z` undo/redo, Art Bible swatch locking (+ optional free color picker), HiDPI `mapClientToTexel()` pointer dispatch over `BeforeAfterWipe`, reload hydration preserving edited `processedBlobId`s cleanly, and atomic Dexie persistence (`commitProcessedSpritePixels()`).
+
+## 66. Pure-TS QA Contact Sheet Packer, Report Schema & Dexie Cache (Milestone 32A)
+
+- **Pure-TS Labeled Contact Sheet Packer (`src/processing/qaContactSheet.ts`):** Deterministically packs up to `16` sprites per page (`packQaContactSheets()`) onto a `#808080` mid-gray grid with `REF` pinned at cell `0` across all paginated sheets, stamps crisp `REF` / `01`..`15` badges via M24's `pixelGlyphTable.ts`, renders bottom-right binary 1× silhouette thumbnails, and hashes sheet pixels + `ArtBible` hash (`computeQaSheetHash()`).
+- **QA Schema & Dexie v5 Cache (`src/processing/artDirectorQaSchema.ts`, `src/db/database.ts`):** Validates Vision QA reports (`ART_DIRECTOR_QA_GEMINI_RESPONSE_SCHEMA`), clamps `overallScore` to `[0, 100]` and resolves `indexLabel -> spriteId` safely dropping hallucinated labels (`parseAndResolveQaReport()`), and stores reports in Dexie `version(5)` `qaReports` (`&projectId, sheetHash`) with cascade cleanup on sprite/project deletion.
+
+## 67. Gemini Flash Vision QA Adapter & Offline Heuristic Analyzer (Milestone 32B)
+
+- **Vision-LLM & Offline QA Engine (`src/providers/artDirectorQa.ts`):** Builds `responseSchema`-enforced multimodal Vision requests attaching labeled contact sheets + Art Bible rules (`buildGeminiVisionQaRequest()`), estimates per-sheet run cost (`estimateArtDirectorQaCost()`), analyzes alpha silhouettes, border luminance contrast, and light-angle balance deterministically offline (`runOfflineHeuristicQa()`), and executes cache-first multi-provider QA passes (`runArtDirectorQaPass()`) via Dexie `qaReports` with strict `ProviderError` secret stripping.
+
+## 68. Audit Matrix Art Director QA Panel, Deep-Links & Smart Filter (Milestone 32C)
+
+- **Visual QA Panel & Audit Matrix Integration (`src/ui/audit/ArtDirectorQaPanel.tsx`, `src/ui/audit/AuditMatrixView.tsx`):** Packs decoded project sprites + Golden Reference into an interactive clickable contact sheet canvas (`qa-contact-sheet-canvas`), surfaces overall cohesion scores, structured severity/category cards (`light-angle`, `style-drift`, `outline-inconsistency`, `silhouette-readability`, `scale-proportion`), `Cached` indicator + `Force Re-Run`, per-row `Visual QA` badges, and deep-links directly into Screen 4A Micro-Editor (`?tab=postprocess&tool=pencil`), Post-Process, 1× Sandbox, or Sprite Studio (`src/store/useAppStore.ts`, `src/App.tsx`, `src/ui/inspector/PostProcessInspector.tsx`).
+- **M28 Smart Asset Browser Integration (`src/ui/vault/VaultAndBrowserView.tsx`):** Hydrates `repository.getQaReport()`, adds `Visual QA Warnings` quick-filter toggle (`browser-filter-qa-warnings`) and status dropdown option, and renders per-card `qa:pass`/`qa:warn`/`qa:fail` badges.

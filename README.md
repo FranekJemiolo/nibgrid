@@ -1,6 +1,6 @@
 # Nibgrid
 
-Local-first, zero-server Bring-Your-Own-Key / Bring-Your-Own-Model (BYOK/BYOM) Progressive Web App for turning hand-drawn sketches and vocal hums into style-locked, engine-ready 2D game sprites, 4-view turnarounds, normal maps, animations, auto-tiles, mesh-tracked sockets, VFX flipbooks, parallax backgrounds, bitmap fonts & damage numerals, colliders, UI panels, Godot 4 `.gdshader` + `ShaderMaterial` `.tres` shaders, `.tscn` + typed `.gd` prefabs & live `res://` sync, surgical pixel micro-editing & region-masked AI inpainting, reusable Global Asset Vault libraries, `.nibgrid.zip` snapshots, zero-server `#share=` URL/Pack Feeds, WebRTC P2P direct transfers, and audio.
+Local-first, zero-server Bring-Your-Own-Key / Bring-Your-Own-Model (BYOK/BYOM) Progressive Web App for turning hand-drawn sketches and vocal hums into style-locked, engine-ready 2D game sprites, 4-view turnarounds, normal maps, animations, auto-tiles, mesh-tracked sockets, VFX flipbooks, parallax backgrounds, bitmap fonts & damage numerals, colliders, UI panels, Godot 4 `.gdshader` + `ShaderMaterial` `.tres` shaders, `.tscn` + typed `.gd` prefabs & live `res://` sync, surgical pixel micro-editing & region-masked AI inpainting, Vision-LLM Art Director QA reviews, reusable Global Asset Vault libraries, `.nibgrid.zip` snapshots, zero-server `#share=` URL/Pack Feeds, WebRTC P2P direct transfers, and audio.
 
 **Live App (GitHub Pages):** https://franekjemiolo.github.io/nibgrid/
 
@@ -43,6 +43,7 @@ Local-first, zero-server Bring-Your-Own-Key / Bring-Your-Own-Model (BYOK/BYOM) P
   - [2.24 Share Zero-Server `#share=` Recipes & Import Static Pack Feeds (Sharing)](#224-share-zero-server-share-recipes--import-static-pack-feeds-sharing)
   - [2.25 Transfer Snapshots Browser-to-Browser via WebRTC P2P (`NIB-O1:` / `NIB-A1:`)](#225-transfer-snapshots-browser-to-browser-via-webrtc-p2p-nib-o1--nib-a1)
   - [2.26 Polish Sprites via Surgical Pixel Micro-Editor & Region Inpainting (Screen 4A)](#226-polish-sprites-via-surgical-pixel-micro-editor--region-inpainting-screen-4a)
+  - [2.27 Run Vision-LLM Art Director Visual QA Passes (Audit Matrix)](#227-run-vision-llm-art-director-visual-qa-passes-audit-matrix)
 - [Part 3 — Engine Drop-In Integration Examples](#part-3--engine-drop-in-integration-examples)
 - [Architecture Summary](#architecture-summary)
 - [Development & Verification](#development--verification)
@@ -52,35 +53,36 @@ Local-first, zero-server Bring-Your-Own-Key / Bring-Your-Own-Model (BYOK/BYOM) P
 
 ## Use-Case Matrix: What Can You Build with Nibgrid?
 
-| Use Case                                          | Screen / Tab                                 | Compute Cost                                | Exported Output                                                                                     |
-| :------------------------------------------------ | :------------------------------------------- | :------------------------------------------ | :-------------------------------------------------------------------------------------------------- |
-| Character Concept-to-Sprite & Pose Branches       | `Art Bible` + `Sprite Studio`                | `$0.00` Mock / Handoff or BYOK              | Branching PNG nodes + `asset.recipe.json`                                                           |
-| Pixel-Art Cleanup, De-Mixel & OKLab Sel-Out       | `Post-Process` (Screen 4A)                   | `$0.00 Local` (Web Worker)                  | Crisp alpha PNG, pivot metadata, `.zip`                                                             |
-| Dynamic 2D Bevel & Normal Maps                    | `2D Lighting & Normal Map` (Screen 4B)       | `$0.00 Local` (WebGL2 + EDT)                | Godot (`+Y`) / DirectX (`-Y`) `_n.png`                                                              |
-| Single-Sprite Idle, Breathe & Recoil Loops        | `Puppet Warp Animator` (Screen 4C)           | `$0.00 Local` (WebGL2 MLS)                  | Horizontal `_strip.png` + frame JSON + `.zip`                                                       |
-| Seamless Environment Tiles (Ground, Brick, Water) | `Tile & 9-Slice` → `Seamless Tile`           | `$0.00 Local` wrap + optional BYOK inpaint  | Wrapping PNG + toroidal `gl.REPEAT` `_n.png`                                                        |
-| Responsive UI Buttons, Frames & Dialog Boxes      | `Tile & 9-Slice` → `9-Slice UI Panel`        | `$0.00 Local`                               | `_stylebox.tres`, `_nineslice_phaser.json`, Pixi JSON                                               |
-| Multi-Faction Enemy & Armor Recolor Shaders       | `Palette-Swap & LUT` (Screen 4E)             | `$0.00 Local` (OKLCH ramps)                 | `_idx.png`, `_lut.png`, `.gdshader`, Pixi v8 Filter                                                 |
-| 1× Biome Contrast Audit & Combat Hit-Flash Feel   | `Game Sandbox` (Screen 4F)                   | `$0.00 Local` (Canvas2D)                    | Rec.709 contrast telemetry + SFX bindings                                                           |
-| 2D Physics Hulls, Hitboxes & Hurtboxes            | `Collider & Hitbox` (Screen 4G)              | `$0.00 Local` (Marching Squares + RDP)      | Godot `_collider.tres`, Phaser / Matter `_matter.json`                                              |
-| Multi-Engine Texture & Animation Atlases          | `Atlas Packer` (Screen 5)                    | `$0.00 Local` (BSSF MaxRects)               | `atlas_0.png`, `_n.png`, `atlas_frames.tres`, `atlas.json`, `atlas_pixi.json`, `atlas_physics.json` |
-| Procedural SFX, Google Lyria 3 Music & Gemini TTS | `Audio Foundry` (Screen 6)                   | `$0.00 Local` or Single Gemini Key          | 16-bit WAV + 1/4/6× variations + `.audio.recipe.json`                                               |
-| Mic Hum-to-Laser, Engine Rev or Chiptune Melody   | `Audio Foundry` → `Mic Sketch`               | `$0.00 Local` or Single Gemini Key          | Contour-locked WAVs + `audioSketch` recipe                                                          |
-| Project-Wide Asset Drift Audit & Batch Re-Bake    | `Audit` (Screen 7)                           | `$0.00 Local`                               | Readiness `0–100` matrix + reversible batch fixes                                                   |
-| 4-View Directional Character Turnarounds          | `Turnaround Slicer` (Screen 4H)              | `$0.00 Local` (BFS Auto-Slicer)             | 4 linked `directionGroupId` nodes + shared pivot                                                    |
-| Asset-Class Workspaces, `1×` PiP & Quick-Switch   | Screen 4 HUD + `Cmd/Ctrl+K` Palette          | `$0.00 Local` (Canvas2D + Drop Router)      | Class-aware tabs, `BeforeAfterWipe`, drag-drop import                                               |
-| Blob-47 & Wang-16 Terrain Tilemaps                | `Auto-Tile` (Screen 4I)                      | `$0.00 Local` (Worker SDF Compositor)       | Packed sheet PNG, Godot `_tileset.tres`, Tiled `.tsx`                                               |
-| Deforming Weapon, Muzzle & Exhaust Sockets        | `Attachment Sockets` (Screen 4J)             | `$0.00 Local` (Barycentric MLS Binding)     | `_sockets.json`, Godot `Marker2D` `.tscn`, Phaser/Pixi JSON                                         |
-| Procedural Sparks, Smoke, Rings & Dissolve VFX    | `VFX Baker` (Screen 4K)                      | `$0.00 Local` (Worker FBM Synthesizer)      | Packed `_vfx_sheet.png`, Godot `GPUParticles2D`, Pixi JSON                                          |
-| Multi-Layer Parallax Vistas & Aerial Depth Haze   | `Parallax BG` (Screen 4L)                    | `$0.00 Local` or BYOK / Bridge Stack        | Horizontal seamless band PNGs, Godot `Parallax2D` `.tscn`, Phaser/Pixi JSON                         |
-| Palette-Locked Bitmap Fonts & Damage Numerals     | `Bitmap Font` (Screen 4M)                    | `$0.00 Local` (Worker PoT Packer)           | `<slug>.png`, AngelCode `.fnt` + `.xml`, `<slug>.recipe.json`                                       |
-| Godot 4 `.tscn` Prefabs & Live `res://` Sync      | `Entities` (Entity Hub) + Sync Pill          | `$0.00 Local` (FSAA + SHA-256 Diff)         | `.tscn`, `_frames.tres`, `_anims.tres`, `CanvasTexture`, lossless `.png.import`                     |
-| Prompt-to-Entity AI Director + Typed GDScript     | `Entities` → `+ Prompt-to-Entity (AI)`       | `$0.00` Mock or `~$0.04` Gemini BYOK        | Sprite, hull, snapped sockets, SFX pack, typed `.gd` controller + wired `.tscn`                     |
-| AI Godot 4 Shaders & Live WebGL2 Uniform FX       | `Shader Studio` (Screen 4N)                  | `$0.00` Presets or `~$0.001` Gemini Flash   | `<slug>.gdshader`, `<slug>_mat.tres` (`ShaderMaterial`), live WebGL2 preview, wired `.tscn`         |
-| Cross-Project Vault & Portable Project Snapshots  | `Vault` (`Project Browser` / `Global Vault`) | `$0.00 Local` (SHA-256 Dexie Deduplication) | 1-click promoted sprites/shaders/fonts/VFX/SFX/palettes + `.nibgrid.zip` snapshots                  |
-| Zero-Server URL Recipe Links & Static Pack Feeds  | `Shader Studio` / `Vault` → `Pack Feeds`     | `$0.00` Static URLs & CORS Feeds            | Compressed `#share=v1.` re-bakeable links + signed `.nibgrid-pack.zip` starter packs                |
-| Direct Browser-to-Browser WebRTC Binary Transfer  | `Projects` / `Vault` → `Share via P2P`       | `$0.00 Local` (Non-Trickle DataChannel)     | Scannable `NIB-O1:` / `NIB-A1:` QR/SDP handshake + 16 KiB chunked SHA-256 verified `.nibgrid.zip`   |
-| Surgical Pixel Fixes & Region-Masked Inpainting   | `Post-Process` (Screen 4A) Floating Rail     | `$0.00` Local Edits / `$0.00` Mock / BYOK   | Byte-preserved unmasked pixels + atomic Dexie commit (`manualPixelEditCount` / `inpaintHistory`)    |
+| Use Case                                          | Screen / Tab                                  | Compute Cost                                | Exported Output                                                                                     |
+| :------------------------------------------------ | :-------------------------------------------- | :------------------------------------------ | :-------------------------------------------------------------------------------------------------- |
+| Character Concept-to-Sprite & Pose Branches       | `Art Bible` + `Sprite Studio`                 | `$0.00` Mock / Handoff or BYOK              | Branching PNG nodes + `asset.recipe.json`                                                           |
+| Pixel-Art Cleanup, De-Mixel & OKLab Sel-Out       | `Post-Process` (Screen 4A)                    | `$0.00 Local` (Web Worker)                  | Crisp alpha PNG, pivot metadata, `.zip`                                                             |
+| Dynamic 2D Bevel & Normal Maps                    | `2D Lighting & Normal Map` (Screen 4B)        | `$0.00 Local` (WebGL2 + EDT)                | Godot (`+Y`) / DirectX (`-Y`) `_n.png`                                                              |
+| Single-Sprite Idle, Breathe & Recoil Loops        | `Puppet Warp Animator` (Screen 4C)            | `$0.00 Local` (WebGL2 MLS)                  | Horizontal `_strip.png` + frame JSON + `.zip`                                                       |
+| Seamless Environment Tiles (Ground, Brick, Water) | `Tile & 9-Slice` → `Seamless Tile`            | `$0.00 Local` wrap + optional BYOK inpaint  | Wrapping PNG + toroidal `gl.REPEAT` `_n.png`                                                        |
+| Responsive UI Buttons, Frames & Dialog Boxes      | `Tile & 9-Slice` → `9-Slice UI Panel`         | `$0.00 Local`                               | `_stylebox.tres`, `_nineslice_phaser.json`, Pixi JSON                                               |
+| Multi-Faction Enemy & Armor Recolor Shaders       | `Palette-Swap & LUT` (Screen 4E)              | `$0.00 Local` (OKLCH ramps)                 | `_idx.png`, `_lut.png`, `.gdshader`, Pixi v8 Filter                                                 |
+| 1× Biome Contrast Audit & Combat Hit-Flash Feel   | `Game Sandbox` (Screen 4F)                    | `$0.00 Local` (Canvas2D)                    | Rec.709 contrast telemetry + SFX bindings                                                           |
+| 2D Physics Hulls, Hitboxes & Hurtboxes            | `Collider & Hitbox` (Screen 4G)               | `$0.00 Local` (Marching Squares + RDP)      | Godot `_collider.tres`, Phaser / Matter `_matter.json`                                              |
+| Multi-Engine Texture & Animation Atlases          | `Atlas Packer` (Screen 5)                     | `$0.00 Local` (BSSF MaxRects)               | `atlas_0.png`, `_n.png`, `atlas_frames.tres`, `atlas.json`, `atlas_pixi.json`, `atlas_physics.json` |
+| Procedural SFX, Google Lyria 3 Music & Gemini TTS | `Audio Foundry` (Screen 6)                    | `$0.00 Local` or Single Gemini Key          | 16-bit WAV + 1/4/6× variations + `.audio.recipe.json`                                               |
+| Mic Hum-to-Laser, Engine Rev or Chiptune Melody   | `Audio Foundry` → `Mic Sketch`                | `$0.00 Local` or Single Gemini Key          | Contour-locked WAVs + `audioSketch` recipe                                                          |
+| Project-Wide Asset Drift Audit & Batch Re-Bake    | `Audit` (Screen 7)                            | `$0.00 Local`                               | Readiness `0–100` matrix + reversible batch fixes                                                   |
+| 4-View Directional Character Turnarounds          | `Turnaround Slicer` (Screen 4H)               | `$0.00 Local` (BFS Auto-Slicer)             | 4 linked `directionGroupId` nodes + shared pivot                                                    |
+| Asset-Class Workspaces, `1×` PiP & Quick-Switch   | Screen 4 HUD + `Cmd/Ctrl+K` Palette           | `$0.00 Local` (Canvas2D + Drop Router)      | Class-aware tabs, `BeforeAfterWipe`, drag-drop import                                               |
+| Blob-47 & Wang-16 Terrain Tilemaps                | `Auto-Tile` (Screen 4I)                       | `$0.00 Local` (Worker SDF Compositor)       | Packed sheet PNG, Godot `_tileset.tres`, Tiled `.tsx`                                               |
+| Deforming Weapon, Muzzle & Exhaust Sockets        | `Attachment Sockets` (Screen 4J)              | `$0.00 Local` (Barycentric MLS Binding)     | `_sockets.json`, Godot `Marker2D` `.tscn`, Phaser/Pixi JSON                                         |
+| Procedural Sparks, Smoke, Rings & Dissolve VFX    | `VFX Baker` (Screen 4K)                       | `$0.00 Local` (Worker FBM Synthesizer)      | Packed `_vfx_sheet.png`, Godot `GPUParticles2D`, Pixi JSON                                          |
+| Multi-Layer Parallax Vistas & Aerial Depth Haze   | `Parallax BG` (Screen 4L)                     | `$0.00 Local` or BYOK / Bridge Stack        | Horizontal seamless band PNGs, Godot `Parallax2D` `.tscn`, Phaser/Pixi JSON                         |
+| Palette-Locked Bitmap Fonts & Damage Numerals     | `Bitmap Font` (Screen 4M)                     | `$0.00 Local` (Worker PoT Packer)           | `<slug>.png`, AngelCode `.fnt` + `.xml`, `<slug>.recipe.json`                                       |
+| Godot 4 `.tscn` Prefabs & Live `res://` Sync      | `Entities` (Entity Hub) + Sync Pill           | `$0.00 Local` (FSAA + SHA-256 Diff)         | `.tscn`, `_frames.tres`, `_anims.tres`, `CanvasTexture`, lossless `.png.import`                     |
+| Prompt-to-Entity AI Director + Typed GDScript     | `Entities` → `+ Prompt-to-Entity (AI)`        | `$0.00` Mock or `~$0.04` Gemini BYOK        | Sprite, hull, snapped sockets, SFX pack, typed `.gd` controller + wired `.tscn`                     |
+| AI Godot 4 Shaders & Live WebGL2 Uniform FX       | `Shader Studio` (Screen 4N)                   | `$0.00` Presets or `~$0.001` Gemini Flash   | `<slug>.gdshader`, `<slug>_mat.tres` (`ShaderMaterial`), live WebGL2 preview, wired `.tscn`         |
+| Cross-Project Vault & Portable Project Snapshots  | `Vault` (`Project Browser` / `Global Vault`)  | `$0.00 Local` (SHA-256 Dexie Deduplication) | 1-click promoted sprites/shaders/fonts/VFX/SFX/palettes + `.nibgrid.zip` snapshots                  |
+| Zero-Server URL Recipe Links & Static Pack Feeds  | `Shader Studio` / `Vault` → `Pack Feeds`      | `$0.00` Static URLs & CORS Feeds            | Compressed `#share=v1.` re-bakeable links + signed `.nibgrid-pack.zip` starter packs                |
+| Direct Browser-to-Browser WebRTC Binary Transfer  | `Projects` / `Vault` → `Share via P2P`        | `$0.00 Local` (Non-Trickle DataChannel)     | Scannable `NIB-O1:` / `NIB-A1:` QR/SDP handshake + 16 KiB chunked SHA-256 verified `.nibgrid.zip`   |
+| Surgical Pixel Fixes & Region-Masked Inpainting   | `Post-Process` (Screen 4A) Floating Rail      | `$0.00` Local Edits / `$0.00` Mock / BYOK   | Byte-preserved unmasked pixels + atomic Dexie commit (`manualPixelEditCount` / `inpaintHistory`)    |
+| Vision-LLM Art Director Visual QA Contact Sheet   | `Audit` (Screen 7) → `Art Director Visual QA` | `$0.00` Offline Mock or `~$0.002`/sheet     | Paginated `REF`-pinned contact sheet, SHA-256 cached QA findings & 1-click Micro-Editor deep-links  |
 
 ---
 
@@ -647,6 +649,18 @@ flowchart LR
 
 ---
 
+### 2.27 Run Vision-LLM Art Director Visual QA Passes (Audit Matrix)
+
+**When to use it:** Math checks in the Audit Matrix catch palette/collider/LUFS errors, but perceptual issues—like an opposing key-light direction, inconsistent outline weight, or muddy 1× silhouette readability—require visual comparison across your whole cast.
+
+**Click-by-Click:**
+
+1. Open **`Audit`** (**Screen 7**) on any populated project. Nibgrid automatically packs your project sprites alongside your Golden Reference (`REF` pinned in cell `0` across up to 15 sprites per paginated `#808080` sheet) with crisp top-left bitmap indices (`01`, `02`, …) and bottom-right 1× binary silhouette previews.
+2. Select **`Gemini Flash Vision` (`~$0.002` / contact sheet)**, **Antigravity Bridge**, or **`Offline Mock` (`$0.00`)**, and click **`Run Visual QA Pass (AI)`**. Results are cached in IndexedDB by exact sheet + Art Bible `SHA-256` hash (`Cached` badge) so unchanged casts never re-bill.
+3. Click any cell on the contact sheet or inspect finding cards (`Light Angle`, `Style Drift`, `Outline`, `1× Silhouette`, `Scale`) and per-row **`Visual QA`** badges (`Pass` / `Warn` / `Fail`). Click **`Fix in Micro-Editor`** (`Open Post-Process`, `Open 1× Sandbox`, or `Regenerate in Studio`) to jump straight to fixing the flagged sprite, or filter flagged sprites in **`Vault`** → **`Visual QA Warnings`**.
+
+---
+
 ## Part 3 — Engine Drop-In Integration Examples
 
 ### Godot 4 (`4.2+`)
@@ -805,6 +819,7 @@ const pop = new BitmapText({
 - **Zero-Server `#share=v1.` URL Recipes & Static GitHub Pack Feeds:** Encode self-contained recipes into URL fragments via `zlib` level-9 compression, safe bounded inflation (`inflateWithLimit`), and Base64URL (`recipeUrlCodec.ts`, `ShareRecipeModal.tsx`) for instant boot-time inspection and re-baking; fetch CORS-friendly static pack catalogs (`packFeedClient.ts`, `PackFeedBrowser.tsx`) with SHA-256 ZIP integrity checks (`public/packs/starter-catalog.json` + `retro-rpg-starter.nibgrid-pack.zip`).
 - **Zero-Server WebRTC P2P Direct Transfer:** Stream `.nibgrid.zip` snapshots directly between browsers with zero signaling backend using non-trickle `zlib`+Base64URL `NIB-O1:` / `NIB-A1:` SDP codes and built-in QR code generation (`sdpCodec.ts`), backpressure-controlled `16 KiB` DataChannel framing + `SHA-256` manifest verification (`p2pProtocol.ts`, `webrtcTransfer.ts`), and `P2pTransferModal.tsx`.
 - **Surgical Pixel Micro-Editor & Region-Masked Inpainting (Screen 4A):** Draw Bresenham strokes with optional horizontal symmetry (`Mirror-X`), 4-connected flood fill, eyedropper, and 50-step `PixelUndoStack` in pure TS (`pixelEditorCore.ts`); paint binary inpaint masks and merge Gemini BYOK / Antigravity Bridge / ComfyUI / Offline Mock regenerations strictly within masked texels (`inpaintMask.ts`, `inpaintAdapter.ts`) while guaranteeing 100% byte-identical preservation of unmasked pixels; and persist edits atomically (`commitProcessedSpritePixels`) with HiDPI texel mapping (`PixelMicroEditorToolbar.tsx`, `PostProcessInspector.tsx`).
+- **Vision-LLM Art Director Visual QA Pass (Screen 7 Audit Matrix):** Pack project casts into paginated `REF`-pinned mid-gray contact sheets with M24 `5×7` bitmap index stamps and 1× silhouette thumbnails in pure TS (`qaContactSheet.ts`), validate structured Gemini Flash Vision / Antigravity Bridge / `$0.00` offline heuristic findings (`artDirectorQaSchema.ts`, `artDirectorQa.ts`), cache reports in Dexie v5 `qaReports` by sheet SHA-256, and expose clickable contact sheets, row `Visual QA` badges, M28 `Visual QA Warnings` filtering, and 1-click Screen 4A Micro-Editor deep-links (`ArtDirectorQaPanel.tsx`, `AuditMatrixView.tsx`).
 
 ---
 

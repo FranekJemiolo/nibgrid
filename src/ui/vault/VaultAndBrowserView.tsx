@@ -1,4 +1,4 @@
-import { useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   Archive,
   CheckSquare,
@@ -20,6 +20,7 @@ import { db, repository } from '../../db/database';
 import { createDefaultPostProcessConfig, type SpriteNode } from '../../domain/schemas';
 import type { VaultItemKind } from '../../domain/vaultSchema';
 import { triggerBlobDownload } from '../../export/zipPackager';
+import type { QaSeverity } from '../../processing/artDirectorQaSchema';
 import { decodePngBytesToRgba, encodeRgbaToPngBytes } from '../../processing/png';
 import { computeArtBibleHash } from '../../processing/projectAudit';
 import { useAppStore } from '../../store/useAppStore';
@@ -56,8 +57,37 @@ export function VaultAndBrowserView() {
   const [busyMessage, setBusyMessage] = useState<string | null>(null);
   const [statusNotice, setStatusNotice] = useState<string | null>(null);
   const [errorNotice, setErrorNotice] = useState<string | null>(null);
+  const [qaSeverityBySpriteId, setQaSeverityBySpriteId] = useState<Map<string, QaSeverity>>(
+    () => new Map(),
+  );
 
   const importInputRef = useRef<HTMLInputElement | null>(null);
+
+  useEffect(() => {
+    if (!activeProject) {
+      setQaSeverityBySpriteId(new Map());
+      return;
+    }
+    let cancelled = false;
+    void repository.getQaReport(activeProject.id).then((report) => {
+      if (cancelled || !report) {
+        if (!cancelled) setQaSeverityBySpriteId(new Map());
+        return;
+      }
+      const next = new Map<string, QaSeverity>();
+      const rank = (s: QaSeverity) => (s === 'fail' ? 3 : s === 'warn' ? 2 : 1);
+      for (const finding of report.findings) {
+        const prev = next.get(finding.spriteId);
+        if (!prev || rank(finding.severity) > rank(prev)) {
+          next.set(finding.spriteId, finding.severity);
+        }
+      }
+      setQaSeverityBySpriteId(next);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [activeProject]);
 
   const currentBibleHash = useMemo(
     () => (activeProject ? computeArtBibleHash(activeProject.artBible) : ''),
@@ -105,6 +135,10 @@ export function VaultAndBrowserView() {
       if (statusFilter === 'unsynced' && syncTarget?.lastSyncedAt != null) {
         return false;
       }
+      if (statusFilter === 'qa-warnings') {
+        const sev = qaSeverityBySpriteId.get(node.id);
+        if (sev !== 'warn' && sev !== 'fail') return false;
+      }
       return true;
     });
   }, [
@@ -112,6 +146,7 @@ export function VaultAndBrowserView() {
     classFilter,
     currentBibleHash,
     entityBySpriteId,
+    qaSeverityBySpriteId,
     searchQuery,
     spriteNodes,
     statusFilter,
@@ -421,7 +456,23 @@ export function VaultAndBrowserView() {
                 <option value="missing-collider">Missing Collider</option>
                 <option value="stale">Art Bible Stale</option>
                 <option value="unsynced">Unsynced</option>
+                <option value="qa-warnings">Visual QA Warnings</option>
               </select>
+              <button
+                type="button"
+                data-testid="browser-filter-qa-warnings"
+                aria-pressed={statusFilter === 'qa-warnings'}
+                onClick={() =>
+                  setStatusFilter((prev) => (prev === 'qa-warnings' ? 'all' : 'qa-warnings'))
+                }
+                className={`rounded border px-2 py-1 text-[11px] font-medium transition-colors ${
+                  statusFilter === 'qa-warnings'
+                    ? 'border-amber-400 bg-amber-500/20 text-amber-200'
+                    : 'border-[#2A2A2E] bg-[#121214] text-zinc-300 hover:border-zinc-500'
+                }`}
+              >
+                Visual QA Warnings
+              </button>
             </>
           ) : (
             <div className="flex items-center gap-1.5">
@@ -545,6 +596,24 @@ export function VaultAndBrowserView() {
                               no collider
                             </span>
                           )}
+                          {(() => {
+                            const qaSev = qaSeverityBySpriteId.get(node.id);
+                            if (!qaSev) return null;
+                            return (
+                              <span
+                                data-testid={`browser-qa-badge-${node.id}`}
+                                className={`rounded border px-1.5 py-0.5 font-mono uppercase ${
+                                  qaSev === 'fail'
+                                    ? 'border-rose-500/50 bg-rose-500/15 text-rose-200'
+                                    : qaSev === 'warn'
+                                      ? 'border-amber-500/50 bg-amber-500/15 text-amber-200'
+                                      : 'border-emerald-500/40 bg-emerald-500/15 text-emerald-200'
+                                }`}
+                              >
+                                qa:{qaSev}
+                              </span>
+                            );
+                          })()}
                         </div>
                       </div>
                     </div>
