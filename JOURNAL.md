@@ -596,3 +596,19 @@
 
 - **UI Kit Workshop & Workspace Integration (`src/ui/inspector/UiKitWorkshop.tsx`, `src/ui/inspector/workspaceTabs.ts`, `src/store/useAppStore.ts`, `src/ui/inspector/PostProcessInspector.tsx`, `src/ui/command/CommandPalette.tsx`):** Added `'uikit'` tab promoted on `ui-panel` assets, interactive 9-slice Hover/Pressed/Disabled button & scrubbed HP progress bar canvases, M24 Bitmap Font selector (`default_font = ExtResource("8_font")`), Art Bible color swatches + clamped margin guide canvas, `Save UI Kit to Project`, 1-click `Sync to Godot (res://)`, and `<slug>_theme.zip` bundling.
 - **Verification:** Updated `tests/unit/m19-ux-polish.test.ts` for `ui-panel` primary tabs and added `tests/e2e/m33c-ui-kit-e2e.spec.ts` verifying M24 font saving & pairing, live hover/press/disabled state transitions, unzipped 7 PNGs + `.png.import` + `.fnt`/`.png` + `<slug>_theme.tres` (`load_steps=16`), Zod-validated `.recipe.json`, and hard-reload IndexedDB persistence.
+
+## Milestone 34A: Pure-TS 15-Joint Pose Rig, Analytic 2-Bone IK, Presets & OpenPose Renderer
+
+- **Pure-TS Pose Rig & Presets (`src/processing/poseRigCore.ts`, `src/processing/posePresets.ts`):** Implemented the 15-joint rig, `solveTwoBoneIk()` law-of-cosines IK solver, `applyJointDragWithIk()`, `interpolatePoseFrames()`, built-in `run_6f` / `melee_slash_5f` / `jump_4f` / `idle_4f` presets, `renderOpenPoseFrame()` / `renderOpenPoseStrip()`, and `sliceAndAlignPoseStrip()` ground-pivot aligner.
+- **Schema & Orphan-Blob Safety (`src/domain/schemas.ts`, `src/export/recipeBuilder.ts`, `src/db/database.ts`, `src/sync/projectSnapshot.ts`):** Added `PoseClipDefinitionSchema` on `SpriteNode` / `AssetRecipe` and tracked `generatedStripBlobId` + `generatedFrameBlobIds` across GC and snapshot round-trips.
+- **Verification:** Added `tests/unit/m34a-pose-rig-core.test.ts` confirming `1e-4` exact IK bone lengths on bent/stretched/zero targets, exact 0.5 interpolation midpoints, `384×64` OpenPose RGB strip layout, and uniform bottom-row ground alignment across 6 sliced frames.
+
+## Milestone 34B: GenAI / Antigravity / ControlNet Pose Adapter & Worker Slicer
+
+- **Adapter, Worker & ZIP Bundling (`src/providers/poseAnimationAdapter.ts`, `src/workers/postprocess.worker.ts`, `src/workers/postprocessClient.ts`, `src/export/zipPackager.ts`):** Implemented `buildGeminiPoseStripRequest()`, `buildGeminiSingleFrameRerollRequest()`, `generatePoseSpriteCycle()` (Gemini BYOK, Antigravity Bridge, ComfyUI ControlNet OpenPose, and `$0.00` Offline Mock mannequin mode), `regenerateSinglePoseFrame()`, transferable `SLICE_AND_ALIGN_POSE_STRIP` worker offloading, and ZIP strip/guide bundling.
+- **Verification:** Added `tests/unit/m34b-pose-adapter.test.ts` asserting both `inlineData` parts in Gemini payloads, 6 aligned `64×64` Offline Mock frames, single-frame re-roll execution, and complete `AIzaSyPOSE999` secret stripping on HTTP `401`/`429`.
+
+## Milestone 34C: Interactive 2D Pose Keyframer Workshop, Onion-Skinning & M25 Commit
+
+- **Screen 4O Workshop & Routing (`src/ui/inspector/PoseKeyframerWorkshop.tsx`, `src/ui/inspector/workspaceTabs.ts`, `src/store/useAppStore.ts`, `src/ui/inspector/PostProcessInspector.tsx`, `src/ui/command/CommandPalette.tsx`):** Built the 3-pane Pose Keyframer workshop (`'pose'` tab on `character` assets & `Cmd/Ctrl+K`), draggable 15-joint IK rig with red/cyan onion-skinning, `SLICE_AND_ALIGN_POSE_STRIP` worker generation & per-frame re-roll, IndexedDB blob hydration, ZIP export, and 1-click commit into M25 `EntityAnimationClip`.
+- **Verification:** Added `tests/e2e/m34c-pose-keyframer-e2e.spec.ts` testing `Run 6f` preset loading, 2-bone IK `r_wrist` dragging + elbow solve with onion-skinning, intercepted Gemini `generateContent` `384×64` `#FF00FF` strip generation (`6` aligned frames), committing `run` clip to M25 Entities, and hard-reload persistence with zero console/page errors.

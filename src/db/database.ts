@@ -941,6 +941,12 @@ export async function findOrphanBlobIds(database: NibgridDatabase = db): Promise
         referencedBlobIds.add(layer.blobId);
       }
     }
+    if (node.poseClip?.generatedStripBlobId) {
+      referencedBlobIds.add(node.poseClip.generatedStripBlobId);
+    }
+    for (const frameBlobId of node.poseClip?.generatedFrameBlobIds ?? []) {
+      referencedBlobIds.add(frameBlobId);
+    }
   }
 
   const allAudio = await database.audioAssets.toArray();

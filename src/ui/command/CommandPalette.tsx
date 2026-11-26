@@ -229,6 +229,20 @@ export function CommandPalette({ open, onOpenChange }: CommandPaletteProps) {
             }),
         },
         {
+          id: 'act-pose-keyframer',
+          title: 'Open 2D Stick-Figure Pose Keyframer (AI)',
+          subtitle: '15-joint IK rig, OpenPose guides, onion-skinning & run/attack cycle generation',
+          category: 'action',
+          keywords: ['pose', 'openpose', 'ik', 'keyframe', 'run', 'attack', 'animation'],
+          execute: () =>
+            navigate({
+              screen: 'inspector',
+              projectId: projId,
+              nodeId: targetId,
+              initialTab: 'pose',
+            }),
+        },
+        {
           id: 'act-sockets',
           title: 'Open Attachment Sockets Editor',
           subtitle: 'Bind hand_r, muzzle & exhaust sockets to mesh deformation',

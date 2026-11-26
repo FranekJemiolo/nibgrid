@@ -196,6 +196,12 @@ export async function exportProjectSnapshotFromDb(
     for (const layer of node.parallaxScene?.layers ?? []) {
       if (layer.blobId) blobIds.add(layer.blobId);
     }
+    if (node.poseClip?.generatedStripBlobId) {
+      blobIds.add(node.poseClip.generatedStripBlobId);
+    }
+    for (const frameBlobId of node.poseClip?.generatedFrameBlobIds ?? []) {
+      blobIds.add(frameBlobId);
+    }
   }
   for (const audio of audioAssets) {
     blobIds.add(audio.wavBlobId);
@@ -362,6 +368,21 @@ export async function importProjectSnapshotToDb(
                     ...layer,
                     ...(layer.blobId ? { blobId: mapBlobId(layer.blobId) } : {}),
                   })),
+                },
+              }
+            : {}),
+          ...(node.poseClip
+            ? {
+                poseClip: {
+                  ...node.poseClip,
+                  ...(node.poseClip.generatedStripBlobId
+                    ? { generatedStripBlobId: mapBlobId(node.poseClip.generatedStripBlobId) }
+                    : {}),
+                  ...(node.poseClip.generatedFrameBlobIds
+                    ? {
+                        generatedFrameBlobIds: node.poseClip.generatedFrameBlobIds.map(mapBlobId),
+                      }
+                    : {}),
                 },
               }
             : {}),

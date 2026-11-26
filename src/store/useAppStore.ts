@@ -19,6 +19,7 @@ export type InspectorTab =
   | 'postprocess'
   | 'normal'
   | 'puppet'
+  | 'pose'
   | 'sockets'
   | 'vfx-baker'
   | 'tile-slice'
@@ -62,6 +63,7 @@ const VALID_INSPECTOR_TABS = new Set<InspectorTab>([
   'postprocess',
   'normal',
   'puppet',
+  'pose',
   'sockets',
   'vfx-baker',
   'tile-slice',

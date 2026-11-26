@@ -18,6 +18,7 @@ import {
   PaletteLutConfigSchema,
   ParallaxSceneConfigSchema,
   PivotNormSchema,
+  PoseClipDefinitionSchema,
   PostProcessConfigSchema,
   ProjectionSchema,
   PuppetPinSchema,
@@ -36,6 +37,7 @@ import {
   type NormalMapConfig,
   type PaletteLutConfig,
   type ParallaxSceneConfig,
+  type PoseClipDefinitionSchemaType,
   type PostProcessConfig,
   type Project,
   type PuppetAnimConfig,
@@ -137,6 +139,7 @@ export const AssetRecipeSchema = z.object({
   bitmapFont: BitmapFontConfigSchema.optional(),
   shaderConfig: ShaderConfigSchema.optional(),
   uiKitConfig: UiKitStyleConfigSchema.optional(),
+  poseClip: PoseClipDefinitionSchema.optional(),
   inpaintHistory: z.array(InpaintHistoryEntrySchema).optional(),
   manualPixelEditCount: z.number().int().nonnegative().optional(),
 });
@@ -180,6 +183,7 @@ export interface BuildAssetRecipeInput {
   bitmapFont?: BitmapFontConfig;
   shaderConfig?: ShaderConfig;
   uiKitConfig?: UiKitStyleConfigSchemaType;
+  poseClip?: PoseClipDefinitionSchemaType;
   inpaintHistory?: readonly InpaintHistoryEntry[];
   manualPixelEditCount?: number;
 }
@@ -284,6 +288,7 @@ export function buildAssetRecipe(input: BuildAssetRecipeInput): AssetRecipe {
     ...((input.uiKitConfig ?? node.uiKitConfig)
       ? { uiKitConfig: input.uiKitConfig ?? node.uiKitConfig }
       : {}),
+    ...((input.poseClip ?? node.poseClip) ? { poseClip: input.poseClip ?? node.poseClip } : {}),
     ...(() => {
       const sockList = input.sockets ?? node.sockets;
       return sockList && sockList.length > 0 ? { sockets: [...sockList] } : {};

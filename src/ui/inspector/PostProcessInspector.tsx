@@ -32,6 +32,7 @@ import {
   createDefaultNormalMapConfig,
   createDefaultPaletteLutConfig,
   createDefaultParallaxSceneConfig,
+  createDefaultPoseClip,
   createDefaultPostProcessConfig,
   createDefaultPuppetAnimConfig,
   createDefaultSeamlessTileConfig,
@@ -51,6 +52,7 @@ import {
   type NormalMapConfig,
   type PaletteLutConfig,
   type ParallaxSceneConfig,
+  type PoseClipDefinitionSchemaType,
   type PostProcessConfig,
   type PuppetAnimConfig,
   type ResampleMode,
@@ -115,6 +117,7 @@ import { PaletteLutWorkshop } from './PaletteLutWorkshop';
 import { ParallaxWorkshop } from './ParallaxWorkshop';
 import { PipBiomePreview } from './PipBiomePreview';
 import { PixelMicroEditorToolbar } from './PixelMicroEditorToolbar';
+import { PoseKeyframerWorkshop } from './PoseKeyframerWorkshop';
 import { PuppetWarpEditor } from './PuppetWarpEditor';
 import { ShaderStudio } from './ShaderStudio';
 import { SocketEditor } from './SocketEditor';
@@ -303,6 +306,9 @@ export function PostProcessInspector({
     () =>
       targetNode?.uiKitConfig ?? createDefaultUiKitConfig(activeProject?.artBible.palette ?? []),
   );
+  const [poseClip, setPoseClip] = useState<PoseClipDefinitionSchemaType>(
+    () => targetNode?.poseClip ?? createDefaultPoseClip(),
+  );
   const [activeSpriteBuffer, setActiveSpriteBuffer] = useState<RgbaBuffer | null>(null);
   const bakedNormalRef = useRef<{ buffer: RgbaBuffer; key: string } | null>(null);
   const [foundryStats, setFoundryStats] = useState<{
@@ -411,6 +417,8 @@ export function PostProcessInspector({
   latestShaderConfigRef.current = shaderConfig;
   const latestUiKitRef = useRef(uiKitConfig);
   latestUiKitRef.current = uiKitConfig;
+  const latestPoseClipRef = useRef(poseClip);
+  latestPoseClipRef.current = poseClip;
 
   useEffect(() => {
     if (!overflowOpen) return;
@@ -457,6 +465,7 @@ export function PostProcessInspector({
       node.uiKitConfig ??
         createDefaultUiKitConfig(latestProjectRef.current?.artBible.palette ?? []),
     );
+    setPoseClip(node.poseClip ?? createDefaultPoseClip());
     pixelUndoStackRef.current.clear();
     setUndoState({ canUndo: false, canRedo: false });
     inpaintMaskRef.current = new Uint8Array(0);
@@ -1545,6 +1554,7 @@ export function PostProcessInspector({
       ...(targetNode.bitmapFont ? { bitmapFont: bitmapFontConfig } : {}),
       ...(targetNode.shaderConfig ? { shaderConfig } : {}),
       ...(targetNode.uiKitConfig ? { uiKitConfig } : {}),
+      ...(targetNode.poseClip ? { poseClip } : {}),
       ...(manualPixelEditCount > 0 ? { manualPixelEditCount } : {}),
       ...(inpaintHistory.length > 0 ? { inpaintHistory } : {}),
       recipeArtBibleHash: computeArtBibleHash(activeProject.artBible),
@@ -1780,6 +1790,22 @@ export function PostProcessInspector({
         ...existing,
         assetClass: latestAssetClassRef.current,
         uiKitConfig: savedConfig,
+      }));
+      await refreshSpriteNodes(activeProject.id);
+    },
+    [activeProject, refreshSpriteNodes],
+  );
+
+  const handleSavePoseClip = useCallback(
+    async (savedClip: PoseClipDefinitionSchemaType) => {
+      setPoseClip(savedClip);
+      latestPoseClipRef.current = savedClip;
+      const current = latestNodeRef.current;
+      if (!activeProject || !current) return;
+      await repository.patchSpriteNode(current.id, (existing) => ({
+        ...existing,
+        assetClass: latestAssetClassRef.current,
+        poseClip: savedClip,
       }));
       await refreshSpriteNodes(activeProject.id);
     },
@@ -2097,6 +2123,20 @@ export function PostProcessInspector({
             onChangeConfig={setPuppetConfig}
             onExportStripZip={handleDownloadZip}
             exportSlot={exportBarNode}
+          />
+        ) : inspectorTab === 'pose' && activeSpriteBuffer ? (
+          <PoseKeyframerWorkshop
+            sprite={activeSpriteBuffer}
+            artMode={activeProject.artBible.artMode}
+            project={activeProject}
+            targetNode={targetNode}
+            providers={providers}
+            postProcessConfig={config}
+            rawWidth={rawSize.width}
+            rawHeight={rawSize.height}
+            poseClip={poseClip}
+            onChangeClip={setPoseClip}
+            onSaveToProject={handleSavePoseClip}
           />
         ) : inspectorTab === 'sockets' && activeSpriteBuffer ? (
           <SocketEditor

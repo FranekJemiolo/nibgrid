@@ -44,6 +44,11 @@ export interface PackageSpriteZipInput {
     readonly paddingPx?: number;
   };
   shaderBundle?: ShaderConfig;
+  poseClipBundle?: {
+    readonly stripPngBytes: Uint8Array;
+    readonly openPoseStripPngBytes: Uint8Array;
+    readonly clipName: string;
+  };
 }
 
 /**
@@ -119,6 +124,12 @@ export function packageSpriteZip(input: PackageSpriteZipInput): Uint8Array {
 
   if (input.shaderBundle) {
     Object.assign(files, buildShaderExportFiles(input.slug, input.shaderBundle));
+  }
+
+  if (input.poseClipBundle) {
+    const cleanClip = toAssetSlug(input.poseClipBundle.clipName || 'pose');
+    files[`${input.slug}_${cleanClip}_strip.png`] = input.poseClipBundle.stripPngBytes;
+    files[`${input.slug}_${cleanClip}_openpose.png`] = input.poseClipBundle.openPoseStripPngBytes;
   }
 
   return zipSync(files, { level: 6 });

@@ -3,6 +3,11 @@ import type { AutoTileOptions } from '../processing/autoTile';
 import type { BitmapFontStyleOptions, GlyphMask } from '../processing/bitmapFont';
 import type { RgbTuple } from '../processing/parallaxCompositor';
 import type { TurnaroundSliceOptions } from '../processing/turnaroundSlicer';
+import type {
+  RgbTriplet as PoseRgbTriplet,
+  SliceAndAlignPoseOptions,
+} from '../processing/poseRigCore';
+import type { RgbaBuffer } from '../processing/types';
 import type { VfxFlipbookOptions } from '../processing/vfxFlipbook';
 import {
   executeBakeBitmapFontJob,
@@ -10,6 +15,7 @@ import {
   executeComposeAutoTileJob,
   executePostProcessJob,
   executeProcessParallaxLayerJob,
+  executeSlicePoseStripJob,
   executeSliceTurnaroundJob,
   type BakeBitmapFontWorkerRequest,
   type BakeBitmapFontWorkerSuccess,
@@ -22,6 +28,8 @@ import {
   type PostProcessWorkerSuccess,
   type ProcessParallaxLayerWorkerRequest,
   type ProcessParallaxLayerWorkerSuccess,
+  type SlicePoseStripWorkerRequest,
+  type SlicePoseStripWorkerSuccess,
   type SliceTurnaroundWorkerRequest,
   type SliceTurnaroundWorkerSuccess,
 } from './postprocess.worker';
@@ -37,7 +45,8 @@ interface PendingJob {
       | ComposeAutoTileWorkerSuccess
       | BakeVfxFlipbookWorkerSuccess
       | ProcessParallaxLayerWorkerSuccess
-      | BakeBitmapFontWorkerSuccess,
+      | BakeBitmapFontWorkerSuccess
+      | SlicePoseStripWorkerSuccess,
   ) => void;
   reject: (reason: Error) => void;
   onProgress?: (phase: string, progress: number) => void;
@@ -386,6 +395,43 @@ export async function bakeBitmapFontInWorker(
     }
     worker.postMessage(request, [...transfers]);
   });
+}
+
+export async function sliceAndAlignPoseStripInWorker(
+  strip: RgbaBuffer,
+  frameCount: number,
+  chromaRgb: PoseRgbTriplet = [255, 0, 255],
+  options: SliceAndAlignPoseOptions = {},
+): Promise<readonly RgbaBuffer[]> {
+  const id = nextRequestId++;
+  const copy = new Uint8ClampedArray(strip.data);
+  const request: SlicePoseStripWorkerRequest = {
+    type: 'SLICE_AND_ALIGN_POSE_STRIP',
+    id,
+    rgba: copy,
+    width: strip.width,
+    height: strip.height,
+    frameCount,
+    chromaRgb: [chromaRgb[0], chromaRgb[1], chromaRgb[2]],
+    options: {
+      ...options,
+      ...(options.paletteHex ? { paletteHex: [...options.paletteHex] } : {}),
+    },
+  };
+
+  const worker = getWorker();
+  if (!worker) {
+    return executeSlicePoseStripJob(request).frames;
+  }
+
+  const res = await new Promise<SlicePoseStripWorkerSuccess>((resolve, reject) => {
+    pending.set(id, {
+      resolve: (value) => resolve(value as SlicePoseStripWorkerSuccess),
+      reject,
+    });
+    worker.postMessage(request, [copy.buffer]);
+  });
+  return res.frames;
 }
 
 export interface MonotonicRequestGuard {

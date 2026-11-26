@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import { ContourTimbrePatchSchema } from '../audio/contourPatchSchema';
 import { pickUiKitColorsFromPalette } from '../processing/uiKitCore';
+import { createPoseClipFromPreset } from '../processing/posePresets';
 import { extractDefaultUniformValues, getGdShaderPreset } from '../processing/gdshaderPresets';
 import {
   ParallaxBandBlueprintSchema,
@@ -689,6 +690,56 @@ export const InpaintHistoryEntrySchema = z.object({
 });
 export type InpaintHistoryEntry = z.infer<typeof InpaintHistoryEntrySchema>;
 
+export const PoseVec2Schema = z.object({
+  x: z.number().min(0).max(1),
+  y: z.number().min(0).max(1),
+});
+
+export const PoseFrameJointsSchema = z.object({
+  head: PoseVec2Schema,
+  neck: PoseVec2Schema,
+  pelvis: PoseVec2Schema,
+  r_shoulder: PoseVec2Schema,
+  r_elbow: PoseVec2Schema,
+  r_wrist: PoseVec2Schema,
+  l_shoulder: PoseVec2Schema,
+  l_elbow: PoseVec2Schema,
+  l_wrist: PoseVec2Schema,
+  r_hip: PoseVec2Schema,
+  r_knee: PoseVec2Schema,
+  r_ankle: PoseVec2Schema,
+  l_hip: PoseVec2Schema,
+  l_knee: PoseVec2Schema,
+  l_ankle: PoseVec2Schema,
+});
+
+export const PoseKeyframeSchema = z.object({
+  id: z.string().min(1),
+  joints: PoseFrameJointsSchema,
+  propLine: z.tuple([PoseVec2Schema, PoseVec2Schema]).optional(),
+});
+
+export const PoseClipDefinitionSchema = z.object({
+  slug: z.string().trim().min(1).max(64).default('run'),
+  fps: z.number().int().min(4).max(24).default(12),
+  loop: z.boolean().default(true),
+  frameWidthPx: z.number().int().min(16).max(256).default(64),
+  frameHeightPx: z.number().int().min(16).max(256).default(64),
+  frames: z.array(PoseKeyframeSchema).min(1).max(24),
+  generatedFrameBlobIds: z.array(z.string().min(1)).optional(),
+  generatedStripBlobId: z.string().min(1).optional(),
+});
+export type PoseClipDefinitionSchemaType = z.infer<typeof PoseClipDefinitionSchema>;
+
+export function createDefaultPoseClip(
+  frameWidthPx = 64,
+  frameHeightPx = 64,
+): PoseClipDefinitionSchemaType {
+  return PoseClipDefinitionSchema.parse(
+    createPoseClipFromPreset('run_6f', frameWidthPx, frameHeightPx),
+  );
+}
+
 export const SpriteNodeSchema = z.object({
   id: z.string().min(1),
   projectId: z.string().min(1),
@@ -702,6 +753,7 @@ export const SpriteNodeSchema = z.object({
   bitmapFont: BitmapFontConfigSchema.optional(),
   shaderConfig: ShaderConfigSchema.optional(),
   uiKitConfig: UiKitStyleConfigSchema.optional(),
+  poseClip: PoseClipDefinitionSchema.optional(),
   inpaintHistory: z.array(InpaintHistoryEntrySchema).optional(),
   manualPixelEditCount: z.number().int().nonnegative().optional(),
   imageBlobId: z.string().min(1),

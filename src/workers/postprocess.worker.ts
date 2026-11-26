@@ -17,6 +17,12 @@ import { processSingleParallaxLayer, type RgbTuple } from '../processing/paralla
 import { runPostProcessPipeline } from '../processing/pipeline';
 import { encodeRgbaToPngBytes } from '../processing/png';
 import {
+  sliceAndAlignPoseStrip,
+  type RgbTriplet as PoseRgbTriplet,
+  type SliceAndAlignPoseOptions,
+} from '../processing/poseRigCore';
+import type { RgbaBuffer } from '../processing/types';
+import {
   sliceAndAlignTurnaround,
   type TurnaroundSliceOptions,
   type TurnaroundSliceResult,
@@ -103,13 +109,25 @@ export interface BakeBitmapFontWorkerRequest {
   options: BitmapFontStyleOptions;
 }
 
+export interface SlicePoseStripWorkerRequest {
+  type: 'SLICE_AND_ALIGN_POSE_STRIP';
+  id: number;
+  rgba: Uint8ClampedArray;
+  width: number;
+  height: number;
+  frameCount: number;
+  chromaRgb: PoseRgbTriplet;
+  options: SliceAndAlignPoseOptions;
+}
+
 export type AnyPostProcessWorkerRequest =
   | PostProcessWorkerRequest
   | SliceTurnaroundWorkerRequest
   | ComposeAutoTileWorkerRequest
   | BakeVfxFlipbookWorkerRequest
   | ProcessParallaxLayerWorkerRequest
-  | BakeBitmapFontWorkerRequest;
+  | BakeBitmapFontWorkerRequest
+  | SlicePoseStripWorkerRequest;
 
 export interface PostProcessWorkerProgress {
   id: number;
@@ -175,6 +193,13 @@ export interface BakeBitmapFontWorkerSuccess {
   result: BakedBitmapFont;
 }
 
+export interface SlicePoseStripWorkerSuccess {
+  id: number;
+  type: 'pose-slice-result';
+  ok: true;
+  frames: readonly RgbaBuffer[];
+}
+
 export interface PostProcessWorkerFailure {
   id: number;
   type:
@@ -183,7 +208,8 @@ export interface PostProcessWorkerFailure {
     | 'autotile-result'
     | 'vfx-result'
     | 'parallax-result'
-    | 'bmfont-result';
+    | 'bmfont-result'
+    | 'pose-slice-result';
   ok: false;
   error: string;
 }
@@ -196,6 +222,7 @@ export type PostProcessWorkerMessage =
   | BakeVfxFlipbookWorkerSuccess
   | ProcessParallaxLayerWorkerSuccess
   | BakeBitmapFontWorkerSuccess
+  | SlicePoseStripWorkerSuccess
   | PostProcessWorkerFailure;
 
 type ProgressReporter = (phase: string, progress: number) => void;
@@ -444,6 +471,23 @@ export function executeBakeBitmapFontJob(
   };
 }
 
+export function executeSlicePoseStripJob(
+  req: SlicePoseStripWorkerRequest,
+): SlicePoseStripWorkerSuccess {
+  const frames = sliceAndAlignPoseStrip(
+    { width: req.width, height: req.height, data: req.rgba },
+    req.frameCount,
+    req.chromaRgb,
+    req.options,
+  );
+  return {
+    id: req.id,
+    type: 'pose-slice-result',
+    ok: true,
+    frames,
+  };
+}
+
 interface WorkerPostScope {
   onmessage: ((event: MessageEvent<AnyPostProcessWorkerRequest>) => void) | null;
   postMessage: (message: PostProcessWorkerMessage, transfer?: Transferable[]) => void;
@@ -471,6 +515,27 @@ if (
           type: 'bmfont-result',
           ok: false,
           error: error instanceof Error ? error.message : 'Bitmap font bake failed',
+        });
+      }
+      return;
+    }
+
+    if (req.type === 'SLICE_AND_ALIGN_POSE_STRIP') {
+      try {
+        const res = executeSlicePoseStripJob(req);
+        const transfers = new Set<Transferable>();
+        for (const frame of res.frames) {
+          if (frame.data.buffer instanceof ArrayBuffer) {
+            transfers.add(frame.data.buffer);
+          }
+        }
+        workerSelf.postMessage(res, [...transfers]);
+      } catch (error) {
+        workerSelf.postMessage({
+          id: req.id,
+          type: 'pose-slice-result',
+          ok: false,
+          error: error instanceof Error ? error.message : 'Pose strip slicing failed',
         });
       }
       return;

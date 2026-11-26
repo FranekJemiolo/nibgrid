@@ -33,6 +33,12 @@ export const INSPECTOR_TAB_META: Record<InspectorTab, InspectorTabMeta> = {
     shortLabel: 'Animate',
     testId: 'inspector-tab-puppet',
   },
+  pose: {
+    id: 'pose',
+    label: 'Pose Keyframer (AI)',
+    shortLabel: 'Pose Rig',
+    testId: 'inspector-tab-pose',
+  },
   sockets: {
     id: 'sockets',
     label: 'Attachment Sockets',
@@ -105,6 +111,7 @@ export const ALL_INSPECTOR_TABS: readonly InspectorTab[] = [
   'postprocess',
   'normal',
   'puppet',
+  'pose',
   'sockets',
   'vfx-baker',
   'tile-slice',
@@ -168,6 +175,7 @@ export function resolveInspectorTabs(
         'postprocess',
         'normal',
         'puppet',
+        'pose',
         'sockets',
         'collider',
         'palette-lut',
