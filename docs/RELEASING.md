@@ -98,3 +98,13 @@ irm https://franekjemiolo.github.io/nibgrid/install.ps1 | iex
 ```
 
 Browser PWA users can also click **Get Desktop App** in the top navigation bar (or **Get Nibgrid Studio Desktop** in `Cmd+K`) to open `InstallDesktopModal`, switch OS tabs, download directly from GitHub Releases, or copy the matching SHA-256-verified CLI command.
+
+---
+
+## 6. Zero-Server Desktop Self-Update Checker (Milestone 43)
+
+Nibgrid Studio Desktop checks `https://api.github.com/repos/FranekJemiolo/nibgrid/releases/latest` using conditional `If-None-Match` ETag requests (`packages/vscode-extension/src/updateCheckerCore.ts`), avoiding dedicated update servers and preventing rate-limit burn (`304 Not Modified`). Checks run at most once every 24 hours on startup (or manually via `Nibgrid: Check for Updates`), ignore pre-releases, respect skipped versions, and reuse the M41/M42 asset naming + `SHA256SUMS.txt` release artifacts.
+
+Before launching any downloaded installer, `packages/vscode-extension/src/desktopUpdater.ts` verifies its streaming SHA-256 digest with `crypto.timingSafeEqual` against `SHA256SUMS.txt` inside an isolated temporary directory (deleting temp files immediately on mismatch) and invokes the OS installer via `execFile` (`open` on macOS, detached `/SILENT` on Windows, `chmod 0o755` under `~/.local/bin/nibgrid-studio` on Linux).
+
+In **Nibgrid Studio Desktop**, available updates appear unobtrusively in the status bar (`$(cloud-download) Nibgrid vX.Y.Z`) with **Install Update**, **Release Notes**, and **Skip This Version** actions, and users can trigger **Nibgrid: Check for Updates** (`nibgrid.checkForUpdates`) from the Command Palette or disable automatic checks via `nibgrid.updates.autoCheck`.

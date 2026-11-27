@@ -95,8 +95,22 @@
       {
         "command": "nibgrid.linkAntigravity",
         "title": "Nibgrid: Link Google Antigravity MCP"
+      },
+      {
+        "command": "nibgrid.checkForUpdates",
+        "title": "Nibgrid: Check for Updates"
       }
     ],
+    "configuration": {
+      "title": "Nibgrid Studio",
+      "properties": {
+        "nibgrid.updates.autoCheck": {
+          "type": "boolean",
+          "default": true,
+          "description": "Automatically check GitHub Releases for Nibgrid Studio Desktop updates every 24 hours."
+        }
+      }
+    },
     "languageModelTools": [
       {
         "name": "nibgrid_inpaint_sprite_region",

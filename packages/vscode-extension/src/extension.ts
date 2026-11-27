@@ -1,7 +1,21 @@
 import { execFile } from 'node:child_process';
 import { resolve } from 'node:path';
+import type { ArtDirectorQaReport } from '../../../src/processing/artDirectorQaSchema';
+import {
+  DEFAULT_GITHUB_REPO,
+  detectDesktopPlatform,
+  getLatestReleasesFallbackUrl,
+  type DesktopPlatform,
+} from '../../../src/platform/desktopInstaller';
 import type { HostSecretStore } from '../../../src/platform/hostAdapter';
 import { registerNibgridCustomEditors, type VscodeCustomEditorRegistryLike } from './customEditors';
+import {
+  ChecksumMismatchError,
+  downloadAndVerifyUpdate,
+  handoffVerifiedInstaller,
+  type UpdaterExecFileLike,
+  type UpdaterFsLike,
+} from './desktopUpdater';
 import { NIBGRID_MCP_TOOLS } from './mcpToolServer';
 import {
   publishQaDiagnostics,
@@ -9,8 +23,18 @@ import {
   type VscodeDiagnosticCollectionLike,
   type VscodeTreeRegistryLike,
 } from './treeProviders';
+import {
+  checkForDesktopUpdate,
+  DEFAULT_UPDATE_CHECK_INTERVAL_MS,
+  shouldRunAutoUpdateCheck,
+  type UpdateCheckResult,
+} from './updateCheckerCore';
 import { dispatchHostRpcRequest, type HostBridgeHandlers } from './vscodeHostBridge';
-import type { ArtDirectorQaReport } from '../../../src/processing/artDirectorQaSchema';
+
+export const UPDATE_LAST_CHECKED_AT_KEY = 'nibgrid.updateLastCheckedAt';
+export const UPDATE_ETAG_KEY = 'nibgrid.updateEtag';
+export const UPDATE_SKIPPED_VERSION_KEY = 'nibgrid.updateSkippedVersion';
+export const DEFAULT_STARTUP_UPDATE_DELAY_MS = 10_000;
 
 export interface VscodeSecretStorageLike {
   get: (key: string) => Promise<string | undefined>;
@@ -18,8 +42,23 @@ export interface VscodeSecretStorageLike {
   delete: (key: string) => Promise<void>;
 }
 
+export interface VscodeMementoLike {
+  get: <T>(key: string, defaultValue?: T) => T | undefined;
+  update: (key: string, value: unknown) => Promise<void> | void;
+}
+
+export interface VscodeStatusBarItemLike {
+  text: string;
+  tooltip?: string;
+  command?: string;
+  show: () => void;
+  hide: () => void;
+  dispose: () => void;
+}
+
 export interface VscodeExtensionContextLike {
   readonly secrets: VscodeSecretStorageLike;
+  readonly globalState?: VscodeMementoLike;
   readonly subscriptions: { dispose: () => void }[];
 }
 
@@ -49,7 +88,18 @@ export interface VscodeHostApiLike {
   registerCommand: (command: string, callback: () => unknown) => { dispose: () => void };
   openNibgridPanel: (onMessage: (raw: unknown) => Promise<unknown>) => void;
   runTerminalCommand?: (command: string, cwd?: string) => void;
-  showMessage: (level: 'info' | 'warn' | 'error', msg: string) => void;
+  showMessage: (
+    level: 'info' | 'warn' | 'error',
+    msg: string,
+    ...actions: string[]
+  ) => Promise<string | undefined> | string | undefined | void;
+  createStatusBarItem?: () => VscodeStatusBarItemLike;
+  withProgress?: <T>(
+    title: string,
+    task: (report: (message: string) => void) => Promise<T>,
+  ) => Promise<T>;
+  openExternal?: (url: string) => Promise<boolean | void> | boolean | void;
+  getAutoCheckUpdates?: () => boolean;
   readonly customEditorRegistry?: VscodeCustomEditorRegistryLike;
   readonly treeRegistry?: VscodeTreeRegistryLike;
   readonly qaDiagnosticCollection?: VscodeDiagnosticCollectionLike;
@@ -57,6 +107,22 @@ export interface VscodeHostApiLike {
 
 const UNSAFE_BINARY_CHARS = /[;&|$`<>!\n\r]/;
 const SAFE_SCENE_RES_PATH = /^res:\/\/[A-Za-z0-9_./-]+\.tscn$/;
+
+/**
+ * Maps Node's `process.platform` and `process.arch` deterministically to a
+ * `DesktopPlatform` release asset target.
+ */
+export function detectNodeDesktopPlatform(
+  platform: string = process.platform,
+  arch: string = process.arch,
+): DesktopPlatform {
+  if (platform === 'win32') return 'win-x64';
+  if (platform === 'linux') return 'linux-x64';
+  if (platform === 'darwin') {
+    return arch === 'x64' ? 'macos-x64' : 'macos-arm64';
+  }
+  return detectDesktopPlatform({ platform, architecture: arch });
+}
 
 /**
  * Validates workspace/scene inputs and launches Godot cleanly via `execFile`
@@ -162,6 +228,18 @@ export interface ActivateNibgridDeps {
   readonly godotBinary?: string;
   readonly qaReport?: ArtDirectorQaReport | null;
   readonly resolveSpriteUri?: (spriteId: string) => string;
+  readonly currentVersion?: string;
+  readonly platform?: DesktopPlatform;
+  readonly supportsLocalProcessLaunch?: boolean;
+  readonly fetchImpl?: typeof fetch;
+  readonly updaterExecFileImpl?: UpdaterExecFileLike;
+  readonly updaterFsImpl?: UpdaterFsLike;
+  readonly updaterHomeDir?: string;
+  readonly updaterTmpRootDir?: string;
+  readonly quitApp?: () => Promise<void> | void;
+  readonly updateStartupDelayMs?: number;
+  readonly updateCheckIntervalMs?: number;
+  readonly nowMs?: () => number;
 }
 
 /**
@@ -177,14 +255,9 @@ export function activateNibgridExtension(
   readonly registeredCommands: readonly string[];
   readonly mcpToolCount: number;
   readonly activeGodotLaunches: readonly GodotLaunchHandle[];
+  readonly checkForUpdatesNow: () => Promise<UpdateCheckResult>;
 } {
-  const deps: ActivateNibgridDeps =
-    'syncGodotProject' in depsOrAntigravity || 'workspacePath' in depsOrAntigravity
-      ? (depsOrAntigravity as ActivateNibgridDeps)
-      : {
-          detectAntigravity: depsOrAntigravity.detectAntigravity,
-          linkAntigravityMcp: depsOrAntigravity.linkAntigravityMcp,
-        };
+  const deps: ActivateNibgridDeps = depsOrAntigravity;
 
   const keychain = createKeychainSecretStore(context.secrets);
   const activeLaunches: GodotLaunchHandle[] = [];
@@ -216,11 +289,145 @@ export function activateNibgridExtension(
     notify: (level, message) => hostApi.showMessage(level, message),
   };
 
+  const currentVersion = deps.currentVersion ?? '0.1.0';
+  const targetPlatform = deps.platform ?? detectNodeDesktopPlatform();
+  const nowMs = deps.nowMs ?? (() => Date.now());
+  let statusBarItem: VscodeStatusBarItemLike | null = null;
+  let pendingUpdate: UpdateCheckResult | null = null;
+  let startupTimer: ReturnType<typeof setTimeout> | null = null;
+  let disposed = false;
+
+  const ensureStatusBarItem = (latestVersion: string) => {
+    if (!hostApi.createStatusBarItem) return;
+    if (!statusBarItem) {
+      statusBarItem = hostApi.createStatusBarItem();
+    }
+    statusBarItem.text = `$(cloud-download) Nibgrid v${latestVersion}`;
+    statusBarItem.tooltip = `Nibgrid Studio v${latestVersion} is available (running v${currentVersion})`;
+    statusBarItem.command = 'nibgrid.checkForUpdates';
+    statusBarItem.show();
+  };
+
+  const installVerifiedUpdate = async (update: UpdateCheckResult): Promise<void> => {
+    const runTask = async (report: (msg: string) => void) => {
+      report('Downloading and verifying SHA-256 installer...');
+      const downloaded = await downloadAndVerifyUpdate(update, {
+        fetchImpl: deps.fetchImpl,
+        tmpRootDir: deps.updaterTmpRootDir,
+        onProgress: report,
+      });
+      report('Launching verified installer...');
+      return handoffVerifiedInstaller(targetPlatform, downloaded.installerPath, {
+        execFileImpl: deps.updaterExecFileImpl,
+        fsImpl: deps.updaterFsImpl,
+        homeDir: deps.updaterHomeDir,
+        quitApp: deps.quitApp,
+      });
+    };
+
+    try {
+      const handoff = hostApi.withProgress
+        ? await hostApi.withProgress(`Installing Nibgrid Studio v${update.latestVersion}`, runTask)
+        : await runTask(() => undefined);
+      if (!handoff.quitRequested) {
+        await hostApi.showMessage(
+          'info',
+          `Verified installer ready (${handoff.action}). Restart Nibgrid Studio to complete update to v${update.latestVersion}.`,
+        );
+      }
+    } catch (err) {
+      const message =
+        err instanceof ChecksumMismatchError
+          ? `Update aborted: ${err.message}`
+          : err instanceof Error
+            ? `Failed to install update: ${err.message}`
+            : 'Failed to install update.';
+      await hostApi.showMessage('error', message);
+    }
+  };
+
+  const promptForUpdate = async (update: UpdateCheckResult): Promise<void> => {
+    if (disposed || !update.latestVersion) return;
+    const choice = await hostApi.showMessage(
+      'info',
+      `Nibgrid Studio v${update.latestVersion} is available (running v${update.currentVersion}).`,
+      'Install Update',
+      'Release Notes',
+      'Skip This Version',
+    );
+    if (choice === 'Install Update') {
+      await installVerifiedUpdate(update);
+    } else if (choice === 'Release Notes' && update.releaseUrl) {
+      await hostApi.openExternal?.(update.releaseUrl);
+    } else if (choice === 'Skip This Version') {
+      await context.globalState?.update(UPDATE_SKIPPED_VERSION_KEY, update.latestVersion);
+      pendingUpdate = null;
+      statusBarItem?.hide();
+    }
+  };
+
+  const runUpdateCheck = async (manual: boolean): Promise<UpdateCheckResult> => {
+    const savedEtag = context.globalState?.get<string>(UPDATE_ETAG_KEY);
+    const savedSkipped = manual
+      ? undefined
+      : context.globalState?.get<string>(UPDATE_SKIPPED_VERSION_KEY);
+
+    const result = await checkForDesktopUpdate({
+      currentVersion,
+      platform: targetPlatform,
+      ...(savedSkipped ? { skippedVersion: savedSkipped } : {}),
+      ...(savedEtag ? { etag: savedEtag } : {}),
+      ...(deps.fetchImpl ? { fetchImpl: deps.fetchImpl } : {}),
+    });
+
+    if (disposed) return result;
+
+    if (result.status !== 'offline-or-ratelimited') {
+      await context.globalState?.update(UPDATE_LAST_CHECKED_AT_KEY, nowMs());
+      if (result.etag) {
+        await context.globalState?.update(UPDATE_ETAG_KEY, result.etag);
+      }
+    }
+
+    if (result.status === 'offline-or-ratelimited') {
+      if (manual) {
+        const action = await hostApi.showMessage(
+          'info',
+          'Offline or rate-limited — view releases on GitHub.',
+          'View Releases on GitHub',
+        );
+        if (action === 'View Releases on GitHub') {
+          await hostApi.openExternal?.(
+            result.releaseUrl ?? getLatestReleasesFallbackUrl(DEFAULT_GITHUB_REPO),
+          );
+        }
+      }
+      return result;
+    }
+
+    if (result.status === 'update-available' && result.latestVersion) {
+      pendingUpdate = result;
+      ensureStatusBarItem(result.latestVersion);
+      if (manual) {
+        await promptForUpdate(result);
+      }
+      return result;
+    }
+
+    pendingUpdate = null;
+    statusBarItem?.hide();
+    if (manual) {
+      await hostApi.showMessage('info', `Nibgrid Studio v${currentVersion} is up to date.`);
+    }
+    return result;
+  };
+
   const registeredCommands = [
     'nibgrid.openStudio',
     'nibgrid.syncGodot',
     'nibgrid.runGodotSlice',
     'nibgrid.linkAntigravity',
+    'nibgrid.checkForUpdates',
   ];
 
   context.subscriptions.push(
@@ -249,14 +456,47 @@ export function activateNibgridExtension(
       });
       hostApi.showMessage(res.ok ? 'info' : 'error', res.message);
     }),
+    hostApi.registerCommand('nibgrid.checkForUpdates', async () => {
+      if (pendingUpdate) {
+        const cached = pendingUpdate;
+        await promptForUpdate(cached);
+        return cached;
+      }
+      return runUpdateCheck(true);
+    }),
     {
       dispose: () => {
+        disposed = true;
+        if (startupTimer !== null) {
+          clearTimeout(startupTimer);
+          startupTimer = null;
+        }
+        statusBarItem?.dispose();
+        statusBarItem = null;
         for (const launch of activeLaunches) {
           launch.cancel();
         }
       },
     },
   );
+
+  const supportsLocalLaunch = deps.supportsLocalProcessLaunch ?? true;
+  const autoCheckEnabled = hostApi.getAutoCheckUpdates ? hostApi.getAutoCheckUpdates() : true;
+  if (supportsLocalLaunch && autoCheckEnabled) {
+    const delayMs = deps.updateStartupDelayMs ?? DEFAULT_STARTUP_UPDATE_DELAY_MS;
+    const intervalMs = deps.updateCheckIntervalMs ?? DEFAULT_UPDATE_CHECK_INTERVAL_MS;
+    startupTimer = setTimeout(() => {
+      startupTimer = null;
+      if (disposed) return;
+      const lastCheckedAt = context.globalState?.get<number>(UPDATE_LAST_CHECKED_AT_KEY);
+      if (shouldRunAutoUpdateCheck(lastCheckedAt, nowMs(), intervalMs)) {
+        void runUpdateCheck(false);
+      }
+    }, delayMs);
+    if (typeof startupTimer === 'object' && startupTimer !== null && 'unref' in startupTimer) {
+      (startupTimer as { unref?: () => void }).unref?.();
+    }
+  }
 
   if (hostApi.customEditorRegistry) {
     context.subscriptions.push(
@@ -286,5 +526,6 @@ export function activateNibgridExtension(
     registeredCommands,
     mcpToolCount: NIBGRID_MCP_TOOLS.length,
     activeGodotLaunches: activeLaunches,
+    checkForUpdatesNow: () => runUpdateCheck(true),
   };
 }

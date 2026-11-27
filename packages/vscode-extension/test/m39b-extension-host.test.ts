@@ -295,6 +295,7 @@ describe('M39B: VS Code Extension Host, Custom Editors, Activity Bar Trees & Saf
       'nibgrid.syncGodot',
       'nibgrid.runGodotSlice',
       'nibgrid.linkAntigravity',
+      'nibgrid.checkForUpdates',
     ]);
 
     commands.get('nibgrid.runGodotSlice')!();

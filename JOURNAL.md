@@ -737,3 +737,18 @@
 
 - **Hardened Bridge (`.agents/skills/nibgrid/scripts/nibgrid_bridge.py`, `.agents/skills/nibgrid/SKILL.md`, `docs/ARCHITECTURE.md`):** Upgraded the zero-dependency `uv`-compatible loopback server with PEP 723 metadata, strict `127.0.0.1` binding, `hmac.compare_digest` Bearer auth, `Origin` allowlisting (`--allow-origin` support), Chrome PNA `OPTIONS` headers, secret redaction (`redact_secrets`), deterministic stdlib RGBA PNG + 16-bit PCM WAV `--mock` payloads, live Gemini REST forwarding, and M10 `create_bridge_server()` compatibility.
 - **Python Test Suite & CI Wiring (`tests/python/test_nibgrid_bridge.py`, `.github/workflows/ci-parity.yml`):** Added 9 ephemeral-port HTTP contract/security tests alongside the 6 M10 bridge tests and wired both into `ci-parity.yml`.
+
+## Milestone 43A: Pure-TS Self-Update Checker Core (`updateCheckerCore.ts`)
+
+- **Core Logic (`packages/vscode-extension/src/updateCheckerCore.ts`, `docs/ARCHITECTURE.md`, `docs/RELEASING.md`):** Added strict SemVer parsing/comparison (excluding pre-releases by default), 24h auto-check throttle (`shouldRunAutoUpdateCheck()`), `SHA256SUMS.txt` parser (`parseSha256Sums()`), and ETag-conditional `/releases/latest` checker (`checkForDesktopUpdate()`).
+- **Verification (`packages/vscode-extension/test/m43a-update-checker.test.ts`):** Verified `1.2.0 -> 1.2.1/1.3.0/2.0.0`, equal/older/pre-release rejection, `304 Not Modified` ETag short-circuiting, `skippedVersion` gating, and HTTP `403`/`429`/network-error fallback.
+
+## Milestone 43B: Streaming SHA-256 Verifier & Safe OS Installer Handoff (`desktopUpdater.ts`)
+
+- **Streaming Verifier & OS Handoff (`packages/vscode-extension/src/desktopUpdater.ts`, `docs/ARCHITECTURE.md`, `docs/RELEASING.md`):** Added `verifyFileSha256()`, `downloadAndVerifyUpdate()` (isolated `os.tmpdir()` download + `crypto.timingSafeEqual` + recursive cleanup on `ChecksumMismatchError`), and shell-free `handoffVerifiedInstaller()` (`open` for macOS `.dmg`, detached `/SILENT` + app quit for Windows, atomic move + `chmod 0o755` for Linux AppImage).
+- **Verification (`packages/vscode-extension/test/m43b-desktop-updater.test.ts`):** Verified streaming SHA-256 verification and OS handoff across macOS/Windows/Linux plus `ChecksumMismatchError` throw, temp dir deletion, and zero `execFile` invocations on 1-byte tampering.
+
+## Milestone 43C: Status Bar UX, `globalState` Persistence & Command Palette Wiring
+
+- **Extension Wiring (`packages/vscode-extension/package.json`, `packages/vscode-extension/src/extension.ts`, `docs/ARCHITECTURE.md`, `docs/RELEASING.md`):** Registered `nibgrid.checkForUpdates` and `nibgrid.updates.autoCheck`, added 10s delayed startup check with 24h throttle + `globalState` ETag/skip-version persistence, `$(cloud-download) Nibgrid v<latest>` status bar indicator, `withProgress` verified installer launch, and manual offline/rate-limit GitHub Releases fallback.
+- **Verification (`packages/vscode-extension/test/m43c-extension-updates.test.ts`, `packages/vscode-extension/test/m39b-extension-host.test.ts`):** Verified 10s timer delay + clean cancellation, 24h throttle, `globalState` persistence, status bar show/hide, Skip This Version, Install Update flow, and full repo parity/unit/build gates.
