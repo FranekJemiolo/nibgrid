@@ -9,11 +9,12 @@ import {
   Plus,
   Save,
   Settings2,
+  Sun,
   Trash2,
   Wand2,
   X,
 } from 'lucide-react';
-import { db } from '../../db/database';
+import { db, repository } from '../../db/database';
 import {
   EntityDefinitionSchema,
   GodotBodyTypeSchema,
@@ -23,7 +24,10 @@ import {
   type EntityDefinition,
   type GodotBodyType,
 } from '../../domain/entitySchema';
+import type { SpriteNode } from '../../domain/schemas';
 import { assembleGodotEntityFiles, type VirtualSyncFile } from '../../export/godotPrefabAssembler';
+import { decodePngBytesToRgba } from '../../processing/png';
+import type { RgbaBuffer } from '../../processing/types';
 import { useAppStore } from '../../store/useAppStore';
 import {
   collectEntitySyncFiles,
@@ -32,6 +36,7 @@ import {
   syncFilesToGodotDirectory,
 } from '../../sync/fsaaSyncEngine';
 import { BlobImage } from '../components/BlobImage';
+import { LightingBakerPanel } from '../lighting/LightingBakerPanel';
 import { EntityDirectorModal } from './EntityDirectorModal';
 import { EntityPlaytestStage } from './EntityPlaytestStage';
 
@@ -78,6 +83,7 @@ export function EntityHubView() {
     saveEntityRecord,
     deleteEntityRecord,
     refreshSyncTarget,
+    refreshSpriteNodes,
   } = useAppStore();
 
   const [drawerOpen, setDrawerOpen] = useState(false);
@@ -86,6 +92,11 @@ export function EntityHubView() {
   const [playtestEntityId, setPlaytestEntityId] = useState<string | null>(() =>
     route.screen === 'entities' && route.playtestEntityId ? route.playtestEntityId : null,
   );
+  const [lightingModal, setLightingModal] = useState<{
+    readonly entity: EntityDefinition;
+    readonly spriteNode: SpriteNode;
+    readonly sprite: RgbaBuffer;
+  } | null>(null);
   const [draft, setDraft] = useState<EntityDefinition | null>(null);
   const [slugLocked, setSlugLocked] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -360,7 +371,8 @@ export function EntityHubView() {
           {entities.map((entity) => {
             const primaryNode = spriteById.get(entity.primarySpriteNodeId);
             const hasSprite = Boolean(primaryNode);
-            const hasNormal = entity.includeNormalMap;
+            const hasNormal =
+              entity.includeNormalMap || Boolean(primaryNode?.lightingBake?.normalBlobId);
             const hasCollider = (primaryNode?.collisionShapes?.length ?? 0) > 0;
             const hasSockets = (primaryNode?.sockets?.length ?? 0) > 0;
             const hasAudio = entity.audioAssetIds.length > 0;
@@ -459,6 +471,34 @@ export function EntityHubView() {
                       <Play className="h-3 w-3" />
                       Playtest
                     </button>
+                    {primaryNode && (
+                      <button
+                        type="button"
+                        data-testid={`entity-lighting-${entity.slug}`}
+                        onClick={() => {
+                          void (async () => {
+                            const blobId = primaryNode.processedBlobId ?? primaryNode.imageBlobId;
+                            const rec = await repository.getBlob(blobId);
+                            if (!rec) return;
+                            const bytes = new Uint8Array(await rec.bytes.arrayBuffer());
+                            const decoded = await decodePngBytesToRgba(bytes);
+                            setLightingModal({
+                              entity,
+                              spriteNode: primaryNode,
+                              sprite: {
+                                width: decoded.width,
+                                height: decoded.height,
+                                data: decoded.rgba,
+                              },
+                            });
+                          })();
+                        }}
+                        className="inline-flex items-center gap-1 rounded border border-amber-500/40 bg-amber-500/15 px-2.5 py-1 text-[11px] font-medium text-amber-200 hover:bg-amber-500/25"
+                      >
+                        <Sun className="h-3 w-3" />
+                        Lighting
+                      </button>
+                    )}
                   </div>
 
                   <div className="flex items-center gap-1.5">
@@ -899,6 +939,25 @@ export function EntityHubView() {
           />
         );
       })()}
+      {lightingModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4 backdrop-blur-xs">
+          <LightingBakerPanel
+            sprite={lightingModal.sprite}
+            spriteNode={lightingModal.spriteNode}
+            artMode={activeProject.artBible.artMode}
+            paletteHex={activeProject.artBible.palette}
+            slug={lightingModal.entity.slug}
+            onBaked={(updatedNode) => {
+              setLightingModal((prev) => (prev ? { ...prev, spriteNode: updatedNode } : null));
+              void refreshSpriteNodes(activeProject.id);
+              setStatusBanner(
+                `Baked _n.png + CanvasTexture metadata for "${lightingModal.entity.slug}". Ready for Godot res:// sync.`,
+              );
+            }}
+            onClose={() => setLightingModal(null)}
+          />
+        </div>
+      )}
     </div>
   );
 }

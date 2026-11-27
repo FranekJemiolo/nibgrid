@@ -4,6 +4,10 @@ import { pickUiKitColorsFromPalette } from '../processing/uiKitCore';
 import { createPoseClipFromPreset } from '../processing/posePresets';
 import { extractDefaultUniformValues, getGdShaderPreset } from '../processing/gdshaderPresets';
 import {
+  EmissionBakeConfigSchema,
+  NormalBakeConfigSchema,
+} from '../processing/normalEmissionBaker';
+import {
   ParallaxBandBlueprintSchema,
   ParallaxBandRoleSchema,
   ParallaxSceneBlueprintSchema,
@@ -740,6 +744,17 @@ export function createDefaultPoseClip(
   );
 }
 
+export const SpriteLightingBakeSchema = z.object({
+  normalBlobId: z.string().min(1),
+  emissionBlobId: z.string().min(1).optional(),
+  normalConfig: NormalBakeConfigSchema,
+  emissionConfig: EmissionBakeConfigSchema,
+  emissivePixelCount: z.number().int().nonnegative().default(0),
+  occluderVertexCount: z.number().int().nonnegative().default(0),
+  bakedAt: z.string().min(1),
+});
+export type SpriteLightingBake = z.infer<typeof SpriteLightingBakeSchema>;
+
 export const SpriteNodeSchema = z.object({
   id: z.string().min(1),
   projectId: z.string().min(1),
@@ -760,6 +775,7 @@ export const SpriteNodeSchema = z.object({
   maskBlobId: z.string().min(1).optional(),
   processedBlobId: z.string().min(1).optional(),
   postProcessConfig: PostProcessConfigSchema.optional(),
+  lightingBake: SpriteLightingBakeSchema.optional(),
   puppetAnim: PuppetAnimConfigSchema.optional(),
   seamlessTile: SeamlessTileConfigSchema.optional(),
   nineSlice: NineSliceConfigSchema.optional(),

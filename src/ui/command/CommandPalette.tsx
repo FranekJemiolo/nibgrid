@@ -29,6 +29,7 @@ export function CommandPalette({ open, onOpenChange }: CommandPaletteProps) {
     setComposerOpen,
     setModelSettingsOpen,
     setInstallDesktopOpen,
+    setLightingBakerOpen,
   } = useAppStore();
 
   const [query, setQuery] = useState('');
@@ -253,6 +254,22 @@ export function CommandPalette({ open, onOpenChange }: CommandPaletteProps) {
               nodeId: targetId,
               initialTab: 'normal',
             }),
+        },
+        {
+          id: 'act-lighting-baker',
+          title: 'Open 2D Normal & Emission Baker (CanvasTexture)',
+          subtitle: 'Bake tangent normals, _e.png emission masks, CanvasTexture & LightOccluder2D',
+          category: 'action',
+          keywords: ['lighting', 'normal', 'emission', 'canvastexture', 'occluder', 'baker', 'm44'],
+          execute: async () => {
+            await navigate({
+              screen: 'inspector',
+              projectId: projId,
+              nodeId: targetId,
+              initialTab: 'postprocess',
+            });
+            setLightingBakerOpen(true);
+          },
         },
         {
           id: 'act-puppet',

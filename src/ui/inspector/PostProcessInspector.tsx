@@ -22,6 +22,7 @@ import {
   Scissors,
   Sliders,
   Sparkles,
+  Sun,
 } from 'lucide-react';
 import { strToU8 } from 'fflate';
 import { repository } from '../../db/database';
@@ -112,6 +113,7 @@ import { AutoTileWorkshop } from './AutoTileWorkshop';
 import { BitmapFontWorkshop } from './BitmapFontWorkshop';
 import { ColliderEditor } from './ColliderEditor';
 import { GameSandbox } from './GameSandbox';
+import { LightingBakerPanel } from '../lighting/LightingBakerPanel';
 import { NormalMapPreview } from './NormalMapPreview';
 import { PaletteLutWorkshop } from './PaletteLutWorkshop';
 import { ParallaxWorkshop } from './ParallaxWorkshop';
@@ -234,7 +236,15 @@ export function PostProcessInspector({
   initialTab?: InspectorTab;
   initialPixelTool?: PixelTool;
 }) {
-  const { activeProject, spriteNodes, providers, refreshSpriteNodes, navigate } = useAppStore();
+  const {
+    activeProject,
+    spriteNodes,
+    providers,
+    refreshSpriteNodes,
+    navigate,
+    lightingBakerOpen,
+    setLightingBakerOpen,
+  } = useAppStore();
 
   const targetNode: SpriteNode | undefined =
     spriteNodes.find((n) => n.id === nodeId) ?? spriteNodes[spriteNodes.length - 1];
@@ -2080,6 +2090,17 @@ export function PostProcessInspector({
           >
             {processedSize.width}×{processedSize.height}
           </span>
+          {activeSpriteBuffer && (
+            <button
+              type="button"
+              data-testid="open-lighting-baker-btn"
+              onClick={() => setLightingBakerOpen(true)}
+              className="inline-flex items-center gap-1 rounded border border-amber-500/40 bg-amber-500/15 px-2.5 py-1 text-xs font-medium text-amber-200 hover:bg-amber-500/25"
+            >
+              <Sun className="h-3.5 w-3.5" />
+              Lighting Baker
+            </button>
+          )}
           {inspectorTab === 'postprocess' && (
             <button
               type="button"
@@ -3244,6 +3265,24 @@ export function PostProcessInspector({
           </div>
         )}
       </div>
+
+      {lightingBakerOpen && activeSpriteBuffer && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4 backdrop-blur-xs">
+          <LightingBakerPanel
+            sprite={activeSpriteBuffer}
+            spriteNode={targetNode}
+            artMode={activeProject.artBible.artMode}
+            paletteHex={activeProject.artBible.palette}
+            slug={toAssetSlug(
+              `${activeProject.name}-${targetNode.kind}-${targetNode.generationMeta.seed}`,
+            )}
+            onBaked={() => {
+              void refreshSpriteNodes(activeProject.id);
+            }}
+            onClose={() => setLightingBakerOpen(false)}
+          />
+        </div>
+      )}
     </div>
   );
 }

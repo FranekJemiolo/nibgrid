@@ -285,7 +285,22 @@ export async function collectEntitySyncFiles(
     }
 
     let normalBytes: Uint8Array | undefined;
-    if (entity.includeNormalMap) {
+    let emissionBytes: Uint8Array | undefined;
+
+    if (node.lightingBake?.normalBlobId) {
+      const bakedNormRec = await repo.getBlob(node.lightingBake.normalBlobId);
+      if (bakedNormRec) {
+        normalBytes = await readBlobBytes(bakedNormRec.bytes);
+      }
+    }
+    if (node.lightingBake?.emissionBlobId) {
+      const bakedEmissRec = await repo.getBlob(node.lightingBake.emissionBlobId);
+      if (bakedEmissRec) {
+        emissionBytes = await readBlobBytes(bakedEmissRec.bytes);
+      }
+    }
+
+    if (!normalBytes && entity.includeNormalMap) {
       try {
         const decoded = await decodePngBytesToRgba(bytes);
         if (i === 0) {
@@ -316,6 +331,7 @@ export async function collectEntitySyncFiles(
       filename,
       bytes,
       ...(normalBytes ? { normalBytes } : {}),
+      ...(emissionBytes ? { emissionBytes } : {}),
     });
   }
 

@@ -5,6 +5,7 @@ import {
 } from '../domain/entitySchema';
 import type { ShaderConfig } from '../domain/schemas';
 import { exportGodotShaderMaterialTres } from './shaderExporters';
+import { exportCanvasTextureTres, exportNormalMapImportFile } from './godotLightingExporter';
 import { stripShaderCodeFences } from '../processing/gdshaderTranspiler';
 
 export interface VirtualSyncFile {
@@ -16,6 +17,7 @@ export interface EntityAssemblySpriteFile {
   readonly filename: string;
   readonly bytes: Uint8Array;
   readonly normalBytes?: Uint8Array;
+  readonly emissionBytes?: Uint8Array;
   readonly spriteNodeId?: string;
 }
 
@@ -120,19 +122,11 @@ export function generateCanvasTextureTres(
   normalResPath: string,
   isPixelArt: boolean,
 ): string {
-  const textureFilter = isPixelArt ? 1 : 2;
-  return [
-    '[gd_resource type="CanvasTexture" load_steps=3 format=3]',
-    '',
-    `[ext_resource type="Texture2D" path="${escapeGodotString(diffuseResPath)}" id="1_diff"]`,
-    `[ext_resource type="Texture2D" path="${escapeGodotString(normalResPath)}" id="2_norm"]`,
-    '',
-    '[resource]',
-    'diffuse_texture = ExtResource("1_diff")',
-    'normal_texture = ExtResource("2_norm")',
-    `texture_filter = ${textureFilter}`,
-    '',
-  ].join('\n');
+  return exportCanvasTextureTres({
+    diffuseResPath,
+    normalResPath,
+    artMode: isPixelArt ? 'pixel-art' : 'hd-handdrawn',
+  });
 }
 
 interface PreparedSpriteAsset {
@@ -186,6 +180,18 @@ export function assembleGodotEntityFiles(input: EntityAssemblyInput): readonly V
       content: generateGodotPngImport(diffuseRes, input.isPixelArt),
     });
 
+    if (sprite.emissionBytes) {
+      const stem = filename.replace(/\.png$/i, '');
+      const emissionFilename = claimUniqueFilename(`${stem}_e.png`, `${slug}_${i}_e.png`);
+      const emissionRel = `${baseDir}/${emissionFilename}`;
+      const emissionRes = `${resDir}/${emissionFilename}`;
+      files.push({ relativePath: emissionRel, content: sprite.emissionBytes });
+      files.push({
+        relativePath: `${emissionRel}.import`,
+        content: generateGodotPngImport(emissionRes, input.isPixelArt),
+      });
+    }
+
     if (sprite.normalBytes) {
       const stem = filename.replace(/\.png$/i, '');
       const normalFilename = claimUniqueFilename(`${stem}_n.png`, `${slug}_${i}_n.png`);
@@ -194,7 +200,10 @@ export function assembleGodotEntityFiles(input: EntityAssemblyInput): readonly V
       files.push({ relativePath: normalRel, content: sprite.normalBytes });
       files.push({
         relativePath: `${normalRel}.import`,
-        content: generateGodotPngImport(normalRes, input.isPixelArt),
+        content: exportNormalMapImportFile({
+          resPath: normalRes,
+          artMode: input.isPixelArt ? 'pixel-art' : 'hd-handdrawn',
+        }),
       });
 
       const canvasTresFilename = claimUniqueFilename(

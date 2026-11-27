@@ -543,3 +543,16 @@ All image-manipulation stages operate on raw `Uint8ClampedArray` buffers in `src
 ## 103. Automated Pre-Release & Post-Deploy Smoke Gate (`scripts/smoke-release.mjs`)
 
 - **Playwright Release Smoke Verifier (`scripts/smoke-release.mjs`, `package.json`, `.github/workflows/release.yml`):** Verifies live or preview deployments across `install.sh` (including `sh -n` POSIX syntax check), `install.ps1` (`Get-FileHash` & `SHA256SUMS.txt` assertions), `manifest.webmanifest`, Chromium cold boot, active Service Worker registration, `InstallDesktopModal`, offline reload, and zero unexpected `console.error` / `pageerror` events. Wired into `.github/workflows/release.yml` as the post-deploy `smoke-pages` job reading `needs.deploy-pages.outputs.page_url`.
+
+## 104. Pure-TS 2D Normal Map & Emission Mask Baker (Milestone 44A)
+
+- **Zero-DOM Normal & Emission Math (`src/processing/normalEmissionBaker.ts`):** Derives normalized scalar height fields (`luminance`, `alpha-bevel`, or `hybrid`) over raw `Uint8ClampedArray` RGBA buffers, computes 3×3 Sobel tangent-space normals scaled by `strength` with `invertY` toggle (defaulting to OpenGL `+Y` up for Godot 4), encodes neutral `(128, 128, 255, 0)` on all transparent pixels to avoid edge halos, and isolates glowing regions (`palette-swatches` or `luminance-threshold`) via `bakeEmissionMaskFromRgba()`.
+
+## 105. Godot 4 `CanvasTexture`, Normal `.import` & `LightOccluder2D` Exporter (Milestone 44B)
+
+- **Lighting Resource Export & M25 Sync (`src/export/godotLightingExporter.ts`, `src/export/godotPrefabAssembler.ts`, `src/sync/fsaaSyncEngine.ts`):** Serializes Godot 4 `format=3` `CanvasTexture` `.tres` resources (`texture_filter = 1` for pixel art), normal map `.png.import` sidecars with `compress/normal_map=1`, and M16-derived RDP `OccluderPolygon2D` sub-resources (`cull_mode = 0`, `>= 3` finite vertices).
+- **Atomic Persistence (`src/domain/schemas.ts`, `src/db/database.ts`):** Stores `SpriteLightingBakeSchema` metadata and SHA-256 deduplicated `_n.png` / `_e.png` blobs via `NibgridRepository.commitSpriteLightingBake()` while extending `findOrphanBlobIds()` so replaced lighting blobs are garbage-collected with zero orphans.
+
+## 106. Interactive WebGL2 Lighting Baker & Entity Sync UX (Milestone 44C)
+
+- **`LightingBakerPanel.tsx` & UI Integration (`src/ui/lighting/LightingBakerPanel.tsx`, `src/ui/inspector/PostProcessInspector.tsx`, `src/ui/entities/EntityHubView.tsx`, `src/ui/command/CommandPalette.tsx`, `src/store/useAppStore.ts`):** Renders an interactive draggable `PointLight2D` stage in WebGL2 (with transparent 2D Canvas CPU fallback and full GL resource disposal on unmount), 5-channel toggles (`Lit Preview`, `Diffuse`, `Normal Map (_n)`, `Emission (_e)`, `Occluder Hull`), `ArtBible` emissive swatches, and 1-click **Bake & Attach to Asset** committing `_n.png`, `_e.png`, and `_canvas.tres` metadata atomically into Dexie for M25 `res://` sync.

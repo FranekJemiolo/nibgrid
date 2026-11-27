@@ -39,6 +39,7 @@ import {
   type SpriteNode,
   type VfxFlipbookConfig,
 } from '../domain/schemas';
+import { type EmissionBakeConfig, type NormalBakeConfig } from '../processing/normalEmissionBaker';
 import { sha256Bytes } from '../processing/hash';
 import {
   StoredQaReportRecordSchema,
@@ -572,6 +573,88 @@ export class NibgridRepository {
     );
   }
 
+  /**
+   * Atomically persists baked M44 `_n.png` (and optional `_e.png`) blobs + lighting metadata
+   * onto `SpriteNode.lightingBake` with SHA-256 deduplication and zero-orphan cleanup.
+   */
+  async commitSpriteLightingBake(
+    nodeId: string,
+    opts: {
+      readonly normalPngBlob: Blob;
+      readonly emissionPngBlob?: Blob | null;
+      readonly normalConfig: NormalBakeConfig;
+      readonly emissionConfig: EmissionBakeConfig;
+      readonly emissivePixelCount: number;
+      readonly occluderVertexCount: number;
+    },
+  ): Promise<SpriteNode> {
+    const normalBytes = new Uint8Array(await opts.normalPngBlob.arrayBuffer());
+    const normalSha = await sha256Bytes(normalBytes);
+    const emissionBytes = opts.emissionPngBlob
+      ? new Uint8Array(await opts.emissionPngBlob.arrayBuffer())
+      : null;
+    const emissionSha = emissionBytes ? await sha256Bytes(emissionBytes) : null;
+
+    return this.database.transaction(
+      'rw',
+      [
+        this.database.blobs,
+        this.database.spriteNodes,
+        this.database.projects,
+        this.database.audioAssets,
+        this.database.vaultItems,
+        this.database.agentCheckpoints,
+      ],
+      async () => {
+        const existingNode = await this.database.spriteNodes.get(nodeId);
+        if (!existingNode) {
+          throw new Error(`SpriteNode "${nodeId}" not found.`);
+        }
+
+        const ensureBlob = async (bytes: Uint8Array, sha256: string): Promise<string> => {
+          const existing = await this.database.blobs.where('sha256').equals(sha256).first();
+          if (existing) return existing.id;
+          const copy = new Uint8Array(bytes.byteLength);
+          copy.set(bytes);
+          const rec = BlobRecordSchema.parse({
+            id: createId(),
+            mimeType: 'image/png',
+            bytes: new Blob([copy.buffer], { type: 'image/png' }),
+            sha256,
+            createdAt: nowIso(),
+          });
+          await this.database.blobs.put(rec);
+          return rec.id;
+        };
+
+        const normalBlobId = await ensureBlob(normalBytes, normalSha);
+        const emissionBlobId =
+          emissionBytes && emissionSha ? await ensureBlob(emissionBytes, emissionSha) : undefined;
+
+        const nextNode = SpriteNodeSchema.parse({
+          ...existingNode,
+          lightingBake: {
+            normalBlobId,
+            ...(emissionBlobId ? { emissionBlobId } : {}),
+            normalConfig: opts.normalConfig,
+            emissionConfig: opts.emissionConfig,
+            emissivePixelCount: opts.emissivePixelCount,
+            occluderVertexCount: opts.occluderVertexCount,
+            bakedAt: nowIso(),
+          },
+        });
+
+        await this.database.spriteNodes.put(nextNode);
+        await this.database.projects
+          .where('id')
+          .equals(nextNode.projectId)
+          .modify({ updatedAt: nowIso() });
+        await this.cleanupOrphanedBlobsInTx();
+        return nextNode;
+      },
+    );
+  }
+
   async listAudioAssets(projectId: string): Promise<AudioAsset[]> {
     const rows = await this.database.audioAssets.where('projectId').equals(projectId).toArray();
     return rows
@@ -1077,6 +1160,12 @@ export async function findOrphanBlobIds(database: NibgridDatabase = db): Promise
     }
     if (node.processedBlobId) {
       referencedBlobIds.add(node.processedBlobId);
+    }
+    if (node.lightingBake?.normalBlobId) {
+      referencedBlobIds.add(node.lightingBake.normalBlobId);
+    }
+    if (node.lightingBake?.emissionBlobId) {
+      referencedBlobIds.add(node.lightingBake.emissionBlobId);
     }
     if (node.parallaxScene?.masterKeyframeBlobId) {
       referencedBlobIds.add(node.parallaxScene.masterKeyframeBlobId);

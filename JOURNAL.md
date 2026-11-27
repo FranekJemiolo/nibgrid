@@ -756,3 +756,18 @@
 ## Pre-Release Checklist & Automated Post-Deploy Smoke Gate (`scripts/smoke-release.mjs`)
 
 - **Smoke Gate & Release Workflow (`scripts/smoke-release.mjs`, `.github/workflows/release.yml`, `package.json`, `docs/RELEASING.md`, `docs/ARCHITECTURE.md`):** Added Playwright smoke verifier (`npm run smoke:release`) testing `install.sh` (`sh -n`), `install.ps1`, `manifest.webmanifest`, Service Worker offline reload, `InstallDesktopModal`, and zero console/page errors, plus exposed `deploy-pages.outputs.page_url` and added the 3-attempt CDN-retry `smoke-pages` job to `release.yml`.
+
+## Milestone 44A: Pure-TS Normal Map & Emission Mask Baker (`normalEmissionBaker.ts`)
+
+- **Core Pipeline (`src/processing/normalEmissionBaker.ts`, `docs/ARCHITECTURE.md`):** Implemented Zod config schemas (`NormalBakeConfigSchema`, `EmissionBakeConfigSchema`), height-field derivation (`luminance` / `alpha-bevel` / `hybrid`), 3×3 Sobel tangent-space baking (`bakeNormalMapFromRgba()`), neutral `(128, 128, 255, 0)` alpha-zero hygiene, and swatch/luminance emission extraction (`bakeEmissionMaskFromRgba()`).
+- **Verification (`tests/unit/m44a-normal-emission.test.ts`):** Verified exact neutral interior normals on 16×16 solids, unit vector magnitude bounds (`0.98 <= ||N|| <= 1.02`), `invertY` G-channel flip, transparent pixel `(128, 128, 255, 0)` encoding, and isolated `#00ffcc` emission extraction.
+
+## Milestone 44B: Godot 4 `CanvasTexture`, Normal `.import` & `LightOccluder2D` Exporter (`godotLightingExporter.ts`)
+
+- **Exporter & Atomic Persistence (`src/export/godotLightingExporter.ts`, `src/export/godotPrefabAssembler.ts`, `src/sync/fsaaSyncEngine.ts`, `src/domain/schemas.ts`, `src/db/database.ts`, `docs/ARCHITECTURE.md`):** Implemented `exportCanvasTextureTres()`, `exportNormalMapImportFile()` (`compress/normal_map=1`), `exportLightOccluderSubResource()`, atomic `commitSpriteLightingBake()`, orphan tracking for `lightingBake` blobs, and M25 sync emission of `*_n.png`, `*_n.png.import`, `*_e.png`, and `*_canvas.tres`.
+- **Verification (`tests/unit/m44b-godot-lighting.test.ts`):** Verified `load_steps` & `texture_filter`, `compress/normal_map=1`, RDP `OccluderPolygon2D` finite vertices, 0-orphan Dexie replacement, and M25 sync file output.
+
+## Milestone 44C: Interactive WebGL2 `LightingBakerPanel.tsx` & E2E Flow
+
+- **WebGL2 Lighting Studio & Navigation (`src/ui/lighting/LightingBakerPanel.tsx`, `src/ui/entities/EntityHubView.tsx`, `src/ui/inspector/PostProcessInspector.tsx`, `src/ui/command/CommandPalette.tsx`, `src/store/useAppStore.ts`, `docs/ARCHITECTURE.md`):** Built draggable `PointLight2D` WebGL2/CPU preview, 5-channel switcher (`lit`/`diffuse`/`normal`/`emission`/`occluder`), ArtBible emissive swatch extractor, and atomic **Bake & Attach to Asset** persisted to Dexie for M25 FSAA sync.
+- **Verification (`tests/e2e/m44c-lighting-e2e.spec.ts`):** Verified live pointer light drag, normal strength adjustment, `_n.png`/`_n.png.import`/`_canvas.tres` FSAA sync, persistence across `page.reload()`, zero `pageerror`/`console.error`, and zero orphan blobs.
