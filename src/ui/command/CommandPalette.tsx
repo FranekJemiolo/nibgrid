@@ -21,10 +21,12 @@ export function CommandPalette({ open, onOpenChange }: CommandPaletteProps) {
     spriteNodes,
     audioAssets,
     entities,
+    composerOpen,
     navigate,
     setVaultOpen,
     setP2pOpen,
     setAutopilotOpen,
+    setComposerOpen,
   } = useAppStore();
 
   const [query, setQuery] = useState('');
@@ -33,10 +35,22 @@ export function CommandPalette({ open, onOpenChange }: CommandPaletteProps) {
   const inputRef = useRef<HTMLInputElement | null>(null);
   const previousFocusRef = useRef<HTMLElement | null>(null);
 
-  // Global Cmd/Ctrl+K shortcut
+  // Global Cmd/Ctrl+Shift+P always opens palette; Cmd/Ctrl+K opens palette unless an inline canvas target has focus
   useEffect(() => {
     const handleGlobalKeyDown = (e: KeyboardEvent) => {
-      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k') {
+      const mod = e.metaKey || e.ctrlKey;
+      if (!mod) return;
+      const lower = e.key.toLowerCase();
+      if (e.shiftKey && lower === 'p') {
+        e.preventDefault();
+        onOpenChange(!open);
+        return;
+      }
+      if (!e.shiftKey && lower === 'k') {
+        const inlineTarget = document.activeElement?.closest('[data-inline-agent-target]');
+        if (inlineTarget && !open) {
+          return;
+        }
         e.preventDefault();
         onOpenChange(!open);
       }
@@ -390,6 +404,16 @@ export function CommandPalette({ open, onOpenChange }: CommandPaletteProps) {
 
     list.push(
       {
+        id: 'act-asset-composer',
+        title: 'Toggle Agentic Asset Composer (Cmd/Ctrl+L)',
+        subtitle:
+          'Multi-asset @ mentions, deterministic Studio tool calls, visual diff & checkpoints',
+        category: 'action',
+        keywords: ['composer', 'agent', 'ai', 'diff', 'checkpoint', 'mention', 'cmd+l'],
+        shortcut: '⌘L',
+        execute: () => setComposerOpen(!composerOpen),
+      },
+      {
         id: 'act-vertical-slice',
         title: 'Vertical Slice Autopilot (1-Prompt Game Slice)',
         subtitle:
@@ -489,10 +513,12 @@ export function CommandPalette({ open, onOpenChange }: CommandPaletteProps) {
     spriteNodes,
     audioAssets,
     entities,
+    composerOpen,
     navigate,
     setVaultOpen,
     setP2pOpen,
     setAutopilotOpen,
+    setComposerOpen,
   ]);
 
   const ranked = useMemo(() => rankCommands(query, commands), [query, commands]);

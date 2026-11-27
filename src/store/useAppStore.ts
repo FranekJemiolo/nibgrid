@@ -11,6 +11,7 @@ import type {
   ShaderConfig,
   SpriteNode,
 } from '../domain/schemas';
+import type { AgentCheckpoint } from '../agent/stagingTransactions';
 import type { VaultItem } from '../domain/vaultSchema';
 import type { StoredRoomRecord } from '../processing/roomLayoutCore';
 import type { SliceJobRecord } from '../processing/sliceDagRunner';
@@ -177,6 +178,12 @@ export function formatHashRoute(route: ScreenRoute): string {
   return '#/';
 }
 
+export interface InlineAgentTarget {
+  readonly kind: 'sprite' | 'entity' | 'room';
+  readonly id: string;
+  readonly slug: string;
+}
+
 interface AppState {
   route: ScreenRoute;
   projects: ProjectSummary[];
@@ -186,11 +193,15 @@ interface AppState {
   entities: EntityDefinition[];
   rooms: StoredRoomRecord[];
   sliceJobs: SliceJobRecord[];
+  agentCheckpoints: AgentCheckpoint[];
   syncTarget: GodotSyncTargetRecord | null;
   vaultItems: VaultItem[];
   outgoingShareRecipe: ShareableRecipe | null;
   p2pOpen: boolean;
   autopilotOpen: boolean;
+  composerOpen: boolean;
+  inlineCommandTarget: InlineAgentTarget | null;
+  workspaceRulesText: string;
   providers: ProviderConfig[];
   selectedProviderId: string;
   studioAdherence: AdherenceLevel;
@@ -204,6 +215,9 @@ interface AppState {
   setVaultOpen: (open: boolean) => void;
   setP2pOpen: (open: boolean) => void;
   setAutopilotOpen: (open: boolean) => void;
+  setComposerOpen: (open: boolean) => void;
+  setInlineCommandTarget: (target: InlineAgentTarget | null) => void;
+  setWorkspaceRulesText: (text: string) => void;
   openShareModal: (recipe: ShareableRecipe) => void;
   closeShareModal: () => void;
   clearError: () => void;
@@ -239,6 +253,7 @@ interface AppState {
   refreshSliceJobs: (projectId: string) => Promise<void>;
   saveSliceJobRecord: (job: SliceJobRecord) => Promise<SliceJobRecord>;
   deleteSliceJobRecord: (jobId: string, projectId: string) => Promise<void>;
+  refreshAgentCheckpoints: (projectId: string) => Promise<void>;
   refreshSyncTarget: (projectId: string) => Promise<void>;
 
   refreshVaultItems: () => Promise<void>;
@@ -278,11 +293,15 @@ export const useAppStore = create<AppState>((set, get) => ({
   entities: [],
   rooms: [],
   sliceJobs: [],
+  agentCheckpoints: [],
   syncTarget: null,
   vaultItems: [],
   outgoingShareRecipe: null,
   p2pOpen: false,
   autopilotOpen: false,
+  composerOpen: false,
+  inlineCommandTarget: null,
+  workspaceRulesText: '',
   providers: [],
   selectedProviderId: OFFLINE_MOCK_PROVIDER_ID,
   studioAdherence: 'balanced',
@@ -309,15 +328,23 @@ export const useAppStore = create<AppState>((set, get) => ({
           ? await repository.getProject(initialRoute.projectId)
           : undefined;
         if (project) {
-          const [spriteNodes, audioAssets, entities, rooms, sliceJobs, syncTarget] =
-            await Promise.all([
-              repository.listSpriteNodes(project.id),
-              repository.listAudioAssets(project.id),
-              repository.listEntities(project.id),
-              repository.listRooms(project.id),
-              repository.listSliceJobs(project.id),
-              repository.getSyncTarget(project.id),
-            ]);
+          const [
+            spriteNodes,
+            audioAssets,
+            entities,
+            rooms,
+            sliceJobs,
+            agentCheckpoints,
+            syncTarget,
+          ] = await Promise.all([
+            repository.listSpriteNodes(project.id),
+            repository.listAudioAssets(project.id),
+            repository.listEntities(project.id),
+            repository.listRooms(project.id),
+            repository.listSliceJobs(project.id),
+            repository.listAgentCheckpoints(project.id),
+            repository.getSyncTarget(project.id),
+          ]);
           set({
             route: initialRoute,
             projects,
@@ -329,6 +356,7 @@ export const useAppStore = create<AppState>((set, get) => ({
             entities,
             rooms,
             sliceJobs,
+            agentCheckpoints,
             syncTarget: syncTarget ?? null,
             isLoading: false,
           });
@@ -345,6 +373,7 @@ export const useAppStore = create<AppState>((set, get) => ({
           entities: [],
           rooms: [],
           sliceJobs: [],
+          agentCheckpoints: [],
           syncTarget: null,
           isLoading: false,
         });
@@ -354,15 +383,23 @@ export const useAppStore = create<AppState>((set, get) => ({
       if (initialRoute.screen !== 'hub') {
         const project = await repository.getProject(initialRoute.projectId);
         if (project) {
-          const [spriteNodes, audioAssets, entities, rooms, sliceJobs, syncTarget] =
-            await Promise.all([
-              repository.listSpriteNodes(project.id),
-              repository.listAudioAssets(project.id),
-              repository.listEntities(project.id),
-              repository.listRooms(project.id),
-              repository.listSliceJobs(project.id),
-              repository.getSyncTarget(project.id),
-            ]);
+          const [
+            spriteNodes,
+            audioAssets,
+            entities,
+            rooms,
+            sliceJobs,
+            agentCheckpoints,
+            syncTarget,
+          ] = await Promise.all([
+            repository.listSpriteNodes(project.id),
+            repository.listAudioAssets(project.id),
+            repository.listEntities(project.id),
+            repository.listRooms(project.id),
+            repository.listSliceJobs(project.id),
+            repository.listAgentCheckpoints(project.id),
+            repository.getSyncTarget(project.id),
+          ]);
           set({
             route: initialRoute,
             projects,
@@ -374,6 +411,7 @@ export const useAppStore = create<AppState>((set, get) => ({
             entities,
             rooms,
             sliceJobs,
+            agentCheckpoints,
             syncTarget: syncTarget ?? null,
             isLoading: false,
           });
@@ -395,6 +433,7 @@ export const useAppStore = create<AppState>((set, get) => ({
         entities: [],
         rooms: [],
         sliceJobs: [],
+        agentCheckpoints: [],
         syncTarget: null,
         isLoading: false,
       });
@@ -422,13 +461,14 @@ export const useAppStore = create<AppState>((set, get) => ({
       const targetProjectId = route.projectId ?? get().activeProject?.id;
       const project = targetProjectId ? await repository.getProject(targetProjectId) : undefined;
       if (project) {
-        const [spriteNodes, audioAssets, entities, rooms, sliceJobs, syncTarget] =
+        const [spriteNodes, audioAssets, entities, rooms, sliceJobs, agentCheckpoints, syncTarget] =
           await Promise.all([
             repository.listSpriteNodes(project.id),
             repository.listAudioAssets(project.id),
             repository.listEntities(project.id),
             repository.listRooms(project.id),
             repository.listSliceJobs(project.id),
+            repository.listAgentCheckpoints(project.id),
             repository.getSyncTarget(project.id),
           ]);
         set({
@@ -441,6 +481,7 @@ export const useAppStore = create<AppState>((set, get) => ({
           entities,
           rooms,
           sliceJobs,
+          agentCheckpoints,
           syncTarget: syncTarget ?? null,
           errorMessage: null,
         });
@@ -455,6 +496,7 @@ export const useAppStore = create<AppState>((set, get) => ({
           entities: [],
           rooms: [],
           sliceJobs: [],
+          agentCheckpoints: [],
           syncTarget: null,
           errorMessage: null,
         });
@@ -473,6 +515,7 @@ export const useAppStore = create<AppState>((set, get) => ({
         entities: [],
         rooms: [],
         sliceJobs: [],
+        agentCheckpoints: [],
         syncTarget: null,
         errorMessage: null,
       });
@@ -494,6 +537,7 @@ export const useAppStore = create<AppState>((set, get) => ({
         entities: [],
         rooms: [],
         sliceJobs: [],
+        agentCheckpoints: [],
         syncTarget: null,
         errorMessage: `Project "${route.projectId}" was not found.`,
       });
@@ -502,14 +546,16 @@ export const useAppStore = create<AppState>((set, get) => ({
 
     const prevProjectId = get().activeProject?.id;
     const isSwitchingProject = prevProjectId !== project.id;
-    const [spriteNodes, audioAssets, entities, rooms, sliceJobs, syncTarget] = await Promise.all([
-      repository.listSpriteNodes(project.id),
-      repository.listAudioAssets(project.id),
-      repository.listEntities(project.id),
-      repository.listRooms(project.id),
-      repository.listSliceJobs(project.id),
-      repository.getSyncTarget(project.id),
-    ]);
+    const [spriteNodes, audioAssets, entities, rooms, sliceJobs, agentCheckpoints, syncTarget] =
+      await Promise.all([
+        repository.listSpriteNodes(project.id),
+        repository.listAudioAssets(project.id),
+        repository.listEntities(project.id),
+        repository.listRooms(project.id),
+        repository.listSliceJobs(project.id),
+        repository.listAgentCheckpoints(project.id),
+        repository.getSyncTarget(project.id),
+      ]);
     set({
       route,
       activeProject: project,
@@ -518,6 +564,7 @@ export const useAppStore = create<AppState>((set, get) => ({
       entities,
       rooms,
       sliceJobs,
+      agentCheckpoints,
       syncTarget: syncTarget ?? null,
       errorMessage: null,
       ...(isSwitchingProject ? { studioAdherence: 'balanced', studioVariantCount: 2 } : {}),
@@ -527,6 +574,9 @@ export const useAppStore = create<AppState>((set, get) => ({
   setVaultOpen: (open) => set({ vaultOpen: open }),
   setP2pOpen: (open) => set({ p2pOpen: open }),
   setAutopilotOpen: (open) => set({ autopilotOpen: open }),
+  setComposerOpen: (open) => set({ composerOpen: open }),
+  setInlineCommandTarget: (target) => set({ inlineCommandTarget: target }),
+  setWorkspaceRulesText: (text) => set({ workspaceRulesText: text }),
   openShareModal: (recipe) => set({ outgoingShareRecipe: recipe }),
   closeShareModal: () => set({ outgoingShareRecipe: null }),
   clearError: () => set({ errorMessage: null }),
@@ -560,6 +610,7 @@ export const useAppStore = create<AppState>((set, get) => ({
         entities: [],
         rooms: [],
         sliceJobs: [],
+        agentCheckpoints: [],
         syncTarget: null,
         projects,
       });
@@ -771,6 +822,11 @@ export const useAppStore = create<AppState>((set, get) => ({
     await repository.deleteSliceJob(jobId);
     const sliceJobs = await repository.listSliceJobs(projectId);
     set({ sliceJobs });
+  },
+
+  refreshAgentCheckpoints: async (projectId) => {
+    const agentCheckpoints = await repository.listAgentCheckpoints(projectId);
+    set({ agentCheckpoints });
   },
 
   refreshSyncTarget: async (projectId) => {

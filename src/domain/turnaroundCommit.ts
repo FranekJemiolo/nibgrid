@@ -158,6 +158,7 @@ export async function deleteTurnaroundDirectionGroup(
       database.audioAssets,
       database.blobs,
       database.vaultItems,
+      database.agentCheckpoints,
     ],
     async () => {
       const allNodes = await database.spriteNodes.toArray();

@@ -378,8 +378,12 @@ export function EntityHubView() {
             return (
               <div
                 key={entity.id}
+                tabIndex={0}
                 data-testid={`entity-card-${entity.slug}`}
-                className="flex flex-col justify-between gap-3 rounded-lg border border-[var(--border-hairline)] bg-[var(--bg-panel)] p-4"
+                data-inline-agent-target="entity"
+                data-inline-agent-id={entity.id}
+                data-inline-agent-slug={entity.slug}
+                className="flex flex-col justify-between gap-3 rounded-lg border border-[var(--border-hairline)] bg-[var(--bg-panel)] p-4 focus:outline-none focus:ring-1 focus:ring-amber-500/40"
               >
                 <div className="flex items-start gap-3">
                   <div className="bg-checkerboard flex h-16 w-16 shrink-0 items-center justify-center overflow-hidden rounded border border-[var(--border-hairline)]">

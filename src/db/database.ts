@@ -46,6 +46,7 @@ import {
 } from '../processing/artDirectorQaSchema';
 import { StoredRoomRecordSchema, type StoredRoomRecord } from '../processing/roomLayoutCore';
 import { SliceJobRecordSchema, type SliceJobRecord } from '../processing/sliceDagRunner';
+import { AgentCheckpointSchema, type AgentCheckpoint } from '../agent/stagingTransactions';
 
 export const OFFLINE_MOCK_PROVIDER_ID = 'offline-mock';
 export const ANTIGRAVITY_AGENT_PROVIDER_ID = 'antigravity-agent';
@@ -67,6 +68,7 @@ export class NibgridDatabase extends Dexie {
   qaReports!: Table<StoredQaReportRecord, string>;
   rooms!: Table<StoredRoomRecord, string>;
   sliceJobs!: Table<SliceJobRecord, string>;
+  agentCheckpoints!: Table<AgentCheckpoint, string>;
 
   constructor(dbName = 'nibgrid-db') {
     super(dbName);
@@ -137,6 +139,20 @@ export class NibgridDatabase extends Dexie {
       qaReports: '&projectId, sheetHash',
       rooms: '&id, projectId, slug',
       sliceJobs: '&id, projectId, status, updatedAt',
+    });
+    this.version(8).stores({
+      projects: 'id, updatedAt, name',
+      blobs: 'id, sha256, createdAt',
+      spriteNodes: 'id, projectId, parentId, [projectId+createdAt]',
+      providerConfigs: 'id, kind, updatedAt',
+      audioAssets: 'id, projectId, presetId, createdAt',
+      entities: '&id, projectId, slug',
+      syncTargets: '&projectId',
+      vaultItems: '&id, kind, name, createdAt',
+      qaReports: '&projectId, sheetHash',
+      rooms: '&id, projectId, slug',
+      sliceJobs: '&id, projectId, status, updatedAt',
+      agentCheckpoints: '&id, projectId, createdAt',
     });
   }
 }
@@ -404,6 +420,7 @@ export class NibgridRepository {
         this.database.audioAssets,
         this.database.blobs,
         this.database.vaultItems,
+        this.database.agentCheckpoints,
       ],
       async () => {
         const existing = await this.database.spriteNodes.get(validated.id);
@@ -437,6 +454,7 @@ export class NibgridRepository {
         this.database.audioAssets,
         this.database.blobs,
         this.database.vaultItems,
+        this.database.agentCheckpoints,
       ],
       async () => {
         const existing = await this.database.spriteNodes.get(nodeId);
@@ -464,6 +482,7 @@ export class NibgridRepository {
         this.database.blobs,
         this.database.vaultItems,
         this.database.qaReports,
+        this.database.agentCheckpoints,
       ],
       async () => {
         const node = await this.database.spriteNodes.get(nodeId);
@@ -502,6 +521,7 @@ export class NibgridRepository {
         this.database.projects,
         this.database.audioAssets,
         this.database.vaultItems,
+        this.database.agentCheckpoints,
       ],
       async () => {
         const existingNode = await this.database.spriteNodes.get(nodeId);
@@ -569,6 +589,7 @@ export class NibgridRepository {
         this.database.projects,
         this.database.blobs,
         this.database.vaultItems,
+        this.database.agentCheckpoints,
       ],
       async () => {
         const existing = await this.database.audioAssets.get(validated.id);
@@ -588,11 +609,14 @@ export class NibgridRepository {
   async deleteAudioAsset(assetId: string): Promise<void> {
     await this.database.transaction(
       'rw',
-      this.database.audioAssets,
-      this.database.projects,
-      this.database.spriteNodes,
-      this.database.blobs,
-      this.database.vaultItems,
+      [
+        this.database.audioAssets,
+        this.database.projects,
+        this.database.spriteNodes,
+        this.database.blobs,
+        this.database.vaultItems,
+        this.database.agentCheckpoints,
+      ],
       async () => {
         const found = await this.database.audioAssets.get(assetId);
         if (!found) return;
@@ -752,6 +776,7 @@ export class NibgridRepository {
         this.database.spriteNodes,
         this.database.audioAssets,
         this.database.blobs,
+        this.database.agentCheckpoints,
       ],
       async () => {
         const found = await this.database.vaultItems.get(id);
@@ -946,6 +971,7 @@ export class NibgridRepository {
         this.database.entities,
         this.database.rooms,
         this.database.sliceJobs,
+        this.database.agentCheckpoints,
         this.database.syncTargets,
         this.database.blobs,
         this.database.vaultItems,
@@ -957,12 +983,38 @@ export class NibgridRepository {
         await this.database.entities.where('projectId').equals(projectId).delete();
         await this.database.rooms.where('projectId').equals(projectId).delete();
         await this.database.sliceJobs.where('projectId').equals(projectId).delete();
+        await this.database.agentCheckpoints.where('projectId').equals(projectId).delete();
         await this.database.syncTargets.delete(projectId);
         await this.database.qaReports.delete(projectId);
         await this.database.projects.delete(projectId);
         await this.cleanupOrphanedBlobsInTx();
       },
     );
+  }
+
+  async listAgentCheckpoints(projectId: string): Promise<AgentCheckpoint[]> {
+    const rows = await this.database.agentCheckpoints
+      .where('projectId')
+      .equals(projectId)
+      .toArray();
+    return rows
+      .map((row) => AgentCheckpointSchema.parse(row))
+      .sort((a, b) => b.createdAt - a.createdAt);
+  }
+
+  async getAgentCheckpoint(id: string): Promise<AgentCheckpoint | undefined> {
+    const found = await this.database.agentCheckpoints.get(id);
+    return found ? AgentCheckpointSchema.parse(found) : undefined;
+  }
+
+  async saveAgentCheckpoint(record: AgentCheckpoint): Promise<AgentCheckpoint> {
+    const validated = AgentCheckpointSchema.parse(record);
+    await this.database.agentCheckpoints.put(validated);
+    return validated;
+  }
+
+  async deleteAgentCheckpoint(id: string): Promise<void> {
+    await this.database.agentCheckpoints.delete(id);
   }
 
   async getQaReport(projectId: string): Promise<StoredQaReportRecord | undefined> {
@@ -989,6 +1041,7 @@ export class NibgridRepository {
         this.database.audioAssets,
         this.database.blobs,
         this.database.vaultItems,
+        this.database.agentCheckpoints,
       ],
       async () => this.cleanupOrphanedBlobsInTx(),
     );
@@ -1056,6 +1109,13 @@ export async function findOrphanBlobIds(database: NibgridDatabase = db): Promise
     }
     if (item.previewBlobId) {
       referencedBlobIds.add(item.previewBlobId);
+    }
+  }
+
+  const allCheckpoints = await database.agentCheckpoints.toArray();
+  for (const checkpoint of allCheckpoints) {
+    for (const blobId of checkpoint.referencedBlobIds ?? []) {
+      referencedBlobIds.add(blobId);
     }
   }
 

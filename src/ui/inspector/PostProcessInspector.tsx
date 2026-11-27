@@ -132,6 +132,7 @@ import {
   inferAssetClass,
   resolveInspectorTabs,
 } from './workspaceTabs';
+import { slugifyAssetLabel } from '../../agent/contextResolver';
 import { BeforeAfterWipe } from '../primitives/BeforeAfterWipe';
 import { CanvasHud, type CanvasBackdropMode } from '../primitives/CanvasHud';
 import { ScrubInput } from '../primitives/ScrubInput';
@@ -2365,7 +2366,15 @@ export function PostProcessInspector({
               />
 
               <div
-                className="flex flex-1 items-center justify-center overflow-auto p-6 pt-14 pb-28"
+                tabIndex={0}
+                data-testid="inspector-canvas-stage"
+                data-inline-agent-target="sprite"
+                data-inline-agent-id={targetNode.id}
+                data-inline-agent-slug={slugifyAssetLabel(
+                  targetNode.generationMeta.promptDelta ||
+                    `${targetNode.kind}_${targetNode.generationMeta.seed}`,
+                )}
+                className="flex flex-1 items-center justify-center overflow-auto p-6 pt-14 pb-28 focus:outline-none focus:ring-1 focus:ring-amber-500/40"
                 onPointerLeave={() => setHoverTexel(null)}
               >
                 <BeforeAfterWipe
