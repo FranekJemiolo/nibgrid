@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { RoomLayoutBlueprintSchema, type RoomLayoutBlueprint } from '../processing/roomLayoutCore';
 import {
   AdherenceSchema,
   AnimPresetSchema,
@@ -140,6 +141,7 @@ export const AssetRecipeSchema = z.object({
   shaderConfig: ShaderConfigSchema.optional(),
   uiKitConfig: UiKitStyleConfigSchema.optional(),
   poseClip: PoseClipDefinitionSchema.optional(),
+  roomLayout: RoomLayoutBlueprintSchema.optional(),
   inpaintHistory: z.array(InpaintHistoryEntrySchema).optional(),
   manualPixelEditCount: z.number().int().nonnegative().optional(),
 });
@@ -184,6 +186,7 @@ export interface BuildAssetRecipeInput {
   shaderConfig?: ShaderConfig;
   uiKitConfig?: UiKitStyleConfigSchemaType;
   poseClip?: PoseClipDefinitionSchemaType;
+  roomLayout?: RoomLayoutBlueprint;
   inpaintHistory?: readonly InpaintHistoryEntry[];
   manualPixelEditCount?: number;
 }
@@ -289,6 +292,7 @@ export function buildAssetRecipe(input: BuildAssetRecipeInput): AssetRecipe {
       ? { uiKitConfig: input.uiKitConfig ?? node.uiKitConfig }
       : {}),
     ...((input.poseClip ?? node.poseClip) ? { poseClip: input.poseClip ?? node.poseClip } : {}),
+    ...(input.roomLayout ? { roomLayout: input.roomLayout } : {}),
     ...(() => {
       const sockList = input.sockets ?? node.sockets;
       return sockList && sockList.length > 0 ? { sockets: [...sockList] } : {};

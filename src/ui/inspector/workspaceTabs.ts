@@ -69,6 +69,12 @@ export const INSPECTOR_TAB_META: Record<InspectorTab, InspectorTabMeta> = {
     shortLabel: 'Parallax',
     testId: 'inspector-tab-parallax',
   },
+  room: {
+    id: 'room',
+    label: 'Room & Encounter Prototyper',
+    shortLabel: 'Room Builder',
+    testId: 'inspector-tab-room',
+  },
   bmfont: {
     id: 'bmfont',
     label: 'Bitmap Font',
@@ -117,6 +123,7 @@ export const ALL_INSPECTOR_TABS: readonly InspectorTab[] = [
   'tile-slice',
   'autotile',
   'parallax',
+  'room',
   'bmfont',
   'uikit',
   'palette-lut',
@@ -153,7 +160,15 @@ export function resolveInspectorTabs(
       primary = ['postprocess', 'normal', 'sockets', 'collider', 'palette-lut', 'sandbox'];
       break;
     case 'tile':
-      primary = ['postprocess', 'tile-slice', 'autotile', 'parallax', 'normal', 'palette-lut'];
+      primary = [
+        'postprocess',
+        'tile-slice',
+        'autotile',
+        'parallax',
+        'room',
+        'normal',
+        'palette-lut',
+      ];
       break;
     case 'ui-panel':
       primary = ['postprocess', 'tile-slice', 'bmfont', 'uikit', 'palette-lut'];

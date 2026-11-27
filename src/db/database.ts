@@ -44,6 +44,7 @@ import {
   StoredQaReportRecordSchema,
   type StoredQaReportRecord,
 } from '../processing/artDirectorQaSchema';
+import { StoredRoomRecordSchema, type StoredRoomRecord } from '../processing/roomLayoutCore';
 
 export const OFFLINE_MOCK_PROVIDER_ID = 'offline-mock';
 export const ANTIGRAVITY_AGENT_PROVIDER_ID = 'antigravity-agent';
@@ -63,6 +64,7 @@ export class NibgridDatabase extends Dexie {
   syncTargets!: Table<GodotSyncTargetRecord, string>;
   vaultItems!: Table<VaultItem, string>;
   qaReports!: Table<StoredQaReportRecord, string>;
+  rooms!: Table<StoredRoomRecord, string>;
 
   constructor(dbName = 'nibgrid-db') {
     super(dbName);
@@ -108,6 +110,18 @@ export class NibgridDatabase extends Dexie {
       syncTargets: '&projectId',
       vaultItems: '&id, kind, name, createdAt',
       qaReports: '&projectId, sheetHash',
+    });
+    this.version(6).stores({
+      projects: 'id, updatedAt, name',
+      blobs: 'id, sha256, createdAt',
+      spriteNodes: 'id, projectId, parentId, [projectId+createdAt]',
+      providerConfigs: 'id, kind, updatedAt',
+      audioAssets: 'id, projectId, presetId, createdAt',
+      entities: '&id, projectId, slug',
+      syncTargets: '&projectId',
+      vaultItems: '&id, kind, name, createdAt',
+      qaReports: '&projectId, sheetHash',
+      rooms: '&id, projectId, slug',
     });
   }
 }
@@ -600,6 +614,33 @@ export class NibgridRepository {
     await this.database.entities.delete(entityId);
   }
 
+  async listRooms(projectId: string): Promise<StoredRoomRecord[]> {
+    const rows = await this.database.rooms.where('projectId').equals(projectId).toArray();
+    return rows
+      .map((row) => StoredRoomRecordSchema.parse(row))
+      .sort((a, b) => b.updatedAt - a.updatedAt);
+  }
+
+  async saveRoom(room: StoredRoomRecord): Promise<StoredRoomRecord> {
+    const validated = StoredRoomRecordSchema.parse(room);
+    await this.database.transaction(
+      'rw',
+      [this.database.rooms, this.database.projects],
+      async () => {
+        await this.database.rooms.put(validated);
+        await this.database.projects
+          .where('id')
+          .equals(validated.projectId)
+          .modify({ updatedAt: nowIso() });
+      },
+    );
+    return validated;
+  }
+
+  async deleteRoom(roomId: string): Promise<void> {
+    await this.database.rooms.delete(roomId);
+  }
+
   async getSyncTarget(projectId: string): Promise<GodotSyncTargetRecord | undefined> {
     const found = await this.database.syncTargets.get(projectId);
     if (!found) return undefined;
@@ -856,6 +897,7 @@ export class NibgridRepository {
         this.database.spriteNodes,
         this.database.audioAssets,
         this.database.entities,
+        this.database.rooms,
         this.database.syncTargets,
         this.database.blobs,
         this.database.vaultItems,
@@ -865,6 +907,7 @@ export class NibgridRepository {
         await this.database.spriteNodes.where('projectId').equals(projectId).delete();
         await this.database.audioAssets.where('projectId').equals(projectId).delete();
         await this.database.entities.where('projectId').equals(projectId).delete();
+        await this.database.rooms.where('projectId').equals(projectId).delete();
         await this.database.syncTargets.delete(projectId);
         await this.database.qaReports.delete(projectId);
         await this.database.projects.delete(projectId);

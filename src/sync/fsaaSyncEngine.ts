@@ -1,6 +1,7 @@
 import { zipSync } from 'fflate';
 import { NibgridRepository, db, type NibgridDatabase } from '../db/database';
 import {
+  normalizeResSubpath,
   sanitizeEntitySlug,
   type EntityDefinition,
   type FileSystemDirectoryHandleLike,
@@ -15,10 +16,12 @@ import {
   type EntityAssemblySpriteFile,
   type VirtualSyncFile,
 } from '../export/godotPrefabAssembler';
+import { assembleGodotRoomFiles } from '../export/godotRoomExporter';
 import { assembleGodotUiKitFiles, bakeBitmapFontFromConfig } from '../export/godotThemeExporter';
 import { toAssetSlug, triggerBlobDownload } from '../export/zipPackager';
 import { bakeNormalMapCpu } from '../processing/distanceField';
 import { decodePngBytesToRgba, encodeRgbaToPngBytes } from '../processing/png';
+import { sanitizeRoomSlug, type StoredRoomRecord } from '../processing/roomLayoutCore';
 import { bakeProceduralUiKit } from '../processing/uiKitCore';
 import { computeSyncDiff, virtualFileToBytes, type SyncDiffPlan } from './syncDiff';
 
@@ -369,8 +372,8 @@ export async function collectEntitySyncFiles(
 }
 
 /**
- * Aggregates deterministic Godot 4 virtual files across every `EntityDefinition` and
- * saved M33 `uiKitConfig` node in a project.
+ * Aggregates deterministic Godot 4 virtual files across every `EntityDefinition`,
+ * saved M33 `uiKitConfig` node, and saved M35 `StoredRoomRecord` in a project.
  */
 export async function collectProjectGodotSyncFiles(
   database: NibgridDatabase,
@@ -378,9 +381,14 @@ export async function collectProjectGodotSyncFiles(
   entities: readonly EntityDefinition[],
   spriteNodes: readonly SpriteNode[],
   audioAssets: readonly AudioAsset[],
+  rooms?: readonly StoredRoomRecord[],
 ): Promise<readonly VirtualSyncFile[]> {
   const deduped = new Map<string, VirtualSyncFile>();
+  const entityResPaths: Record<string, string> = {};
   for (const entity of entities) {
+    const slug = sanitizeEntitySlug(entity.slug || entity.displayName);
+    const cleanSubpath = normalizeResSubpath(entity.resSubpath);
+    entityResPaths[slug] = `res://${cleanSubpath}/${slug}/${slug}.tscn`;
     const entityFiles = await collectEntitySyncFiles(
       database,
       project,
@@ -444,6 +452,30 @@ export async function collectProjectGodotSyncFiles(
         : {}),
     });
     for (const file of uiFiles) {
+      deduped.set(file.relativePath, file);
+    }
+  }
+
+  const effectiveRooms = rooms ?? (await new NibgridRepository(database).listRooms(project.id));
+  for (const room of effectiveRooms) {
+    const tileNode = room.tileSetNodeId ? nodeById.get(room.tileSetNodeId) : undefined;
+    const parallaxNode = room.parallaxNodeId ? nodeById.get(room.parallaxNodeId) : undefined;
+    const tileSetResPath = tileNode
+      ? `res://tilesets/${sanitizeRoomSlug(tileNode.generationMeta.promptDelta || tileNode.id)}_tileset.tres`
+      : undefined;
+    const parallaxResPath = parallaxNode
+      ? `res://parallax/${sanitizeRoomSlug(parallaxNode.generationMeta.promptDelta || parallaxNode.id)}_parallax.tscn`
+      : undefined;
+
+    const roomFiles = assembleGodotRoomFiles({
+      blueprint: room.blueprint,
+      tileSetMode: room.tileSetMode,
+      ...(tileSetResPath ? { tileSetResPath } : {}),
+      ...(parallaxResPath ? { parallaxResPath } : {}),
+      entityResPaths,
+      isPixelArt,
+    });
+    for (const file of roomFiles) {
       deduped.set(file.relativePath, file);
     }
   }

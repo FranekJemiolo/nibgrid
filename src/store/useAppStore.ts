@@ -12,6 +12,7 @@ import type {
   SpriteNode,
 } from '../domain/schemas';
 import type { VaultItem } from '../domain/vaultSchema';
+import type { StoredRoomRecord } from '../processing/roomLayoutCore';
 import type { PixelTool } from '../processing/pixelEditorCore';
 import type { ShareableRecipe } from '../share/recipeUrlCodec';
 
@@ -25,6 +26,7 @@ export type InspectorTab =
   | 'tile-slice'
   | 'autotile'
   | 'parallax'
+  | 'room'
   | 'bmfont'
   | 'uikit'
   | 'palette-lut'
@@ -69,6 +71,7 @@ const VALID_INSPECTOR_TABS = new Set<InspectorTab>([
   'tile-slice',
   'autotile',
   'parallax',
+  'room',
   'bmfont',
   'uikit',
   'palette-lut',
@@ -171,6 +174,7 @@ interface AppState {
   spriteNodes: SpriteNode[];
   audioAssets: AudioAsset[];
   entities: EntityDefinition[];
+  rooms: StoredRoomRecord[];
   syncTarget: GodotSyncTargetRecord | null;
   vaultItems: VaultItem[];
   outgoingShareRecipe: ShareableRecipe | null;
@@ -216,6 +220,9 @@ interface AppState {
   refreshEntities: (projectId: string) => Promise<void>;
   saveEntityRecord: (entity: EntityDefinition) => Promise<EntityDefinition>;
   deleteEntityRecord: (entityId: string, projectId: string) => Promise<void>;
+  refreshRooms: (projectId: string) => Promise<void>;
+  saveRoomRecord: (room: StoredRoomRecord) => Promise<StoredRoomRecord>;
+  deleteRoomRecord: (roomId: string, projectId: string) => Promise<void>;
   refreshSyncTarget: (projectId: string) => Promise<void>;
 
   refreshVaultItems: () => Promise<void>;
@@ -253,6 +260,7 @@ export const useAppStore = create<AppState>((set, get) => ({
   spriteNodes: [],
   audioAssets: [],
   entities: [],
+  rooms: [],
   syncTarget: null,
   vaultItems: [],
   outgoingShareRecipe: null,
@@ -283,10 +291,11 @@ export const useAppStore = create<AppState>((set, get) => ({
           ? await repository.getProject(initialRoute.projectId)
           : undefined;
         if (project) {
-          const [spriteNodes, audioAssets, entities, syncTarget] = await Promise.all([
+          const [spriteNodes, audioAssets, entities, rooms, syncTarget] = await Promise.all([
             repository.listSpriteNodes(project.id),
             repository.listAudioAssets(project.id),
             repository.listEntities(project.id),
+            repository.listRooms(project.id),
             repository.getSyncTarget(project.id),
           ]);
           set({
@@ -298,6 +307,7 @@ export const useAppStore = create<AppState>((set, get) => ({
             spriteNodes,
             audioAssets,
             entities,
+            rooms,
             syncTarget: syncTarget ?? null,
             isLoading: false,
           });
@@ -312,6 +322,7 @@ export const useAppStore = create<AppState>((set, get) => ({
           spriteNodes: [],
           audioAssets: [],
           entities: [],
+          rooms: [],
           syncTarget: null,
           isLoading: false,
         });
@@ -321,10 +332,11 @@ export const useAppStore = create<AppState>((set, get) => ({
       if (initialRoute.screen !== 'hub') {
         const project = await repository.getProject(initialRoute.projectId);
         if (project) {
-          const [spriteNodes, audioAssets, entities, syncTarget] = await Promise.all([
+          const [spriteNodes, audioAssets, entities, rooms, syncTarget] = await Promise.all([
             repository.listSpriteNodes(project.id),
             repository.listAudioAssets(project.id),
             repository.listEntities(project.id),
+            repository.listRooms(project.id),
             repository.getSyncTarget(project.id),
           ]);
           set({
@@ -336,6 +348,7 @@ export const useAppStore = create<AppState>((set, get) => ({
             spriteNodes,
             audioAssets,
             entities,
+            rooms,
             syncTarget: syncTarget ?? null,
             isLoading: false,
           });
@@ -355,6 +368,7 @@ export const useAppStore = create<AppState>((set, get) => ({
         spriteNodes: [],
         audioAssets: [],
         entities: [],
+        rooms: [],
         syncTarget: null,
         isLoading: false,
       });
@@ -382,10 +396,11 @@ export const useAppStore = create<AppState>((set, get) => ({
       const targetProjectId = route.projectId ?? get().activeProject?.id;
       const project = targetProjectId ? await repository.getProject(targetProjectId) : undefined;
       if (project) {
-        const [spriteNodes, audioAssets, entities, syncTarget] = await Promise.all([
+        const [spriteNodes, audioAssets, entities, rooms, syncTarget] = await Promise.all([
           repository.listSpriteNodes(project.id),
           repository.listAudioAssets(project.id),
           repository.listEntities(project.id),
+          repository.listRooms(project.id),
           repository.getSyncTarget(project.id),
         ]);
         set({
@@ -396,6 +411,7 @@ export const useAppStore = create<AppState>((set, get) => ({
           spriteNodes,
           audioAssets,
           entities,
+          rooms,
           syncTarget: syncTarget ?? null,
           errorMessage: null,
         });
@@ -408,6 +424,7 @@ export const useAppStore = create<AppState>((set, get) => ({
           spriteNodes: [],
           audioAssets: [],
           entities: [],
+          rooms: [],
           syncTarget: null,
           errorMessage: null,
         });
@@ -424,6 +441,7 @@ export const useAppStore = create<AppState>((set, get) => ({
         spriteNodes: [],
         audioAssets: [],
         entities: [],
+        rooms: [],
         syncTarget: null,
         errorMessage: null,
       });
@@ -443,6 +461,7 @@ export const useAppStore = create<AppState>((set, get) => ({
         spriteNodes: [],
         audioAssets: [],
         entities: [],
+        rooms: [],
         syncTarget: null,
         errorMessage: `Project "${route.projectId}" was not found.`,
       });
@@ -451,10 +470,11 @@ export const useAppStore = create<AppState>((set, get) => ({
 
     const prevProjectId = get().activeProject?.id;
     const isSwitchingProject = prevProjectId !== project.id;
-    const [spriteNodes, audioAssets, entities, syncTarget] = await Promise.all([
+    const [spriteNodes, audioAssets, entities, rooms, syncTarget] = await Promise.all([
       repository.listSpriteNodes(project.id),
       repository.listAudioAssets(project.id),
       repository.listEntities(project.id),
+      repository.listRooms(project.id),
       repository.getSyncTarget(project.id),
     ]);
     set({
@@ -463,6 +483,7 @@ export const useAppStore = create<AppState>((set, get) => ({
       spriteNodes,
       audioAssets,
       entities,
+      rooms,
       syncTarget: syncTarget ?? null,
       errorMessage: null,
       ...(isSwitchingProject ? { studioAdherence: 'balanced', studioVariantCount: 2 } : {}),
@@ -502,6 +523,7 @@ export const useAppStore = create<AppState>((set, get) => ({
         spriteNodes: [],
         audioAssets: [],
         entities: [],
+        rooms: [],
         syncTarget: null,
         projects,
       });
@@ -677,6 +699,24 @@ export const useAppStore = create<AppState>((set, get) => ({
     await repository.deleteEntity(entityId);
     const entities = await repository.listEntities(projectId);
     set({ entities });
+  },
+
+  refreshRooms: async (projectId) => {
+    const rooms = await repository.listRooms(projectId);
+    set({ rooms });
+  },
+
+  saveRoomRecord: async (room) => {
+    const saved = await repository.saveRoom(room);
+    const rooms = await repository.listRooms(saved.projectId);
+    set({ rooms });
+    return saved;
+  },
+
+  deleteRoomRecord: async (roomId, projectId) => {
+    await repository.deleteRoom(roomId);
+    const rooms = await repository.listRooms(projectId);
+    set({ rooms });
   },
 
   refreshSyncTarget: async (projectId) => {
