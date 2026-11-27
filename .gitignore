@@ -7,4 +7,6 @@ coverage/
 *.tsbuildinfo
 __pycache__/
 *.py[cod]
+packages/*/dist/
+desktop/stage/
 

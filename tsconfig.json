@@ -24,6 +24,8 @@
     "tests",
     "packages/*/src",
     "packages/*/test",
+    "packages/*/scripts",
+    "packages/vscode-extension/vite.config.ts",
     "desktop/scripts",
     "vite.config.ts",
     "vitest.config.ts",

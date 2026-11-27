@@ -12,7 +12,7 @@
     "AI",
     "Visualization"
   ],
-  "main": "./src/extension.ts",
+  "main": "./dist/extension.js",
   "activationEvents": [
     "onStartupFinished",
     "onCustomEditor:nibgrid.spriteRecipe",
@@ -83,6 +83,10 @@
       {
         "command": "nibgrid.openStudio",
         "title": "Nibgrid: Open Asset Foundry & Composer"
+      },
+      {
+        "command": "nibgrid.syncGodot",
+        "title": "Nibgrid: Sync Diff to Godot res://"
       },
       {
         "command": "nibgrid.runGodotSlice",

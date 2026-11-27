@@ -1,9 +1,60 @@
 export type HostKind = 'browser' | 'vscode-webview' | 'nibgrid-desktop';
 
-export interface HostSecretsAdapter {
+export interface HostCapabilities {
+  readonly supportsDirectDiskSync: boolean;
+  readonly supportsNativeKeychain: boolean;
+  readonly supportsLocalProcessLaunch: boolean;
+  readonly supportsMcpServer: boolean;
+}
+
+export interface HostFileEntry {
+  readonly path: string;
+  readonly kind: 'file' | 'directory';
+  readonly sizeBytes?: number;
+}
+
+export interface HostFsAdapter {
+  readonly readFile: (relativePath: string) => Promise<Uint8Array>;
+  readonly readText: (relativePath: string) => Promise<string>;
+  readonly writeFile: (relativePath: string, data: Uint8Array | string) => Promise<void>;
+  readonly listFiles: (dirPath?: string) => Promise<readonly HostFileEntry[]>;
+}
+
+export interface HostSecretStore {
   readonly getSecret: (key: string) => Promise<string | null>;
   readonly setSecret: (key: string, value: string) => Promise<void>;
   readonly deleteSecret: (key: string) => Promise<void>;
+}
+
+/**
+ * Backward-compatible alias for M40 host bridge callers.
+ */
+export type HostSecretsAdapter = HostSecretStore;
+
+export interface HostSyncFile {
+  readonly relativePath: string;
+  readonly data: Uint8Array | string;
+}
+
+export interface HostSyncResult {
+  readonly ok: boolean;
+  readonly writtenCount: number;
+  readonly skippedCount: number;
+  readonly targetLabel: string;
+  readonly writtenPaths: readonly string[];
+  readonly message?: string;
+}
+
+export interface HostSyncAdapter {
+  readonly syncResFiles: (
+    projectId: string,
+    files: readonly HostSyncFile[],
+  ) => Promise<HostSyncResult>;
+  readonly openEditor: (relativePath: string) => Promise<void>;
+  readonly launchGodot: (opts?: {
+    readonly workspacePath?: string;
+    readonly scenePath?: string;
+  }) => Promise<{ readonly launched: boolean; readonly pid?: number; readonly message?: string }>;
 }
 
 export interface AntigravityLinkResult {
@@ -27,163 +78,116 @@ export interface HostAntigravityBridge {
 
 export interface HostAdapter {
   readonly kind: HostKind;
-  readonly secrets: HostSecretsAdapter;
+  readonly capabilities: HostCapabilities;
+  readonly fs: HostFsAdapter;
+  readonly secrets: HostSecretStore;
+  readonly sync: HostSyncAdapter;
   readonly antigravity: HostAntigravityBridge;
   readonly notify: (level: 'info' | 'warn' | 'error', message: string) => void;
 }
 
 export interface GlobalNibgridHostBridge {
   readonly hostKind?: HostKind;
-  readonly secrets?: HostSecretsAdapter;
+  readonly capabilities?: Partial<HostCapabilities>;
+  readonly fs?: HostFsAdapter;
+  readonly secrets?: HostSecretStore;
+  readonly sync?: HostSyncAdapter;
   readonly antigravity?: HostAntigravityBridge;
+  readonly notify?: (level: 'info' | 'warn' | 'error', message: string) => void;
 }
 
-interface VscodeWebviewApiLike {
+export interface VscodeWebviewApiLike {
   postMessage: (msg: unknown) => void;
 }
 
-declare global {
-  interface Window {
-    __nibgridHostBridge?: GlobalNibgridHostBridge;
-    acquireVsCodeApi?: () => VscodeWebviewApiLike;
+/**
+ * Validates and normalizes a workspace-relative path, rejecting absolute paths,
+ * Windows drive prefixes, NUL bytes, and parent directory (`..`) traversal.
+ */
+export function assertSafeWorkspaceRelativePath(rawPath: string): string {
+  const input = String(rawPath ?? '').trim();
+  if (!input || input.includes('\0')) {
+    throw new Error('Workspace path cannot be empty or contain NUL bytes.');
   }
-}
-
-const MEMORY_SECRETS = new Map<string, string>();
-
-/**
- * Browser PWA HostAdapter backed by volatile in-memory secrets (IndexedDB handles
- * long-lived vault storage separately) and optional desktop/IDE test hooks.
- */
-export function createBrowserHostAdapter(): HostAdapter {
-  return {
-    kind: 'browser',
-    secrets: {
-      getSecret: async (key) => MEMORY_SECRETS.get(key) ?? null,
-      setSecret: async (key, value) => {
-        MEMORY_SECRETS.set(key, value);
-      },
-      deleteSecret: async (key) => {
-        MEMORY_SECRETS.delete(key);
-      },
-    },
-    antigravity: {
-      detectAntigravity: async () => {
-        if (typeof window !== 'undefined' && window.__nibgridHostBridge?.antigravity) {
-          return window.__nibgridHostBridge.antigravity.detectAntigravity();
-        }
-        return { detected: false, configDir: '~/.gemini/config' };
-      },
-      linkAntigravityMcp: async (opts) => {
-        if (typeof window !== 'undefined' && window.__nibgridHostBridge?.antigravity) {
-          return window.__nibgridHostBridge.antigravity.linkAntigravityMcp(opts);
-        }
-        const snippet = JSON.stringify(
-          {
-            mcpServers: {
-              nibgrid: {
-                command: 'node',
-                args: ['packages/vscode-extension/src/mcpToolServer.ts'],
-                env: { NIBGRID_WORKSPACE: opts.workspacePath ?? '.' },
-              },
-            },
-          },
-          null,
-          2,
-        );
-        return {
-          ok: true,
-          configPath: `${opts.configDir ?? '~/.gemini/config'}/mcp_config.json`,
-          mergedConfigJson: snippet,
-          message:
-            'Generated clean mcp_config.json entry (run inside Nibgrid Desktop / VS Code Extension to write directly to ~/.gemini/config/mcp_config.json).',
-        };
-      },
-    },
-    notify: (_level, _message) => undefined,
-  };
-}
-
-/**
- * VS Code / Standalone Desktop Webview HostAdapter delegating OS Keychain SecretStorage
- * and `~/.gemini/config/mcp_config.json` writes over typed Extension Host postMessage RPC.
- */
-export function createVscodeWebviewHostAdapter(
-  vscodeApi: VscodeWebviewApiLike,
-  kind: HostKind = 'vscode-webview',
-): HostAdapter {
-  const sendRpc = <T>(method: string, params: Record<string, unknown>): Promise<T> =>
-    new Promise((resolve, reject) => {
-      if (typeof window === 'undefined') {
-        reject(new Error('Webview RPC requires browser window context.'));
-        return;
-      }
-      const id = globalThis.crypto.randomUUID();
-      const timeout = window.setTimeout(() => {
-        window.removeEventListener('message', onMsg);
-        reject(new Error(`Extension Host RPC timed out for "${method}"`));
-      }, 15000);
-
-      const onMsg = (ev: MessageEvent<{ id?: string; result?: T; error?: string }>) => {
-        if (!ev.data || ev.data.id !== id) return;
-        window.clearTimeout(timeout);
-        window.removeEventListener('message', onMsg);
-        if (ev.data.error) {
-          reject(new Error(ev.data.error));
-        } else {
-          resolve(ev.data.result as T);
-        }
-      };
-
-      window.addEventListener('message', onMsg);
-      vscodeApi.postMessage({ id, method, params });
-    });
-
-  return {
-    kind,
-    secrets: {
-      getSecret: (key) => sendRpc<string | null>('secrets.get', { key }),
-      setSecret: (key, value) => sendRpc<void>('secrets.set', { key, value }),
-      deleteSecret: (key) => sendRpc<void>('secrets.delete', { key }),
-    },
-    antigravity: {
-      detectAntigravity: () =>
-        sendRpc<{ detected: boolean; configDir: string }>('antigravity.detect', {}),
-      linkAntigravityMcp: (opts) => sendRpc<AntigravityLinkResult>('antigravity.linkMcp', opts),
-    },
-    notify: (level, message) => {
-      vscodeApi.postMessage({
-        id: globalThis.crypto.randomUUID(),
-        method: 'ui.notify',
-        params: { level, message },
-      });
-    },
-  };
-}
-
-let cachedVscodeAdapter: HostAdapter | null = null;
-
-/**
- * Resolves the active host adapter (`__nibgridHostBridge` override -> VS Code Webview -> Browser PWA).
- */
-export function getActiveHostAdapter(): HostAdapter {
-  if (typeof window !== 'undefined' && window.__nibgridHostBridge) {
-    const base = createBrowserHostAdapter();
-    return {
-      kind: window.__nibgridHostBridge.hostKind ?? 'nibgrid-desktop',
-      secrets: window.__nibgridHostBridge.secrets ?? base.secrets,
-      antigravity: window.__nibgridHostBridge.antigravity ?? base.antigravity,
-      notify: base.notify,
-    };
+  const normalized = input.replace(/\\/g, '/');
+  if (normalized.startsWith('/') || /^[A-Za-z]:/.test(normalized)) {
+    throw new Error(`Absolute workspace path "${rawPath}" is not permitted.`);
   }
-  if (typeof window !== 'undefined' && typeof window.acquireVsCodeApi === 'function') {
-    if (!cachedVscodeAdapter) {
-      cachedVscodeAdapter = createVscodeWebviewHostAdapter(
-        window.acquireVsCodeApi(),
-        'vscode-webview',
-      );
+  const segments = normalized.split('/').filter((seg) => seg.length > 0 && seg !== '.');
+  if (segments.length === 0 || segments.some((seg) => seg === '..')) {
+    throw new Error(`Unsafe workspace relative path "${rawPath}".`);
+  }
+  return segments.join('/');
+}
+
+const SECRET_PATTERNS: readonly RegExp[] = [
+  /AIza[0-9A-Za-z_-]{6,}/g,
+  /sk-[0-9A-Za-z_-]{6,}/g,
+  /nbg_[0-9A-Za-z_-]{6,}/g,
+  /Bearer\s+[0-9A-Za-z._-]{6,}/gi,
+  /ghp_[0-9A-Za-z]{8,}/g,
+];
+
+/**
+ * Scrubs explicit secret strings and known API token prefixes from error or log messages.
+ */
+export function redactHostSecrets(input: string, secrets: readonly string[] = []): string {
+  let out = input;
+  for (const secret of secrets) {
+    const clean = secret.trim();
+    if (clean.length >= 4) {
+      out = out.split(clean).join('[REDACTED]');
     }
-    return cachedVscodeAdapter;
   }
-  return createBrowserHostAdapter();
+  for (const pattern of SECRET_PATTERNS) {
+    out = out.replace(pattern, '[REDACTED]');
+  }
+  return out;
+}
+
+const B64_ALPHABET = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/';
+
+export function encodeBytesBase64(bytes: Uint8Array): string {
+  let result = '';
+  for (let i = 0; i < bytes.length; i += 3) {
+    const b0 = bytes[i] ?? 0;
+    const b1 = bytes[i + 1] ?? 0;
+    const b2 = bytes[i + 2] ?? 0;
+    const triplet = (b0 << 16) | (b1 << 8) | b2;
+    result += B64_ALPHABET[(triplet >> 18) & 0x3f] ?? '';
+    result += B64_ALPHABET[(triplet >> 12) & 0x3f] ?? '';
+    result += i + 1 < bytes.length ? (B64_ALPHABET[(triplet >> 6) & 0x3f] ?? '') : '=';
+    result += i + 2 < bytes.length ? (B64_ALPHABET[triplet & 0x3f] ?? '') : '=';
+  }
+  return result;
+}
+
+export function decodeBytesBase64(base64: string): Uint8Array {
+  const clean = base64.replace(/\s+/g, '');
+  if (!clean) return new Uint8Array(0);
+  if (clean.length % 4 !== 0) {
+    throw new Error('Invalid base64 byte payload length.');
+  }
+  const padding = clean.endsWith('==') ? 2 : clean.endsWith('=') ? 1 : 0;
+  const out = new Uint8Array((clean.length / 4) * 3 - padding);
+  let outIdx = 0;
+
+  for (let i = 0; i < clean.length; i += 4) {
+    const c0 = B64_ALPHABET.indexOf(clean[i] ?? '');
+    const c1 = B64_ALPHABET.indexOf(clean[i + 1] ?? '');
+    const c2 = clean[i + 2] === '=' ? 0 : B64_ALPHABET.indexOf(clean[i + 2] ?? '');
+    const c3 = clean[i + 3] === '=' ? 0 : B64_ALPHABET.indexOf(clean[i + 3] ?? '');
+    if (c0 < 0 || c1 < 0 || c2 < 0 || c3 < 0) {
+      throw new Error('Invalid base64 character in payload.');
+    }
+    const triplet = (c0 << 18) | (c1 << 12) | (c2 << 6) | c3;
+    out[outIdx++] = (triplet >> 16) & 0xff;
+    if (clean[i + 2] !== '=') {
+      out[outIdx++] = (triplet >> 8) & 0xff;
+    }
+    if (clean[i + 3] !== '=') {
+      out[outIdx++] = triplet & 0xff;
+    }
+  }
+  return out;
 }

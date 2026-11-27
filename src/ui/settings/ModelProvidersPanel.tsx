@@ -20,7 +20,7 @@ import {
   type ProviderHealthStatus,
   type TaskRoutingTable,
 } from '../../../packages/model-router/src/routerCore';
-import { getActiveHostAdapter } from '../../platform/hostAdapter';
+import { getActiveHostAdapter } from '../../platform/browserHostAdapter';
 import { useAppStore } from '../../store/useAppStore';
 
 const ROUTING_STORAGE_KEY = 'nibgrid.modelRouter.v1';
