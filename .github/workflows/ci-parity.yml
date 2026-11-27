@@ -42,6 +42,11 @@ jobs:
       - name: Unit tests
         run: npm run test:unit
 
+      - name: Python loopback bridge unit tests
+        run: |
+          python3 -m unittest discover -s tests/python -v
+          python3 -m unittest tests/unit/test_nibgrid_bridge.py -v
+
       - name: Build VS Code Extension & MCP server
         run: npm run build:ext
 

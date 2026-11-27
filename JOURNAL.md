@@ -732,3 +732,8 @@
 
 - **Modal, Store & Header Entry (`src/ui/desktop/InstallDesktopModal.tsx`, `src/store/useAppStore.ts`, `src/App.tsx`, `src/ui/command/CommandPalette.tsx`):** Added **Get Desktop App** top-bar button (hidden inside Desktop/VS Code Webview hosts), `Cmd+K` command, 4 OS switcher tabs, direct GitHub Release asset download CTA with HTTP `403`/offline fallback, 1-click CLI copy (`Copied!`), and post-install Antigravity auto-link guidance.
 - **Verification (`tests/e2e/m42c-install-modal-e2e.spec.ts`):** Verified mocked `v1.2.0` release resolution across OS tabs + copy feedback, HTTP `403` rate-limit fallback with zero `pageerror`s, and desktop host hiding `nav-get-desktop-btn`.
+
+## Loopback Bridge Hardening (`nibgrid_bridge.py` PEP 723, PNA/CORS, Mock PNG/WAV & Python Suite)
+
+- **Hardened Bridge (`.agents/skills/nibgrid/scripts/nibgrid_bridge.py`, `.agents/skills/nibgrid/SKILL.md`, `docs/ARCHITECTURE.md`):** Upgraded the zero-dependency `uv`-compatible loopback server with PEP 723 metadata, strict `127.0.0.1` binding, `hmac.compare_digest` Bearer auth, `Origin` allowlisting (`--allow-origin` support), Chrome PNA `OPTIONS` headers, secret redaction (`redact_secrets`), deterministic stdlib RGBA PNG + 16-bit PCM WAV `--mock` payloads, live Gemini REST forwarding, and M10 `create_bridge_server()` compatibility.
+- **Python Test Suite & CI Wiring (`tests/python/test_nibgrid_bridge.py`, `.github/workflows/ci-parity.yml`):** Added 9 ephemeral-port HTTP contract/security tests alongside the 6 M10 bridge tests and wired both into `ci-parity.yml`.

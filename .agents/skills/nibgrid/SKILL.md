@@ -63,18 +63,20 @@ When asked to restyle existing exported assets after an Art Bible update:
 
 ### 4. Local Loopback Bridge Guardrails
 
-Start the optional loopback bridge with:
+Start the optional zero-dependency (`uv` PEP 723) loopback bridge with:
 
 ```bash
 uv run .agents/skills/nibgrid/scripts/nibgrid_bridge.py
-# Or offline smoke test mode:
+# Or deterministic offline mock mode (stdlib PNG & PCM WAV):
 uv run .agents/skills/nibgrid/scripts/nibgrid_bridge.py --mock
+# Custom port / additional Origin:
+uv run .agents/skills/nibgrid/scripts/nibgrid_bridge.py --port 4188 --allow-origin http://localhost:3000
 ```
 
-Strict security rules enforced by `scripts/nibgrid_bridge.py`:
+Strict security & protocol rules enforced by `scripts/nibgrid_bridge.py`:
 
-- Bind ONLY to `127.0.0.1` (default port `4188`).
-- Require the fresh ephemeral `Authorization: Bearer nbg_...` token printed to stdout on startup.
-- Allow only `https://franekjemiolo.github.io`, `http://localhost:*`, and `http://127.0.0.1:*` origins, returning `Access-Control-Allow-Private-Network: true` on `OPTIONS` preflights.
-- Never write API keys, OAuth tokens, or session tokens into `.nibgrid/`, `result.json`, or any tracked Git file.
+- Bind ONLY to `127.0.0.1` (`DEFAULT_PORT = 4188`).
+- Require the fresh ephemeral `Authorization: Bearer nbg_...` token printed to stdout on startup on all `POST` endpoints (`/v1/image/generate`, `/v1/image/inpaint`, `/v1/audio/generate`, `/v1/llm/json`, `/v1/vision/qa`, `/v1/generate`, `/v1/inpaint`, `/v1/critique`, `/v1/cancel/<id>`), verified via `hmac.compare_digest`.
+- Serve `GET /v1/health` unauthenticated by default in CLI mode (`status: "ok"`, `mock`, `authRequired: true`) and allow only `https://franekjemiolo.github.io`, `http://localhost:5173`, `http://127.0.0.1:5173`, `http://localhost:4173`, `http://127.0.0.1:4173` (plus explicit `--allow-origin` values), returning `Access-Control-Allow-Private-Network: true`, `Vary: Origin`, and `Cache-Control: no-store` on CORS/PNA preflights.
+- Enforce `MAX_BODY_BYTES` (`16 MiB` in CLI mode) and redact API keys/tokens via `redact_secrets()` before logging or returning upstream errors; never write API keys, OAuth tokens, or session tokens into `.nibgrid/`, `result.json`, or any tracked Git file.
 
