@@ -1,0 +1,34 @@
+{
+  "nameShort": "Nibgrid",
+  "nameLong": "Nibgrid Studio",
+  "applicationName": "nibgrid",
+  "dataFolderName": ".nibgrid-studio",
+  "licenseName": "MIT",
+  "version": "0.1.0",
+  "telemetryEnabled": false,
+  "enableTelemetry": false,
+  "crashReporterEnabled": false,
+  "extensionsGallery": {
+    "serviceUrl": "https://open-vsx.org/vscode/gallery",
+    "itemUrl": "https://open-vsx.org/vscode/item"
+  },
+  "builtInExtensions": [
+    {
+      "name": "franekjemiolo.nibgrid-studio",
+      "version": "0.1.0",
+      "localPath": "extensions/nibgrid-studio"
+    },
+    {
+      "name": "geequlim.godot-tools",
+      "version": "2.1.0",
+      "openVsx": true
+    }
+  ],
+  "configurationDefaults": {
+    "workbench.startupEditor": "none",
+    "workbench.colorTheme": "Default Dark Modern",
+    "telemetry.telemetryLevel": "off",
+    "nibgrid.defaultModelTaskProfile": "antigravity-acp",
+    "nibgrid.openAssetComposerOnLaunch": true
+  }
+}

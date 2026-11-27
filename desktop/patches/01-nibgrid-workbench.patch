@@ -1,0 +1,18 @@
+--- a/product.json
++++ b/product.json
+@@ -1,6 +1,11 @@
+ {
+-  "nameShort": "Code - OSS",
+-  "nameLong": "Code - OSS",
+-  "applicationName": "code-oss",
+-  "dataFolderName": ".vscode-oss"
++  "nameShort": "Nibgrid",
++  "nameLong": "Nibgrid Studio",
++  "applicationName": "nibgrid",
++  "dataFolderName": ".nibgrid-studio",
++  "telemetryEnabled": false,
++  "configurationDefaults": {
++    "telemetry.telemetryLevel": "off",
++    "workbench.activityBar.location": "default"
++  }
+ }

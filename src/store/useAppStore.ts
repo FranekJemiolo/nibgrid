@@ -200,6 +200,7 @@ interface AppState {
   p2pOpen: boolean;
   autopilotOpen: boolean;
   composerOpen: boolean;
+  modelSettingsOpen: boolean;
   inlineCommandTarget: InlineAgentTarget | null;
   workspaceRulesText: string;
   providers: ProviderConfig[];
@@ -216,6 +217,7 @@ interface AppState {
   setP2pOpen: (open: boolean) => void;
   setAutopilotOpen: (open: boolean) => void;
   setComposerOpen: (open: boolean) => void;
+  setModelSettingsOpen: (open: boolean) => void;
   setInlineCommandTarget: (target: InlineAgentTarget | null) => void;
   setWorkspaceRulesText: (text: string) => void;
   openShareModal: (recipe: ShareableRecipe) => void;
@@ -300,6 +302,7 @@ export const useAppStore = create<AppState>((set, get) => ({
   p2pOpen: false,
   autopilotOpen: false,
   composerOpen: false,
+  modelSettingsOpen: false,
   inlineCommandTarget: null,
   workspaceRulesText: '',
   providers: [],
@@ -575,6 +578,7 @@ export const useAppStore = create<AppState>((set, get) => ({
   setP2pOpen: (open) => set({ p2pOpen: open }),
   setAutopilotOpen: (open) => set({ autopilotOpen: open }),
   setComposerOpen: (open) => set({ composerOpen: open }),
+  setModelSettingsOpen: (open) => set({ modelSettingsOpen: open }),
   setInlineCommandTarget: (target) => set({ inlineCommandTarget: target }),
   setWorkspaceRulesText: (text) => set({ workspaceRulesText: text }),
   openShareModal: (recipe) => set({ outgoingShareRecipe: recipe }),

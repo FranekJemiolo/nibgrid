@@ -27,6 +27,7 @@ export function CommandPalette({ open, onOpenChange }: CommandPaletteProps) {
     setP2pOpen,
     setAutopilotOpen,
     setComposerOpen,
+    setModelSettingsOpen,
   } = useAppStore();
 
   const [query, setQuery] = useState('');
@@ -404,6 +405,14 @@ export function CommandPalette({ open, onOpenChange }: CommandPaletteProps) {
 
     list.push(
       {
+        id: 'act-model-router',
+        title: 'Models & Google Antigravity Auto-Linker',
+        subtitle: 'Configure ModelRouter task routing, LiteRT, Ollama, ComfyUI & Antigravity MCP',
+        category: 'action',
+        keywords: ['model', 'router', 'antigravity', 'litert', 'ollama', 'mcp', 'settings'],
+        execute: () => setModelSettingsOpen(true),
+      },
+      {
         id: 'act-asset-composer',
         title: 'Toggle Agentic Asset Composer (Cmd/Ctrl+L)',
         subtitle:
@@ -519,6 +528,7 @@ export function CommandPalette({ open, onOpenChange }: CommandPaletteProps) {
     setP2pOpen,
     setAutopilotOpen,
     setComposerOpen,
+    setModelSettingsOpen,
   ]);
 
   const ranked = useMemo(() => rankCommands(query, commands), [query, commands]);

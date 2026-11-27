@@ -1,0 +1,135 @@
+{
+  "name": "nibgrid-studio",
+  "displayName": "Nibgrid Studio",
+  "description": "Local-first 2D game asset foundry, sprite composer, shader studio, TileMapLayer prototyper, Godot 4 res:// sync, and MCP tool suite for VS Code, Cursor & Google Antigravity IDE.",
+  "version": "0.1.0",
+  "publisher": "franekjemiolo",
+  "engines": {
+    "vscode": "^1.93.0"
+  },
+  "categories": [
+    "Other",
+    "AI",
+    "Visualization"
+  ],
+  "main": "./src/extension.ts",
+  "activationEvents": [
+    "onStartupFinished",
+    "onCustomEditor:nibgrid.spriteRecipe",
+    "onCustomEditor:nibgrid.gdshader",
+    "onCustomEditor:nibgrid.roomBlueprint"
+  ],
+  "contributes": {
+    "viewsContainers": {
+      "activitybar": [
+        {
+          "id": "nibgrid-studio",
+          "title": "Nibgrid Studio",
+          "icon": "media/nibgrid-icon.svg"
+        }
+      ]
+    },
+    "views": {
+      "nibgrid-studio": [
+        {
+          "id": "nibgrid.entities",
+          "name": "Entities (M25)"
+        },
+        {
+          "id": "nibgrid.rooms",
+          "name": "Rooms (M35)"
+        },
+        {
+          "id": "nibgrid.vault",
+          "name": "Global Vault (M28)"
+        },
+        {
+          "id": "nibgrid.qa",
+          "name": "Audit & Visual QA (M17/M32)"
+        }
+      ]
+    },
+    "customEditors": [
+      {
+        "viewType": "nibgrid.spriteRecipe",
+        "displayName": "Nibgrid Sprite & Post-Process Studio",
+        "selector": [
+          {
+            "filenamePattern": "*.nibgrid.json"
+          }
+        ]
+      },
+      {
+        "viewType": "nibgrid.gdshader",
+        "displayName": "Nibgrid WebGL2 Shader Studio",
+        "selector": [
+          {
+            "filenamePattern": "*.gdshader"
+          }
+        ],
+        "priority": "option"
+      },
+      {
+        "viewType": "nibgrid.roomBlueprint",
+        "displayName": "Nibgrid TileMapLayer Room Prototyper",
+        "selector": [
+          {
+            "filenamePattern": "*.room.json"
+          }
+        ]
+      }
+    ],
+    "commands": [
+      {
+        "command": "nibgrid.openStudio",
+        "title": "Nibgrid: Open Asset Foundry & Composer"
+      },
+      {
+        "command": "nibgrid.runGodotSlice",
+        "title": "Nibgrid: Run Slice in Godot (main.tscn)"
+      },
+      {
+        "command": "nibgrid.linkAntigravity",
+        "title": "Nibgrid: Link Google Antigravity MCP"
+      }
+    ],
+    "languageModelTools": [
+      {
+        "name": "nibgrid_inpaint_sprite_region",
+        "displayName": "Inpaint Sprite Region"
+      },
+      {
+        "name": "nibgrid_repalette_sprites",
+        "displayName": "Repalette Sprites (OKLab)"
+      },
+      {
+        "name": "nibgrid_update_gdshader_uniforms",
+        "displayName": "Update Godot 4 Shader"
+      },
+      {
+        "name": "nibgrid_add_or_move_socket",
+        "displayName": "Add/Move Marker2D Socket"
+      },
+      {
+        "name": "nibgrid_recompute_colliders",
+        "displayName": "Recompute 2D Collision Hull"
+      },
+      {
+        "name": "nibgrid_generate_sfx_cue",
+        "displayName": "Generate Procedural SFX WAV"
+      },
+      {
+        "name": "nibgrid_patch_room_layout",
+        "displayName": "Patch TileMapLayer Room"
+      },
+      {
+        "name": "nibgrid_sync_godot_diff",
+        "displayName": "Sync Diff to Godot res://"
+      },
+      {
+        "name": "nibgrid_run_vertical_slice",
+        "displayName": "Run Vertical Slice Autopilot"
+      }
+    ]
+  }
+}

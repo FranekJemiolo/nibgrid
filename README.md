@@ -1,6 +1,6 @@
 # Nibgrid
 
-Local-first, zero-server Bring-Your-Own-Key / Bring-Your-Own-Model (BYOK/BYOM) Progressive Web App for turning hand-drawn sketches and vocal hums into style-locked, engine-ready 2D game sprites, 4-view turnarounds, normal maps, animations, 2D stick-figure pose-to-sprite run/attack keyframing, auto-tiles, mesh-tracked sockets, VFX flipbooks, parallax backgrounds, bitmap fonts & damage numerals, colliders, UI panels, matched Godot 4 `Theme` `.tres` UI kits, Godot 4 `.gdshader` + `ShaderMaterial` `.tres` shaders, Godot 4 `.tscn` + typed `.gd` prefabs, Godot 4.3+ `TileMapLayer` `.tscn` rooms, single-prompt Vertical Slice Autopilot `main.tscn` generation, Cursor/Antigravity-style `@`-mention Agentic Asset Composer (`Cmd+L`), inline canvas editing (`Cmd+K`) with Visual Diff & instant Dexie checkpoints, in-browser Entity Mini-Playtest Stage & live `res://` sync, surgical pixel micro-editing & region-masked AI inpainting, Vision-LLM Art Director QA reviews, reusable Global Asset Vault libraries, `.nibgrid.zip` snapshots, zero-server `#share=` URL/Pack Feeds, WebRTC P2P direct transfers, and audio.
+Local-first, zero-server Bring-Your-Own-Key / Bring-Your-Own-Model (BYOK/BYOM) Progressive Web App for turning hand-drawn sketches and vocal hums into style-locked, engine-ready 2D game sprites, 4-view turnarounds, normal maps, animations, 2D stick-figure pose-to-sprite run/attack keyframing, auto-tiles, mesh-tracked sockets, VFX flipbooks, parallax backgrounds, bitmap fonts & damage numerals, colliders, UI panels, matched Godot 4 `Theme` `.tres` UI kits, Godot 4 `.gdshader` + `ShaderMaterial` `.tres` shaders, Godot 4 `.tscn` + typed `.gd` prefabs, Godot 4.3+ `TileMapLayer` `.tscn` rooms, single-prompt Vertical Slice Autopilot `main.tscn` generation, Cursor/Antigravity-style `@`-mention Agentic Asset Composer (`Cmd+L`), inline canvas editing (`Cmd+K`) with Visual Diff & instant Dexie checkpoints, a VS Code / Cursor / Antigravity Extension & standalone Nibgrid Studio desktop recipe with pluggable `ModelRouter` (`Antigravity`, `LiteRT`, `Ollama`, `ComfyUI`, `BYOK`), in-browser Entity Mini-Playtest Stage & live `res://` sync, surgical pixel micro-editing & region-masked AI inpainting, Vision-LLM Art Director QA reviews, reusable Global Asset Vault libraries, `.nibgrid.zip` snapshots, zero-server `#share=` URL/Pack Feeds, WebRTC P2P direct transfers, and audio.
 
 **Live App (GitHub Pages):** https://franekjemiolo.github.io/nibgrid/
 
@@ -50,6 +50,7 @@ Local-first, zero-server Bring-Your-Own-Key / Bring-Your-Own-Model (BYOK/BYOM) P
   - [2.31 Feel-Test Entities in the In-Browser Mini-Playtest Stage (Entity Hub)](#231-feel-test-entities-in-the-in-browser-mini-playtest-stage-entity-hub)
   - [2.32 Generate a Playable Godot 4 Vertical Slice from One Prompt (Autopilot)](#232-generate-a-playable-godot-4-vertical-slice-from-one-prompt-autopilot)
   - [2.33 Edit Multi-Asset Projects via Agentic Asset Composer (`Cmd+L`) & Inline `Cmd+K`](#233-edit-multi-asset-projects-via-agentic-asset-composer-cmdl--inline-cmdk)
+  - [2.34 Run Standalone VS Code Desktop App & Link Google Antigravity / Local Models (`Models`)](#234-run-standalone-vs-code-desktop-app--link-google-antigravity--local-models-models)
 - [Part 3 — Engine Drop-In Integration Examples](#part-3--engine-drop-in-integration-examples)
 - [Architecture Summary](#architecture-summary)
 - [Development & Verification](#development--verification)
@@ -95,6 +96,7 @@ Local-first, zero-server Bring-Your-Own-Key / Bring-Your-Own-Model (BYOK/BYOM) P
 | In-Browser Entity Mini-Playtest Stage             | `Entities` → `▶ Playtest`                      | `$0.00 Local` (60 Hz Fixed-Timestep)         | Live WASD/Space combat feel, M16/M21 debug overlay, M27 hit-flash & synced `.gd` `@export` stats     |
 | Single-Prompt Vertical Slice Autopilot            | Header **`+ Vertical Slice`** / `Cmd/Ctrl+K`   | `$0.00` Draft or Hybrid/Full BYOK            | Complete Godot 4 slice: `main.tscn`, `levels/`, `entities/`, `tiles/`, `parallax/`, `ui/`, `#share=` |
 | Agentic Asset Composer & Inline Canvas Edits      | **`Composer`** (`Cmd/Ctrl+L`) / Canvas `Cmd+K` | `$0.00` Offline Mock or Gemini Function Call | Diff-staged M7/M14/M16/M21/M27/M31/M35 edits + instant Dexie rollback checkpoints                    |
+| Standalone Desktop IDE & Antigravity MCP Router   | **`Models`** Header / `packages/` + `desktop/` | `$0.00` Local (`LiteRT`/`Ollama`) or ACP/MCP | VSCodium-style desktop bundle, 9-tool MCP server & safe `~/.gemini/config/mcp_config.json` auto-link |
 
 ---
 
@@ -719,6 +721,8 @@ flowchart LR
 2. Move with **`WASD`** / **`Arrow Keys`**, jump with **`W`** / **`K`**, swing with **`Space`** / **`J`**, toggle the **M16 Collider / Hurtbox / Hitbox & M21 Socket Debug Overlay** with **`H`**, and reset the Target Dummy with **`R`** while watching M27 hit-flash decay, M24 pixel damage numbers, and M14/M15 WAV playback.
 3. Tune **`Move Speed`**, **`Gravity`**, **`Hitstop`**, **`Screen Shake`**, **`Knockback`**, **`Flash`**, and **`Attack Damage`** live on the right sidebar (`Side-Platformer` or `Top-Down`), then click **`Apply Stats to Entity .gd`** to write the tuned `@export` values straight into your entity's Godot 4 controller before syncing.
 
+![Entity Hub In-Browser Mini-Playtest Stage](docs/demo/30-mini-playtest-stage.png)
+
 ---
 
 ### 2.32 Generate a Playable Godot 4 Vertical Slice from One Prompt (Autopilot)
@@ -732,6 +736,8 @@ flowchart LR
 3. Inspect the generated Hero anchor (`1×` / `2×`) and locked Art Bible palette at the **Golden Reference Visual Approval Gate** (`Re-Roll Anchor` or **`Approve Style & Fan Out`**).
 4. Monitor the Dexie-persisted resumable DAG board (abort/resume safely or click any `done` stage card to jump directly into its Foundry workshop), then click **`Playtest Hero (M36)`**, **`Sync Full Slice to Godot (res://)`** (writing `main.tscn` + all folders directly to disk or `.zip`), or **`Share #share=`** to share the entire vertical slice recipe via URL fragment.
 
+![Single-Prompt Vertical Slice Autopilot DAG](docs/demo/27-vertical-slice-autopilot.png)
+
 ---
 
 ### 2.33 Edit Multi-Asset Projects via Agentic Asset Composer (`Cmd+L`) & Inline `Cmd+K`
@@ -744,6 +750,28 @@ flowchart LR
 2. Type `@` inside the Composer prompt to insert exact context mentions (`@goblin_scout`, `@hit_flash`, `@enemies`, `@art_bible`)—for example, `@goblin_scout add cape_tip socket and tint @hit_flash emerald`—then click **`Plan & Stage Visual Diff`**.
 3. Review each staged change inside the **Visual Diff** cards (`BeforeAfterWipe` for sprites, WAV audio player for SFX, side-by-side diffs for `.gdshader`/sockets/rooms), cherry-pick or click **`Accept All & Checkpoint`**, or revert any committed turn in 1 click via **`Restore`** under **Checkpoints**.
 4. For fast single-asset edits, focus any sprite stage in **Screen 4A** (or an Entity card in **Entity Hub**) and press **`Cmd/Ctrl+K`** to open the pre-bound **Inline Edit** bar (press `Escape` to dismiss or `Cmd/Ctrl+Shift+P` for global command search).
+
+![Agentic Asset Composer with @ Mentions and Before/After Diff](docs/demo/28-agentic-asset-composer.png)
+
+---
+
+### 2.34 Run Standalone VS Code Desktop App & Link Google Antigravity / Local Models (`Models`)
+
+**When to use it:** You want Nibgrid Studio installed locally as a VS Code / Cursor / Antigravity-compatible workbench (`packages/vscode-extension` + `desktop/`) where clicking `.nibgrid.json`, `.gdshader`, or `.room.json` opens Nibgrid's visual editors, Antigravity IDE can invoke Nibgrid's 9 MCP tools (`run_vertical_slice`, M38 tools), and tasks route across Antigravity ACP/MCP, on-device LiteRT (`.litertlm`), Ollama/LM Studio, ComfyUI, or Cloud Keychain with automatic `$0.00` fallback.
+
+**Click-by-Click:**
+
+1. Click **`Models`** in the top header (or invoke `Models & Google Antigravity Auto-Linker` via **`Cmd/Ctrl+Shift+P`**).
+2. Click **`Ping Providers`** to inspect live backend availability (`Google Antigravity ACP/MCP`, `On-Device LiteRT`, `Ollama / LM Studio`, `Local ComfyUI`, `Gemini Cloud BYOK`, and `Offline Procedural / Mock`).
+3. Assign per-task primary routes under **Per-Task Model Routing & Automatic Fallback** (`Planning & Asset Composer`, `Sprite & Masked Inpainting`, `Art Director Vision QA`, and `Game Audio`)—unreachable backends fall back cleanly to **`Offline Procedural / Mock ($0.00)`** with zero errors.
+4. Click **`Link Google Antigravity`** to safely back up (`mcp_config.json.bak.<timestamp>`) and merge Nibgrid Studio's secret-free 9-tool MCP entry into `~/.gemini/config/mcp_config.json`.
+5. To stage and verify the standalone VSCodium-style desktop bundle locally:
+   ```bash
+   node --experimental-strip-types desktop/scripts/build-desktop.ts --stage-dir desktop/stage
+   npm run smoke:desktop
+   ```
+
+![Pluggable ModelRouter and 1-Click Google Antigravity MCP Auto-Linker](docs/demo/29-models-and-antigravity-linker.png)
 
 ---
 
@@ -918,6 +946,7 @@ const pop = new BitmapText({
 - **In-Browser Mini-Playtest Stage (Entity Hub):** Run a deterministic zero-DOM 60 Hz fixed-timestep simulation (`playtestEngineCore.ts`) supporting side-platformer gravity/jumping and normalized 8-way top-down movement, single-hit active-frame M16 Hitbox vs. Dummy Hurtbox overlap, hitstop freeze frames, knockback impulse, trauma shake, and M25 `frameAudioTriggers`; synchronize tuned stats directly into M26 `@export` GDScript declarations (`playtestStatSync.ts`) via a spiral-safe `100 ms`-capped accumulator; and audition live combat feel with toggleable `H` Debug Overlays, M27 hit-flash feedback, M24 `5×7` floating damage numerals, and M14/M15 `AudioPlaybackEngine` triggers inside `EntityPlaytestStage.tsx`.
 - **Single-Prompt Vertical Slice Autopilot & Resumable DAG (`+ Vertical Slice`):** Plan clamped hero/cast/world/HUD/room manifests (`verticalSliceSchema.ts`) via Gemini Flash JSON `responseSchema` or `$0.00` offline templates (`verticalSliceDirector.ts`); pause fan-out at an interactive `1×`/`2×` Golden Reference visual approval checkpoint and execute parallel stages up to concurrency `2` over Dexie v7 `sliceJobs` (`sliceDagRunner.ts`) with `AbortSignal` pause/resume and `findOrphanBlobIds(db) === []`; generate complete Godot 4 `main.tscn` + `res://` trees (`godotMainSceneExporter.ts`); and stream/share full slices via FSAA/ZIP or compressed `#share=v1.` URLs (`VerticalSliceWizard.tsx`, `recipeUrlCodec.ts`).
 - **Agentic Asset Composer (`Cmd+L`), Inline Canvas `Cmd+K` & Dexie Checkpoints:** Resolve deduplicated `@slug`/`@enemies`/`@all_sprites`/`@art_bible` mentions and inject `.nibgridrules` (`contextResolver.ts`); dispatch all 8 deterministic Studio tools into isolated staging buffers (`studioToolRegistry.ts`) via Gemini Flash Function Calling, M10 Antigravity Bridge, or `$0.00` Offline Mock (`assetAgentAdapter.ts`); inspect interactive `BeforeAfterWipe`, audio, and code diffs inside `AssetComposerRail.tsx` and focused `InlineCanvasCommand.tsx`; and commit/reject/rollback turns atomically in Dexie v8 `agentCheckpoints` (`stagingTransactions.ts`) with zero orphan blobs (`findOrphanBlobIds(db) === []`).
+- **VS Code Extension, MCP Server, Pluggable `ModelRouter` & Standalone Desktop Pipeline:** Abstract browser/IDE secrets & Antigravity bridging behind `HostAdapter` (`src/platform/hostAdapter.ts`); expose Custom Editors, Activity Bar views, Godot `F5` execution, and a 9-tool JSON-RPC 2.0 MCP server (`packages/vscode-extension/`); route tasks deterministically across Google Antigravity ACP/MCP, on-device LiteRT, Ollama/LM Studio, ComfyUI, Cloud Keychain, and `$0.00` Offline Mock (`packages/model-router/src/routerCore.ts`); safely merge `~/.gemini/config/mcp_config.json` with timestamped `.bak` backups (`antigravityLinker.ts`, `ModelProvidersPanel.tsx`); and stage/verify VSCodium-style multi-OS desktop installers (`desktop/`, `release-desktop.yml`).
 
 ---
 
@@ -933,6 +962,7 @@ npm run typecheck
 npm run lint
 npm run format:check
 npm run test:unit
+npm run smoke:desktop
 npm run test:e2e
 python3 -m unittest tests/unit/test_nibgrid_bridge.py -v
 npm run build

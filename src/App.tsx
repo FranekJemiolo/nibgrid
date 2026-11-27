@@ -6,6 +6,7 @@ import {
   Boxes,
   ClipboardCheck,
   Command,
+  Cpu,
   FolderKanban,
   Grid2X2,
   KeyRound,
@@ -31,6 +32,7 @@ import { ProjectHub } from './ui/hub/ProjectHub';
 import { ProviderVaultModal } from './ui/hub/ProviderVaultModal';
 import { PostProcessInspector } from './ui/inspector/PostProcessInspector';
 import { P2pTransferModal } from './ui/share/P2pTransferModal';
+import { ModelProvidersPanel } from './ui/settings/ModelProvidersPanel';
 import { ShareRecipeModal } from './ui/share/ShareRecipeModal';
 import { SpriteStudio } from './ui/studio/SpriteStudio';
 import { VaultAndBrowserView } from './ui/vault/VaultAndBrowserView';
@@ -42,6 +44,7 @@ export function App() {
     vaultOpen,
     p2pOpen,
     composerOpen,
+    modelSettingsOpen,
     outgoingShareRecipe,
     isLoading,
     errorMessage,
@@ -51,6 +54,7 @@ export function App() {
     setP2pOpen,
     setAutopilotOpen,
     setComposerOpen,
+    setModelSettingsOpen,
     setInlineCommandTarget,
     closeShareModal,
     clearError,
@@ -249,6 +253,17 @@ export function App() {
 
           <button
             type="button"
+            data-testid="nav-models-btn"
+            onClick={() => setModelSettingsOpen(!modelSettingsOpen)}
+            className={navButtonClass(modelSettingsOpen)}
+            title="Pluggable ModelRouter & Google Antigravity Auto-Linker"
+          >
+            <Cpu className="h-3.5 w-3.5" />
+            Models
+          </button>
+
+          <button
+            type="button"
             data-testid="nav-provider-vault"
             onClick={() => setVaultOpen(!vaultOpen)}
             className={navButtonClass(vaultOpen)}
@@ -318,6 +333,7 @@ export function App() {
       </main>
 
       <ProviderVaultModal />
+      <ModelProvidersPanel />
       <P2pTransferModal open={p2pOpen} onClose={() => setP2pOpen(false)} />
       <VerticalSliceWizard />
       <AssetComposerRail />

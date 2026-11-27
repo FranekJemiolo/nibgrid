@@ -1,0 +1,7 @@
+{
+  "name": "@nibgrid/model-router",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "description": "Pluggable local & cloud ModelRouter + safe ~/.gemini/config/mcp_config.json Antigravity Auto-Linker."
+}
