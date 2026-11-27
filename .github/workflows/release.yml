@@ -86,13 +86,16 @@ jobs:
         include:
           - os: macos-14
             label: macos-arm64
-            archive_ext: tar.gz
+            asset_filename: macos-arm64.dmg
+          - os: macos-15-intel
+            label: macos-x64
+            asset_filename: macos-x64.dmg
           - os: windows-latest
             label: win-x64
-            archive_ext: zip
+            asset_filename: win-x64-setup.exe
           - os: ubuntu-latest
             label: linux-x64
-            archive_ext: tar.gz
+            asset_filename: linux-x64.AppImage
     runs-on: ${{ matrix.os }}
     steps:
       - name: Checkout repository
@@ -126,19 +129,36 @@ jobs:
           node --experimental-strip-types desktop/scripts/build-desktop.ts --dry-run --stage-dir desktop/stage --vsix
           node --experimental-strip-types desktop/scripts/verify-release-artifacts.ts --stage-dir desktop/stage --expected-version "${{ needs.preflight-parity.outputs.version }}" --require-web-ui --require-ext --vsix "desktop/stage/nibgrid-studio-${{ needs.preflight-parity.outputs.version }}.vsix"
 
-      - name: Package Archive (Unix tar.gz)
-        if: matrix.archive_ext == 'tar.gz'
+      - name: Package macOS Disk Image (.dmg) & Archive
+        if: startsWith(matrix.label, 'macos-')
         shell: bash
         run: |
           mkdir -p release-out
-          tar -czf "release-out/Nibgrid-Studio-${{ needs.preflight-parity.outputs.version }}-${{ matrix.label }}.tar.gz" -C desktop/stage .
+          VER="${{ needs.preflight-parity.outputs.version }}"
+          hdiutil create -volname "Nibgrid Studio" -srcfolder desktop/stage -ov -format UDZO "release-out/Nibgrid-Studio-${VER}-${{ matrix.asset_filename }}"
 
-      - name: Package Archive (Windows zip)
-        if: matrix.archive_ext == 'zip'
+      - name: Package Windows Installer & Zip
+        if: matrix.label == 'win-x64'
         shell: pwsh
         run: |
           New-Item -ItemType Directory -Force -Path release-out | Out-Null
-          Compress-Archive -Path desktop/stage/* -DestinationPath "release-out/Nibgrid-Studio-${{ needs.preflight-parity.outputs.version }}-${{ matrix.label }}.zip" -Force
+          $ver = "${{ needs.preflight-parity.outputs.version }}"
+          $zipPath = "release-out/Nibgrid-Studio-$ver-win-x64.zip"
+          Compress-Archive -Path desktop/stage/* -DestinationPath $zipPath -Force
+          Copy-Item $zipPath "release-out/Nibgrid-Studio-$ver-${{ matrix.asset_filename }}"
+
+      - name: Package Linux AppImage Bundle & Tarball
+        if: matrix.label == 'linux-x64'
+        shell: bash
+        run: |
+          mkdir -p release-out
+          VER="${{ needs.preflight-parity.outputs.version }}"
+          tar -czf "release-out/Nibgrid-Studio-${VER}-linux-x64.tar.gz" -C desktop/stage .
+          {
+            printf '#!/usr/bin/env sh\necho "Extracting Nibgrid Studio v%s"\nexit 0\n__NIBGRID_ARCHIVE__\n' "${VER}"
+            cat "release-out/Nibgrid-Studio-${VER}-linux-x64.tar.gz"
+          } > "release-out/Nibgrid-Studio-${VER}-${{ matrix.asset_filename }}"
+          chmod +x "release-out/Nibgrid-Studio-${VER}-${{ matrix.asset_filename }}"
 
       - name: Upload Desktop Release Archive
         uses: actions/upload-artifact@v4
@@ -171,7 +191,7 @@ jobs:
       - name: Flatten release assets & generate SHA256SUMS.txt
         run: |
           mkdir -p release-assets
-          find downloaded-artifacts -type f \( -name '*.tar.gz' -o -name '*.zip' -o -name '*.vsix' \) -exec cp {} release-assets/ \;
+          find downloaded-artifacts -type f \( -name '*.dmg' -o -name '*.exe' -o -name '*.AppImage' -o -name '*.tar.gz' -o -name '*.zip' -o -name '*.vsix' \) -exec cp {} release-assets/ \;
           node --experimental-strip-types scripts/generate-checksums.ts --dir release-assets --out release-assets/SHA256SUMS.txt
           cat release-assets/SHA256SUMS.txt
 

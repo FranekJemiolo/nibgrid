@@ -73,3 +73,28 @@ shasum -a 256 -c SHA256SUMS.txt
 # Linux
 sha256sum -c SHA256SUMS.txt
 ```
+
+---
+
+## 5. Desktop Distribution & Client Lookup Contract (`src/platform/desktopInstaller.ts`)
+
+Every GitHub Release attaches platform binaries matching:
+
+- `Nibgrid-Studio-<version>-macos-arm64.dmg`
+- `Nibgrid-Studio-<version>-macos-x64.dmg`
+- `Nibgrid-Studio-<version>-win-x64-setup.exe`
+- `Nibgrid-Studio-<version>-linux-x64.AppImage`
+
+One-line CLI installers are hosted on GitHub Pages at `https://franekjemiolo.github.io/nibgrid/` and automatically verify `SHA256SUMS.txt` before installing:
+
+```bash
+# macOS (Apple Silicon / Intel) & Linux (x64 AppImage)
+curl -fsSL https://franekjemiolo.github.io/nibgrid/install.sh | sh
+```
+
+```powershell
+# Windows (x64)
+irm https://franekjemiolo.github.io/nibgrid/install.ps1 | iex
+```
+
+Browser PWA users can also click **Get Desktop App** in the top navigation bar (or **Get Nibgrid Studio Desktop** in `Cmd+K`) to open `InstallDesktopModal`, switch OS tabs, download directly from GitHub Releases, or copy the matching SHA-256-verified CLI command.

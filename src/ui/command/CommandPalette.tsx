@@ -28,6 +28,7 @@ export function CommandPalette({ open, onOpenChange }: CommandPaletteProps) {
     setAutopilotOpen,
     setComposerOpen,
     setModelSettingsOpen,
+    setInstallDesktopOpen,
   } = useAppStore();
 
   const [query, setQuery] = useState('');
@@ -413,6 +414,14 @@ export function CommandPalette({ open, onOpenChange }: CommandPaletteProps) {
         execute: () => setModelSettingsOpen(true),
       },
       {
+        id: 'act-get-desktop',
+        title: 'Get Nibgrid Studio Desktop',
+        subtitle: 'Download standalone macOS/Windows/Linux app or copy SHA-256 CLI installer',
+        category: 'action',
+        keywords: ['desktop', 'install', 'download', 'dmg', 'exe', 'appimage', 'cli'],
+        execute: () => setInstallDesktopOpen(true),
+      },
+      {
         id: 'act-asset-composer',
         title: 'Toggle Agentic Asset Composer (Cmd/Ctrl+L)',
         subtitle:
@@ -529,6 +538,7 @@ export function CommandPalette({ open, onOpenChange }: CommandPaletteProps) {
     setAutopilotOpen,
     setComposerOpen,
     setModelSettingsOpen,
+    setInstallDesktopOpen,
   ]);
 
   const ranked = useMemo(() => rankCommands(query, commands), [query, commands]);

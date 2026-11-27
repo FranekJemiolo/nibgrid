@@ -201,6 +201,7 @@ interface AppState {
   autopilotOpen: boolean;
   composerOpen: boolean;
   modelSettingsOpen: boolean;
+  installDesktopOpen: boolean;
   inlineCommandTarget: InlineAgentTarget | null;
   workspaceRulesText: string;
   providers: ProviderConfig[];
@@ -218,6 +219,7 @@ interface AppState {
   setAutopilotOpen: (open: boolean) => void;
   setComposerOpen: (open: boolean) => void;
   setModelSettingsOpen: (open: boolean) => void;
+  setInstallDesktopOpen: (open: boolean) => void;
   setInlineCommandTarget: (target: InlineAgentTarget | null) => void;
   setWorkspaceRulesText: (text: string) => void;
   openShareModal: (recipe: ShareableRecipe) => void;
@@ -303,6 +305,7 @@ export const useAppStore = create<AppState>((set, get) => ({
   autopilotOpen: false,
   composerOpen: false,
   modelSettingsOpen: false,
+  installDesktopOpen: false,
   inlineCommandTarget: null,
   workspaceRulesText: '',
   providers: [],
@@ -579,6 +582,7 @@ export const useAppStore = create<AppState>((set, get) => ({
   setAutopilotOpen: (open) => set({ autopilotOpen: open }),
   setComposerOpen: (open) => set({ composerOpen: open }),
   setModelSettingsOpen: (open) => set({ modelSettingsOpen: open }),
+  setInstallDesktopOpen: (open) => set({ installDesktopOpen: open }),
   setInlineCommandTarget: (target) => set({ inlineCommandTarget: target }),
   setWorkspaceRulesText: (text) => set({ workspaceRulesText: text }),
   openShareModal: (recipe) => set({ outgoingShareRecipe: recipe }),

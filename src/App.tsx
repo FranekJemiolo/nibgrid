@@ -7,6 +7,7 @@ import {
   ClipboardCheck,
   Command,
   Cpu,
+  Download,
   FolderKanban,
   Grid2X2,
   KeyRound,
@@ -16,6 +17,7 @@ import {
   ShieldCheck,
   Sparkles,
 } from 'lucide-react';
+import { getActiveHostAdapter } from './platform/browserHostAdapter';
 import { parseHashRoute, useAppStore } from './store/useAppStore';
 import { AtlasWorkshop } from './ui/atlas/AtlasWorkshop';
 import { AudioFoundry } from './ui/audio/AudioFoundry';
@@ -32,6 +34,7 @@ import { ProjectHub } from './ui/hub/ProjectHub';
 import { ProviderVaultModal } from './ui/hub/ProviderVaultModal';
 import { PostProcessInspector } from './ui/inspector/PostProcessInspector';
 import { P2pTransferModal } from './ui/share/P2pTransferModal';
+import { InstallDesktopModal } from './ui/desktop/InstallDesktopModal';
 import { ModelProvidersPanel } from './ui/settings/ModelProvidersPanel';
 import { ShareRecipeModal } from './ui/share/ShareRecipeModal';
 import { SpriteStudio } from './ui/studio/SpriteStudio';
@@ -45,6 +48,7 @@ export function App() {
     p2pOpen,
     composerOpen,
     modelSettingsOpen,
+    installDesktopOpen,
     outgoingShareRecipe,
     isLoading,
     errorMessage,
@@ -55,6 +59,7 @@ export function App() {
     setAutopilotOpen,
     setComposerOpen,
     setModelSettingsOpen,
+    setInstallDesktopOpen,
     setInlineCommandTarget,
     closeShareModal,
     clearError,
@@ -272,6 +277,19 @@ export function App() {
             Provider Vault
           </button>
 
+          {!getActiveHostAdapter().capabilities.supportsLocalProcessLaunch && (
+            <button
+              type="button"
+              data-testid="nav-get-desktop-btn"
+              onClick={() => setInstallDesktopOpen(!installDesktopOpen)}
+              className="inline-flex shrink-0 items-center gap-1 rounded-md border border-emerald-500/40 bg-emerald-500/10 px-2.5 py-1 text-xs font-semibold text-emerald-300 hover:bg-emerald-500/20"
+              title="Download standalone Nibgrid Studio Desktop App"
+            >
+              <Download className="h-3.5 w-3.5" />
+              Get Desktop App
+            </button>
+          )}
+
           <button
             type="button"
             data-testid="nav-command-palette-btn"
@@ -334,6 +352,7 @@ export function App() {
 
       <ProviderVaultModal />
       <ModelProvidersPanel />
+      <InstallDesktopModal />
       <P2pTransferModal open={p2pOpen} onClose={() => setP2pOpen(false)} />
       <VerticalSliceWizard />
       <AssetComposerRail />

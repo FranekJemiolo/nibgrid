@@ -717,3 +717,18 @@
 
 - **Checksums & Workflows (`scripts/generate-checksums.ts`, `.github/workflows/ci-parity.yml`, `.github/workflows/release.yml`, `docs/RELEASING.md`):** Added deterministic `SHA256SUMS.txt` generator, PR/`main` parity workflow, and tag/`workflow_dispatch` (`dry_run` toggle) multi-OS release pipeline packaging `macos-arm64`, `win-x64`, `linux-x64`, `.vsix`, and GitHub Pages PWA in lockstep.
 - **Verification (`tests/unit/m41c-checksums.test.ts`):** Verified SHA-256 sorting & self-exclusion, YAML workflow syntax, local dry-run bundle + `.vsix` artifact verification, and full TypeScript/ESLint/Prettier/Vitest/Playwright/Pages build gates.
+
+## Milestone 42A: Pure-TS Desktop OS Detection, Release Parser & CLI Command Builder
+
+- **Installer Core (`src/platform/desktopInstaller.ts`, `docs/RELEASING.md`):** Added DOM-free OS/arch detection (`detectDesktopPlatform()`), GitHub `/releases/latest` parser (`parseLatestDesktopRelease()`), CLI one-liner builder (`getCliInstallCommand()`), and timeout-guarded `fetchLatestDesktopRelease()` with static fallback on `403`/`429`/offline errors.
+- **Verification (`tests/unit/m42a-desktop-installer.test.ts`):** Verified OS mappings across all 4 targets, asset URL extraction for `Nibgrid-Studio-<version>-<platform>`, `curl | sh` & `irm | iex` output, HTTP `200` parsing, and HTTP `403`/offline fallbacks.
+
+## Milestone 42B: Hardened One-Line CLI Installers (`public/install.sh` & `public/install.ps1`)
+
+- **Installers & Workflow Naming (`public/install.sh`, `public/install.ps1`, `.github/workflows/release.yml`):** Authored strict POSIX `sh` (`set -eu`, `trap` cleanup, `shasum`/`sha256sum`) and PowerShell (`$ErrorActionPreference = "Stop"`, `Get-FileHash`) installers verifying `SHA256SUMS.txt`, aligned `release.yml` matrix across `macos-arm64.dmg`, `macos-x64.dmg`, `win-x64-setup.exe`, and `linux-x64.AppImage`, and updated `docs/RELEASING.md` + `docs/ARCHITECTURE.md`.
+- **Verification (`tests/unit/m42b-cli-scripts.test.ts`):** Verified `sh -n public/install.sh` syntax cleanly and asserted exact SHA-256 verification and asset suffix parity across `install.sh`, `install.ps1`, and `release.yml`.
+
+## Milestone 42C: Web UI `InstallDesktopModal.tsx`, PWA-Only Header Entry & E2E Flow
+
+- **Modal, Store & Header Entry (`src/ui/desktop/InstallDesktopModal.tsx`, `src/store/useAppStore.ts`, `src/App.tsx`, `src/ui/command/CommandPalette.tsx`):** Added **Get Desktop App** top-bar button (hidden inside Desktop/VS Code Webview hosts), `Cmd+K` command, 4 OS switcher tabs, direct GitHub Release asset download CTA with HTTP `403`/offline fallback, 1-click CLI copy (`Copied!`), and post-install Antigravity auto-link guidance.
+- **Verification (`tests/e2e/m42c-install-modal-e2e.spec.ts`):** Verified mocked `v1.2.0` release resolution across OS tabs + copy feedback, HTTP `403` rate-limit fallback with zero `pageerror`s, and desktop host hiding `nav-get-desktop-btn`.

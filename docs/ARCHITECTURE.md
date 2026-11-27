@@ -510,3 +510,15 @@ All image-manipulation stages operate on raw `Uint8ClampedArray` buffers in `src
 
 - **Deterministic Release Checksums (`scripts/generate-checksums.ts`):** Uses Node `crypto.createHash('sha256')` to emit deterministically sorted `SHA256SUMS.txt` manifests across packaged `.tar.gz`, `.zip`, and `.vsix` artifacts while excluding `SHA256SUMS.txt` itself.
 - **Continuous Parity & Multi-OS Release Workflows (`.github/workflows/ci-parity.yml`, `.github/workflows/release.yml`, `docs/RELEASING.md`):** Enforces PR/`main` parity and `--dry-run` desktop bundle verification, while `release.yml` orchestrates `preflight-parity` → 3-OS `build-desktop` matrix (`macos-14`, `windows-latest`, `ubuntu-latest`) → `publish-release` (with `workflow_dispatch` `dry_run: true` safety) and lockstep `deploy-pages`.
+
+## 96. Pure-TS Desktop OS Detection, Release Parser & CLI Command Builder (Milestone 42A)
+
+- **Installer & Release Lookup Core (`src/platform/desktopInstaller.ts`):** Pure-TS, DOM-free helpers mapping host signals to `macos-arm64` / `macos-x64` / `win-x64` / `linux-x64` (`detectDesktopPlatform()`), parsing `/releases/latest` JSON payloads (`parseLatestDesktopRelease()`), formatting `curl | sh` / `irm | iex` commands (`getCliInstallCommand()`), and degrading gracefully to `https://github.com/FranekJemiolo/nibgrid/releases/latest` on HTTP `403`/`429` or offline errors (`fetchLatestDesktopRelease()`).
+
+## 97. Hardened One-Line CLI Installers & Release Naming Parity (Milestone 42B)
+
+- **POSIX `sh` & PowerShell Installers (`public/install.sh`, `public/install.ps1`, `.github/workflows/release.yml`):** Deployed verbatim to GitHub Pages root (`/nibgrid/install.sh` and `/nibgrid/install.ps1`), detect OS/arch, fetch `releases/latest` + `SHA256SUMS.txt`, abort with non-zero status on checksum mismatch or missing entry before touching `/Applications/Nibgrid Studio.app` / `$HOME/.local/bin/nibgrid-studio` / `/SILENT` installer, and align 1:1 with `release.yml` assets (`macos-arm64.dmg`, `macos-x64.dmg`, `win-x64-setup.exe`, `linux-x64.AppImage`).
+
+## 98. Web UI Desktop Download Modal & PWA-Only Navigation Entry (Milestone 42C)
+
+- **`InstallDesktopModal.tsx` & Host Capability Gating (`src/ui/desktop/InstallDesktopModal.tsx`, `src/App.tsx`, `src/store/useAppStore.ts`, `src/ui/command/CommandPalette.tsx`):** Exposes **Get Desktop App** (`nav-get-desktop-btn`) and `Cmd+K` **Get Nibgrid Studio Desktop** strictly when `!getActiveHostAdapter().capabilities.supportsLocalProcessLaunch`, fetches `/releases/latest` cleanly, updates OS download CTAs & copyable SHA-256 CLI one-liners across all 4 targets, degrades cleanly to `https://github.com/FranekJemiolo/nibgrid/releases/latest` when rate-limited (`403`/`429`), and documents post-install Google Antigravity linking.
