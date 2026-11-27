@@ -221,6 +221,8 @@ jobs:
       contents: read
       pages: write
       id-token: write
+    outputs:
+      page_url: ${{ steps.deployment.outputs.page_url }}
     environment:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
@@ -239,3 +241,45 @@ jobs:
       - name: Deploy to GitHub Pages
         id: deployment
         uses: actions/deploy-pages@v4
+
+  smoke-pages:
+    name: Smoke-Test Live GitHub Pages
+    needs: [deploy-pages]
+    if: ${{ github.event_name != 'workflow_dispatch' || !inputs.dry_run }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'npm'
+          cache-dependency-path: package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Install Playwright Chromium
+        run: npx playwright install --with-deps chromium
+
+      - name: Run post-deploy smoke test (with CDN propagation retry)
+        env:
+          SMOKE_URL: ${{ needs.deploy-pages.outputs.page_url || 'https://franekjemiolo.github.io/nibgrid/' }}
+        run: |
+          for attempt in 1 2 3; do
+            echo "Smoke attempt $attempt/3 against $SMOKE_URL..."
+            if node scripts/smoke-release.mjs; then
+              exit 0
+            fi
+            if [ "$attempt" -lt 3 ]; then
+              echo "Waiting 15s for GitHub Pages CDN propagation..."
+              sleep 15
+            fi
+          done
+          echo "Post-deploy smoke test failed after 3 attempts." >&2
+          exit 1

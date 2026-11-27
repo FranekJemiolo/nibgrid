@@ -17,6 +17,7 @@
     "test:unit": "vitest run",
     "build:ext": "vite build --config packages/vscode-extension/vite.config.ts && node --experimental-strip-types packages/vscode-extension/scripts/verify-extension-bundle.ts",
     "smoke:desktop": "node --experimental-strip-types desktop/scripts/smoke-desktop-bundle.ts",
+    "smoke:release": "node scripts/smoke-release.mjs",
     "test:e2e": "playwright test"
   },
   "dependencies": {

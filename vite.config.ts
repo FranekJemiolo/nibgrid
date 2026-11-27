@@ -63,9 +63,9 @@ self.addEventListener('fetch', (event) => {
 
   if (req.mode === 'navigate') {
     event.respondWith(
-      caches.match(req).then((cached) =>
+      caches.match(req, { ignoreVary: true }).then((cached) =>
         cached ||
-        caches.match(INDEX_URL).then((indexCached) =>
+        caches.match(INDEX_URL, { ignoreVary: true }).then((indexCached) =>
           indexCached || fetch(req),
         ),
       ),
@@ -74,7 +74,7 @@ self.addEventListener('fetch', (event) => {
   }
 
   event.respondWith(
-    caches.match(req).then((cached) => {
+    caches.match(req, { ignoreVary: true }).then((cached) => {
       if (cached) return cached;
       return fetch(req).then((networkResponse) => {
         if (networkResponse.ok && url.pathname.startsWith(${JSON.stringify(basePath)})) {

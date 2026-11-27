@@ -539,3 +539,7 @@ All image-manipulation stages operate on raw `Uint8ClampedArray` buffers in `src
 ## 102. Desktop Self-Update Status Bar UX & Extension Wiring (Milestone 43C)
 
 - **Extension Manifest & Lifecycle (`packages/vscode-extension/package.json`, `packages/vscode-extension/src/extension.ts`):** Registers `nibgrid.checkForUpdates` (`Nibgrid: Check for Updates`) and `nibgrid.updates.autoCheck` (`true`), schedules a 10-second unreffed startup check throttled at 24h (`nibgrid.updateLastCheckedAt`, `nibgrid.updateEtag`, `nibgrid.updateSkippedVersion` in `globalState`), displays a non-blocking `$(cloud-download) Nibgrid v<latest>` status bar item on available releases, runs verified downloads inside `withProgress`, and degrades silently on background offline/`403`/`429` failures.
+
+## 103. Automated Pre-Release & Post-Deploy Smoke Gate (`scripts/smoke-release.mjs`)
+
+- **Playwright Release Smoke Verifier (`scripts/smoke-release.mjs`, `package.json`, `.github/workflows/release.yml`):** Verifies live or preview deployments across `install.sh` (including `sh -n` POSIX syntax check), `install.ps1` (`Get-FileHash` & `SHA256SUMS.txt` assertions), `manifest.webmanifest`, Chromium cold boot, active Service Worker registration, `InstallDesktopModal`, offline reload, and zero unexpected `console.error` / `pageerror` events. Wired into `.github/workflows/release.yml` as the post-deploy `smoke-pages` job reading `needs.deploy-pages.outputs.page_url`.

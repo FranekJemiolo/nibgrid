@@ -108,3 +108,28 @@ Nibgrid Studio Desktop checks `https://api.github.com/repos/FranekJemiolo/nibgri
 Before launching any downloaded installer, `packages/vscode-extension/src/desktopUpdater.ts` verifies its streaming SHA-256 digest with `crypto.timingSafeEqual` against `SHA256SUMS.txt` inside an isolated temporary directory (deleting temp files immediately on mismatch) and invokes the OS installer via `execFile` (`open` on macOS, detached `/SILENT` on Windows, `chmod 0o755` under `~/.local/bin/nibgrid-studio` on Linux).
 
 In **Nibgrid Studio Desktop**, available updates appear unobtrusively in the status bar (`$(cloud-download) Nibgrid vX.Y.Z`) with **Install Update**, **Release Notes**, and **Skip This Version** actions, and users can trigger **Nibgrid: Check for Updates** (`nibgrid.checkForUpdates`) from the Command Palette or disable automatic checks via `nibgrid.updates.autoCheck`.
+
+---
+
+## 7. Pre-Release Checklist & Automated Post-Deploy Smoke Gate (`scripts/smoke-release.mjs`)
+
+Before cutting a release tag or approving a live release, verify every gate in sequence:
+
+- [ ] **Versions Synchronized:** `package.json`, `packages/vscode-extension/package.json`, `packages/model-router/package.json`, and `desktop/product.json` match (`npm run verify:parity`).
+- [ ] **Static, Unit & Build Checks Green:** `npm run typecheck`, `npm run lint`, `npm run format:check`, `npm run test:unit`, `npm run build:ext`, and `npm run smoke:desktop` pass with zero failures.
+- [ ] **Python Loopback Bridge Green:** `uv run python -m unittest discover -s tests/python -v` and `python3 -m unittest tests/unit/test_nibgrid_bridge.py -v` pass with zero failures.
+- [ ] **Local Preview Smoke Gate Passed:**
+
+```bash
+VITE_BASE_PATH=/nibgrid/ npm run build
+VITE_BASE_PATH=/nibgrid/ npx vite preview --host 127.0.0.1 --port 4173 --strictPort &
+PREVIEW_PID=$!
+SMOKE_URL=http://127.0.0.1:4173/nibgrid/ npm run smoke:release
+kill "$PREVIEW_PID"
+```
+
+- [ ] **Live GitHub Pages Smoke Gate Passed (`smoke-pages` in `release.yml`):** Automatically runs `node scripts/smoke-release.mjs` (up to 3 CDN propagation retries) against `needs.deploy-pages.outputs.page_url` after `deploy-pages` completes, verifying `install.sh` (`sh -n`), `install.ps1` (`Get-FileHash`), `manifest.webmanifest`, cold boot + active Service Worker + `InstallDesktopModal`, offline PWA reload, and zero `console.error`/`pageerror`s.
+
+```bash
+SMOKE_URL=https://franekjemiolo.github.io/nibgrid/ npm run smoke:release
+```

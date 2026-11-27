@@ -752,3 +752,7 @@
 
 - **Extension Wiring (`packages/vscode-extension/package.json`, `packages/vscode-extension/src/extension.ts`, `docs/ARCHITECTURE.md`, `docs/RELEASING.md`):** Registered `nibgrid.checkForUpdates` and `nibgrid.updates.autoCheck`, added 10s delayed startup check with 24h throttle + `globalState` ETag/skip-version persistence, `$(cloud-download) Nibgrid v<latest>` status bar indicator, `withProgress` verified installer launch, and manual offline/rate-limit GitHub Releases fallback.
 - **Verification (`packages/vscode-extension/test/m43c-extension-updates.test.ts`, `packages/vscode-extension/test/m39b-extension-host.test.ts`):** Verified 10s timer delay + clean cancellation, 24h throttle, `globalState` persistence, status bar show/hide, Skip This Version, Install Update flow, and full repo parity/unit/build gates.
+
+## Pre-Release Checklist & Automated Post-Deploy Smoke Gate (`scripts/smoke-release.mjs`)
+
+- **Smoke Gate & Release Workflow (`scripts/smoke-release.mjs`, `.github/workflows/release.yml`, `package.json`, `docs/RELEASING.md`, `docs/ARCHITECTURE.md`):** Added Playwright smoke verifier (`npm run smoke:release`) testing `install.sh` (`sh -n`), `install.ps1`, `manifest.webmanifest`, Service Worker offline reload, `InstallDesktopModal`, and zero console/page errors, plus exposed `deploy-pages.outputs.page_url` and added the 3-attempt CDN-retry `smoke-pages` job to `release.yml`.
