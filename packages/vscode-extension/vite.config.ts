@@ -5,6 +5,7 @@ import { defineConfig } from 'vite';
 const NODE_EXTERNALS = ['vscode', ...builtinModules, ...builtinModules.map((mod) => `node:${mod}`)];
 
 export default defineConfig({
+  publicDir: false,
   build: {
     target: 'node22',
     outDir: resolve(__dirname, 'dist'),

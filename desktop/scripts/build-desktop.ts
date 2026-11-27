@@ -87,17 +87,32 @@ export async function stageDesktopBundle(
     'extension/mcp-manifest.json': new TextEncoder().encode(mcpManifestRaw),
   };
 
+  const iconAbsPath = join(repoRoot, 'packages', 'vscode-extension', 'media', 'nibgrid-icon.svg');
+  const iconBytes = (await pathExists(iconAbsPath))
+    ? new Uint8Array(await readFile(iconAbsPath))
+    : null;
+  if (iconBytes) {
+    vsixEntries['extension/media/nibgrid-icon.svg'] = iconBytes;
+  }
+
   if (!opts.vsixOnly) {
-    const baseOutputs: readonly [string, string][] = [
+    const baseOutputs: readonly (readonly [string, string | Uint8Array])[] = [
       ['product.json', productRaw],
       ['patches/01-nibgrid-workbench.patch', patchRaw],
       ['extensions/nibgrid-studio/package.json', extPkgRaw],
       ['extensions/nibgrid-studio/mcp-manifest.json', mcpManifestRaw],
+      ...(iconBytes
+        ? ([['extensions/nibgrid-studio/media/nibgrid-icon.svg', iconBytes]] as const)
+        : []),
     ];
     for (const [relPath, content] of baseOutputs) {
       const absPath = join(stageDir, relPath);
       await mkdir(dirname(absPath), { recursive: true });
-      await writeFile(absPath, content, 'utf8');
+      if (typeof content === 'string') {
+        await writeFile(absPath, content, 'utf8');
+      } else {
+        await writeFile(absPath, content);
+      }
       writtenFiles.push(relPath);
     }
   }

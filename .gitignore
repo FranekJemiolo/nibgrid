@@ -9,4 +9,8 @@ __pycache__/
 *.py[cod]
 packages/*/dist/
 desktop/stage/
+desktop/vsix-stage/
+desktop/cache/
+release-assets/
+release-out/
 
