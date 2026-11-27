@@ -5,6 +5,7 @@ import {
   FileArchive,
   FileCode2,
   FolderSync,
+  Play,
   Plus,
   Save,
   Settings2,
@@ -32,6 +33,7 @@ import {
 } from '../../sync/fsaaSyncEngine';
 import { BlobImage } from '../components/BlobImage';
 import { EntityDirectorModal } from './EntityDirectorModal';
+import { EntityPlaytestStage } from './EntityPlaytestStage';
 
 const BODY_TYPES: readonly GodotBodyType[] = GodotBodyTypeSchema.options;
 
@@ -66,6 +68,7 @@ function createDraftEntity(
 
 export function EntityHubView() {
   const {
+    route,
     activeProject,
     spriteNodes,
     audioAssets,
@@ -80,6 +83,9 @@ export function EntityHubView() {
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [drawerTab, setDrawerTab] = useState<'config' | 'tscn' | 'gdscript'>('config');
   const [directorOpen, setDirectorOpen] = useState(false);
+  const [playtestEntityId, setPlaytestEntityId] = useState<string | null>(() =>
+    route.screen === 'entities' && route.playtestEntityId ? route.playtestEntityId : null,
+  );
   const [draft, setDraft] = useState<EntityDefinition | null>(null);
   const [slugLocked, setSlugLocked] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -430,15 +436,26 @@ export function EntityHubView() {
                 </div>
 
                 <div className="flex items-center justify-between gap-2 border-t border-[var(--border-hairline)] pt-2.5">
-                  <button
-                    type="button"
-                    data-testid={`entity-edit-${entity.slug}`}
-                    onClick={() => handleOpenEdit(entity)}
-                    className="inline-flex items-center gap-1 rounded border border-[var(--border-hairline)] bg-[var(--bg-well)] px-2.5 py-1 text-[11px] text-slate-200 hover:bg-slate-800"
-                  >
-                    <Settings2 className="h-3 w-3" />
-                    Configure
-                  </button>
+                  <div className="flex items-center gap-1.5">
+                    <button
+                      type="button"
+                      data-testid={`entity-edit-${entity.slug}`}
+                      onClick={() => handleOpenEdit(entity)}
+                      className="inline-flex items-center gap-1 rounded border border-[var(--border-hairline)] bg-[var(--bg-well)] px-2.5 py-1 text-[11px] text-slate-200 hover:bg-slate-800"
+                    >
+                      <Settings2 className="h-3 w-3" />
+                      Configure
+                    </button>
+                    <button
+                      type="button"
+                      data-testid={`entity-playtest-${entity.slug}`}
+                      onClick={() => setPlaytestEntityId(entity.id)}
+                      className="inline-flex items-center gap-1 rounded border border-emerald-500/40 bg-emerald-500/15 px-2.5 py-1 text-[11px] font-medium text-emerald-200 hover:bg-emerald-500/25"
+                    >
+                      <Play className="h-3 w-3" />
+                      Playtest
+                    </button>
+                  </div>
 
                   <div className="flex items-center gap-1.5">
                     <button
@@ -856,6 +873,28 @@ export function EntityHubView() {
           );
         }}
       />
+
+      {(() => {
+        const activePlaytest = playtestEntityId
+          ? entities.find((e) => e.id === playtestEntityId)
+          : undefined;
+        if (!activePlaytest) return null;
+        return (
+          <EntityPlaytestStage
+            entity={activePlaytest}
+            project={activeProject}
+            spriteNodes={spriteNodes}
+            audioAssets={audioAssets}
+            onApplyStats={async (updated) => {
+              await saveEntityRecord(updated);
+              setStatusBanner(
+                `Updated "${updated.slug}" playtest stats & GDScript @export values.`,
+              );
+            }}
+            onClose={() => setPlaytestEntityId(null)}
+          />
+        );
+      })()}
     </div>
   );
 }

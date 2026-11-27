@@ -627,3 +627,18 @@
 
 - **UI Workshop & Routing (`src/ui/inspector/RoomPrototyperWorkshop.tsx`, `src/ui/inspector/workspaceTabs.ts`, `src/store/useAppStore.ts`, `src/ui/inspector/PostProcessInspector.tsx`, `src/ui/command/CommandPalette.tsx`):** Added `'room'` workshop tab on `tile` assets (+ Tools & `Cmd/Ctrl+K`), interactive Canvas2D tile/entity/spawn editor with live M20 bitmask previews, M20/M23/M25 asset bindings, Godot 4.3+ `.tscn` live preview, `Save Room to Project`, 1-click M25 `Sync Room to Godot (res://)`, and `<slug>_level_bundle.zip` export.
 - **Documentation & Verification:** Updated `docs/ARCHITECTURE.md`, `JOURNAL.md`, and `README.md` (`Section 2.30`), and added `tests/e2e/m35c-room-prototyper-e2e.spec.ts` covering intercepted Gemini `24×14` room generation, solid painting + `PlayerSpawn` relocation, Level Bundle ZIP extraction + secret-free `AssetRecipeSchema` validation, M25 FSAA sync stub, and hard-reload persistence with zero console/page errors.
+
+## Milestone 36A: Pure-TS 60 Hz Fixed-Timestep Playtest Simulation Core
+
+- **Playtest Simulation Core (`src/processing/playtestEngineCore.ts`, `src/domain/entitySchema.ts`):** Implemented pure-TS `stepPlaytestSimulation()` handling `'side-platformer'` gravity/jumping and `'top-down'` 8-way movement, M16 Hitbox vs. Dummy Hurtbox overlap on `activeFrames` (with horizontal flip transform), hitstop freeze pauses, knockback impulse, trauma shake, M25 `frameAudioTriggers` events, and optional `EntityDefinition.playtestConfig`.
+- **Verification:** Added `tests/unit/m36a-playtest-core.test.ts` proving 60 Hz floor-clamped jump arc, 8-way speed normalization, single-hit active-frame combat with exact `hitstopMs` / `flashDurationMs` / knockback, and frozen actor integration during hitstop frames.
+
+## Milestone 36B: Entity `.gd` Stat Sync Helper & Fixed-Timestep Accumulator
+
+- **Stat Sync & Accumulator (`src/export/playtestStatSync.ts`):** Added `applyPlaytestStatsToGdScript()`, `ensureEntityPlaytestGdScript()`, `computeHitFlashUniform()`, and spiral-safe 60 Hz `createFixedTimestepRunner()`.
+- **Verification:** Added `tests/unit/m36b-playtest-stat-sync.test.ts` validating byte-exact `@export` mutation + Godot 4.3+ validation, `[0, 1]` flash decay curves, and `100ms` delta clamping.
+
+## Milestone 36C: Interactive `EntityPlaytestStage.tsx` in Entity Hub & E2E Flow
+
+- **Stage UI & Hub Integration (`src/ui/entities/EntityPlaytestStage.tsx`, `src/ui/entities/EntityHubView.tsx`, `src/store/useAppStore.ts`, `src/ui/command/CommandPalette.tsx`):** Added `▶ Playtest` buttons on every Entity Card and `Playtest Active Entity` in `Cmd/Ctrl+K`, integer-scaled Canvas2D stage with M27 hit-flash silhouette + M24 `5×7` damage numerals + `H` Hitbox/Hurtbox/Socket Debug Overlay, lazily resumed `AudioPlaybackEngine` triggers with Mute toggle, live `ScrubInput` game-juice sliders (`Move Speed`, `Gravity`, `Hitstop`, `Screen Shake`, `Knockback`, `Flash`, `Attack Damage`), and 1-click `Apply Stats to Entity .gd` Dexie persistence.
+- **Documentation & Verification:** Updated `docs/ARCHITECTURE.md`, `JOURNAL.md`, and `README.md` (`Section 2.31`), and added `tests/e2e/m36c-playtest-e2e.spec.ts` verifying rendered pixels, `ArrowRight` + `Space` Target Dummy combat damage, `H` Debug Overlay toggle, `ScrubInput` stat sync into `.gd`, and hard-reload persistence with zero console/page errors.

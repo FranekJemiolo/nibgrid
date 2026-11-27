@@ -15,8 +15,16 @@ const CATEGORY_LABEL: Record<CommandCategory, string> = {
 };
 
 export function CommandPalette({ open, onOpenChange }: CommandPaletteProps) {
-  const { route, activeProject, spriteNodes, audioAssets, navigate, setVaultOpen, setP2pOpen } =
-    useAppStore();
+  const {
+    route,
+    activeProject,
+    spriteNodes,
+    audioAssets,
+    entities,
+    navigate,
+    setVaultOpen,
+    setP2pOpen,
+  } = useAppStore();
 
   const [query, setQuery] = useState('');
   const [selectedIndex, setSelectedIndex] = useState(0);
@@ -331,6 +339,20 @@ export function CommandPalette({ open, onOpenChange }: CommandPaletteProps) {
           execute: () => navigate({ screen: 'entities', projectId: projId }),
         },
         {
+          id: 'act-playtest-entity',
+          title: 'Playtest Active Entity',
+          subtitle:
+            'Launch WASD/Space 60 Hz Mini-Playtest Stage with M16 hitboxes, M27 flash & M14 audio',
+          category: 'action',
+          keywords: ['playtest', 'wasd', 'space', 'hitbox', 'juice', 'combat', 'entity'],
+          execute: () =>
+            navigate({
+              screen: 'entities',
+              projectId: projId,
+              ...(entities[0]?.id ? { playtestEntityId: entities[0].id } : {}),
+            }),
+        },
+        {
           id: 'nav-studio',
           title: 'Sprite Studio & Generation DAG',
           subtitle: 'Sketch pad, turnaround prompt mode, and variation tree',
@@ -456,6 +478,7 @@ export function CommandPalette({ open, onOpenChange }: CommandPaletteProps) {
     activeOrLatestNodeId,
     spriteNodes,
     audioAssets,
+    entities,
     navigate,
     setVaultOpen,
     setP2pOpen,

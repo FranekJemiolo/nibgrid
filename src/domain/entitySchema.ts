@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { PlaytestJuiceConfigSchema } from '../processing/playtestEngineCore';
 import { ShaderConfigSchema } from './schemas';
 
 export const GodotBodyTypeSchema = z.enum([
@@ -38,6 +39,7 @@ export const EntityDefinitionSchema = z.object({
   scriptResPath: z.string().trim().min(1).max(200).optional(),
   scriptContent: z.string().max(64000).optional(),
   shaderConfig: ShaderConfigSchema.optional(),
+  playtestConfig: PlaytestJuiceConfigSchema.optional(),
   updatedAt: z.number().int().nonnegative(),
 });
 export type EntityDefinition = z.infer<typeof EntityDefinitionSchema>;

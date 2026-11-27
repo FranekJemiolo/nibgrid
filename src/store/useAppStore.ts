@@ -49,7 +49,7 @@ export type ScreenRoute =
   | { screen: 'atlas'; projectId: string }
   | { screen: 'audio'; projectId: string }
   | { screen: 'audit'; projectId: string }
-  | { screen: 'entities'; projectId: string }
+  | { screen: 'entities'; projectId: string; playtestEntityId?: string }
   | { screen: 'vault'; projectId?: string };
 
 const VALID_PIXEL_TOOLS = new Set<PixelTool>([
@@ -122,7 +122,13 @@ export function parseHashRoute(hash: string): ScreenRoute {
   }
   const entitiesMatch = /^\/project\/([^/]+)\/entities$/.exec(path);
   if (entitiesMatch?.[1]) {
-    return { screen: 'entities', projectId: entitiesMatch[1] };
+    const params = query ? new URLSearchParams(query) : null;
+    const playtestEntityId = params?.get('playtest')?.trim() || undefined;
+    return {
+      screen: 'entities',
+      projectId: entitiesMatch[1],
+      ...(playtestEntityId ? { playtestEntityId } : {}),
+    };
   }
   const projectVaultMatch = /^\/project\/([^/]+)\/vault$/.exec(path);
   if (projectVaultMatch?.[1]) {
@@ -159,7 +165,10 @@ export function formatHashRoute(route: ScreenRoute): string {
     return `#/project/${route.projectId}/audit`;
   }
   if (route.screen === 'entities') {
-    return `#/project/${route.projectId}/entities`;
+    const base = `#/project/${route.projectId}/entities`;
+    return route.playtestEntityId
+      ? `${base}?playtest=${encodeURIComponent(route.playtestEntityId)}`
+      : base;
   }
   if (route.screen === 'vault') {
     return route.projectId ? `#/project/${route.projectId}/vault` : '#/vault';

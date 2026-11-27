@@ -1,6 +1,6 @@
 # Nibgrid
 
-Local-first, zero-server Bring-Your-Own-Key / Bring-Your-Own-Model (BYOK/BYOM) Progressive Web App for turning hand-drawn sketches and vocal hums into style-locked, engine-ready 2D game sprites, 4-view turnarounds, normal maps, animations, 2D stick-figure pose-to-sprite run/attack keyframing, auto-tiles, mesh-tracked sockets, VFX flipbooks, parallax backgrounds, bitmap fonts & damage numerals, colliders, UI panels, matched Godot 4 `Theme` `.tres` UI kits, Godot 4 `.gdshader` + `ShaderMaterial` `.tres` shaders, Godot 4 `.tscn` + typed `.gd` prefabs, Godot 4.3+ `TileMapLayer` `.tscn` rooms & live `res://` sync, surgical pixel micro-editing & region-masked AI inpainting, Vision-LLM Art Director QA reviews, reusable Global Asset Vault libraries, `.nibgrid.zip` snapshots, zero-server `#share=` URL/Pack Feeds, WebRTC P2P direct transfers, and audio.
+Local-first, zero-server Bring-Your-Own-Key / Bring-Your-Own-Model (BYOK/BYOM) Progressive Web App for turning hand-drawn sketches and vocal hums into style-locked, engine-ready 2D game sprites, 4-view turnarounds, normal maps, animations, 2D stick-figure pose-to-sprite run/attack keyframing, auto-tiles, mesh-tracked sockets, VFX flipbooks, parallax backgrounds, bitmap fonts & damage numerals, colliders, UI panels, matched Godot 4 `Theme` `.tres` UI kits, Godot 4 `.gdshader` + `ShaderMaterial` `.tres` shaders, Godot 4 `.tscn` + typed `.gd` prefabs, Godot 4.3+ `TileMapLayer` `.tscn` rooms, in-browser Entity Mini-Playtest Stage & live `res://` sync, surgical pixel micro-editing & region-masked AI inpainting, Vision-LLM Art Director QA reviews, reusable Global Asset Vault libraries, `.nibgrid.zip` snapshots, zero-server `#share=` URL/Pack Feeds, WebRTC P2P direct transfers, and audio.
 
 **Live App (GitHub Pages):** https://franekjemiolo.github.io/nibgrid/
 
@@ -47,6 +47,7 @@ Local-first, zero-server Bring-Your-Own-Key / Bring-Your-Own-Model (BYOK/BYOM) P
   - [2.28 Build Matched Godot 4 `Theme` `.tres` UI Kits (Inspector → UI Kit)](#228-build-matched-godot-4-theme-tres-ui-kits-inspector--ui-kit)
   - [2.29 Keyframe 2D OpenPose Cycles with Onion-Skinning & 2-Bone IK (Screen 4O)](#229-keyframe-2d-openpose-cycles-with-onion-skinning--2-bone-ik-screen-4o)
   - [2.30 Prototype Godot 4 `TileMapLayer` Rooms & Encounters (Screen 4P)](#230-prototype-godot-4-tilemaplayer-rooms--encounters-screen-4p)
+  - [2.31 Feel-Test Entities in the In-Browser Mini-Playtest Stage (Entity Hub)](#231-feel-test-entities-in-the-in-browser-mini-playtest-stage-entity-hub)
 - [Part 3 — Engine Drop-In Integration Examples](#part-3--engine-drop-in-integration-examples)
 - [Architecture Summary](#architecture-summary)
 - [Development & Verification](#development--verification)
@@ -89,6 +90,7 @@ Local-first, zero-server Bring-Your-Own-Key / Bring-Your-Own-Model (BYOK/BYOM) P
 | Godot 4 `Theme` `.tres` UI Kit Builder            | `Inspector` → `UI Kit` (`ui-panel` primary)   | `$0.00` Procedural or GenAI State Sheet     | 7 state PNGs, `.png.import`, paired M24 `.fnt`/`.png`, `<slug>_theme.tres` (`StyleBoxTexture`), ZIP  |
 | 2D OpenPose Keyframer (Run/Attack/Jump Cycles)    | `Pose Rig` (Screen 4O) (`character` primary)  | `$0.00` Mock / ComfyUI or `~$0.04`/strip    | 15-joint IK rig, red/cyan onion-skinning, ground-aligned `1×N` strip, OpenPose PNG & M25 Entity clip |
 | Godot 4 `TileMapLayer` Room & Encounter Builder   | `Room Builder` (Screen 4P) (`tile` primary)   | `$0.00` Offline Mock or `~$0.001` Gemini    | `TileMapLayer` `tile_map_data`, M20 auto-tile coords, M23 Parallax, `PlayerSpawn`, Entities `.tscn`  |
+| In-Browser Entity Mini-Playtest Stage             | `Entities` → `▶ Playtest`                     | `$0.00 Local` (60 Hz Fixed-Timestep)        | Live WASD/Space combat feel, M16/M21 debug overlay, M27 hit-flash & synced `.gd` `@export` stats     |
 
 ---
 
@@ -703,6 +705,18 @@ flowchart LR
 
 ---
 
+### 2.31 Feel-Test Entities in the In-Browser Mini-Playtest Stage (Entity Hub)
+
+**When to use it:** Catch mistimed active hitbox frames, floaty gravity, or clashing footsteps in-browser before exporting or syncing to Godot.
+
+**Click-by-Click:**
+
+1. Open **`Entities`** (`Entity Hub`) and click **`Playtest`** on any saved entity card (or invoke `Playtest Active Entity` via **`Cmd/Ctrl+K`**).
+2. Move with **`WASD`** / **`Arrow Keys`**, jump with **`W`** / **`K`**, swing with **`Space`** / **`J`**, toggle the **M16 Collider / Hurtbox / Hitbox & M21 Socket Debug Overlay** with **`H`**, and reset the Target Dummy with **`R`** while watching M27 hit-flash decay, M24 pixel damage numbers, and M14/M15 WAV playback.
+3. Tune **`Move Speed`**, **`Gravity`**, **`Hitstop`**, **`Screen Shake`**, **`Knockback`**, **`Flash`**, and **`Attack Damage`** live on the right sidebar (`Side-Platformer` or `Top-Down`), then click **`Apply Stats to Entity .gd`** to write the tuned `@export` values straight into your entity's Godot 4 controller before syncing.
+
+---
+
 ## Part 3 — Engine Drop-In Integration Examples
 
 ### Godot 4 (`4.2+`)
@@ -870,6 +884,7 @@ const pop = new BitmapText({
 - **Godot 4 `Theme` `.tres` UI Kit Builder (`UI Kit` Tab):** Synthesize matched 7-slot 9-slice widget kits (`button_normal`, `button_hover`, `button_pressed`, `button_disabled`, `panel_bg`, `bar_track`, `bar_fill`) in pure TS (`uiKitCore.ts`) or slice `#FF00FF` GenAI `4×2` state sheets (`uiKitAdapter.ts`), test live interactive hover/press/disabled buttons and HP progress bars paired with M24 `.fnt` fonts (`UiKitWorkshop.tsx`), and export Godot 4 `format=3` `Theme` `.tres` resources + `.png.import` sidecars + ZIPs (`godotThemeExporter.ts`, `fsaaSyncEngine.ts`).
 - **2D Stick-Figure Pose Keyframer & OpenPose Cycle Generator (Screen 4O):** Pose a 15-joint humanoid skeleton with analytic law-of-cosines 2-bone IK (`solveTwoBoneIk`), built-in `run_6f` / `melee_slash_5f` / `jump_4f` / `idle_4f` cycles, and color-coded `#000000` OpenPose strip rasterization in pure TS (`poseRigCore.ts`, `posePresets.ts`); condition Gemini Image, Antigravity Bridge, ComfyUI ControlNet OpenPose, or `$0.00` Offline Mock mannequins (`poseAnimationAdapter.ts`) with transferable Worker chroma stripping & shared ground-pivot alignment (`SLICE_AND_ALIGN_POSE_STRIP`); edit frames with 35% red/cyan onion-skinning (`PoseKeyframerWorkshop.tsx`); and commit directly into M25 `EntityAnimationClip`.
 - **Godot 4 `TileMapLayer` Room & Encounter Prototyper (Screen 4P):** Validate room grids (`12–64 × 8–32`), relocate invalid solid-overlapping spawns/entities (`sanitizeRoomPlacements()`), map solid/platform cells onto M20 Blob-47 / Wang-16 atlas coords (`resolveRoomAutoTileCells()`), and encode/decode Godot `4.3+` little-endian `2 + 12×N` `tile_map_data` binary arrays (`roomLayoutCore.ts`) backed by Dexie v6 `rooms`; plan rooms via Gemini Flash JSON `responseSchema` or deterministic `$0.00` Offline Mock synthesis (`roomPrototyperAdapter.ts`); export complete `format=3` `.tscn` scenes (`godotRoomExporter.ts`) with M23 `Parallax2D`, `PlayerSpawn`, clamped `Camera2D`, and instanced M25 Entities; and paint, bundle (`levels/<slug>.tscn` + `recipe.json`), and live-sync directly to `res://` inside `RoomPrototyperWorkshop.tsx`.
+- **In-Browser Mini-Playtest Stage (Entity Hub):** Run a deterministic zero-DOM 60 Hz fixed-timestep simulation (`playtestEngineCore.ts`) supporting side-platformer gravity/jumping and normalized 8-way top-down movement, single-hit active-frame M16 Hitbox vs. Dummy Hurtbox overlap, hitstop freeze frames, knockback impulse, trauma shake, and M25 `frameAudioTriggers`; synchronize tuned stats directly into M26 `@export` GDScript declarations (`playtestStatSync.ts`) via a spiral-safe `100 ms`-capped accumulator; and audition live combat feel with toggleable `H` Debug Overlays, M27 hit-flash feedback, M24 `5×7` floating damage numerals, and M14/M15 `AudioPlaybackEngine` triggers inside `EntityPlaytestStage.tsx`.
 
 ---
 
