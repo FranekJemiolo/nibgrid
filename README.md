@@ -4,6 +4,20 @@ Local-first, zero-server Bring-Your-Own-Key / Bring-Your-Own-Model (BYOK/BYOM) P
 
 **Live App (GitHub Pages):** https://franekjemiolo.github.io/nibgrid/
 
+## Screenshots
+
+### GitHub Pages PWA
+
+Dialogue & Localization Studio with the live M24 missing-glyph and M33 text-overflow audits:
+
+![Nibgrid PWA — Dialogue & Localization Studio](docs/screenshots/pwa-dialogue-l10n.png)
+
+Project hub:
+
+![Nibgrid PWA — Project Hub](docs/screenshots/pwa-project-hub.png)
+
+_Regenerate with `npm run build && npx vite preview --port 4173` and `node scripts/capture-readme-screenshots.mjs` (`SHOT_URL` selects the target)._
+
 ---
 
 ## Table of Contents
