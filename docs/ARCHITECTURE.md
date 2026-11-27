@@ -569,3 +569,16 @@ All image-manipulation stages operate on raw `Uint8ClampedArray` buffers in `src
 ## 109. Interactive World Map Graph, Audit & Minimap UI (Milestone 45C)
 
 - **`WorldMapPanel.tsx` & Parity Registration (`src/ui/world/WorldMapPanel.tsx`, `src/ui/inspector/workspaceTabs.ts`, `scripts/verify-parity.ts`, `src/store/useAppStore.ts`, `src/App.tsx`, `src/ui/inspector/PostProcessInspector.tsx`, `src/ui/inspector/RoomPrototyperWorkshop.tsx`, `src/ui/command/CommandPalette.tsx`):** Exposes a top-level **World Map** header route (`#/project/:id/world`), `'world-map'` inspector tab (`verify:parity` tracked), and `Cmd+K` Command Palette action with pan/zoom snap-to-grid room cards, portal link editor, 1-click softlock audit badges (jumping directly to flagged M35 rooms), nearest-neighbor minimap canvas preview, and Godot `res://` world sync.
+
+## 110. Schema-Driven Game Data Foundry & Seeded Balance Simulator (Milestone 46A)
+
+- **Game Data Schemas & Referential Validator (`src/data/gameDataSchemas.ts`):** Defines versioned Zod schemas (`WeaponItemSchema`, `EnemyStatBlockSchema`, `LootTableSchema`, `ProgressionCurveSchema`, `GameDataRegistrySchema`), starter presets (`createDefaultGameDataRegistry`), CSV/JSON serializers, and strict `validateGameDataRegistry()` catching duplicate IDs, `minQty > maxQty`, missing `enemy.lootTableId`, and dangling `lootTable.entries[].itemId` references (allowing reserved `__gold__`).
+- **Seeded Monte Carlo Balance Engine (`src/data/balanceSimulator.ts`):** Implements zero-DOM Mulberry32 PRNG (`createMulberry32`), M36-parity `computeMitigatedDamage()`, `simulateCombatTtk()` (byte-identical P10/P50/P90 TTK, effective DPS, win rate, histogram buckets, and sponge/lethality warnings), `simulateLootEconomy()`, and `evaluateProgressionCurve()`.
+
+## 111. Godot 4 Typed `Resource` Exporter & Dexie v10 Sync (Milestone 46B)
+
+- **Typed Godot Data Exporter (`src/export/godotDataExporter.ts`, `src/db/database.ts`, `src/sync/fsaaSyncEngine.ts`):** Emits Godot 4.3+ `@export` typed `Resource` classes (`WeaponItemData.gd`, `EnemyStatData.gd`, `LootTableData.gd`) under `res://data/schemas/`, safely escaped `format=3` `load_steps=2` `.tres` resource instances (`data/items/*.tres`, `data/enemies/*.tres`, `data/loot/*.tres`), `toPlaytestCombatPatch()` mapping for M36 Playtest, Dexie v10 `gameDataRegistries` table persistence, and automatic `collectProjectGodotSyncFiles()` inclusion.
+
+## 112. Interactive Data Foundry, Balance Lab & Parity Integration (Milestone 46C)
+
+- **`DataFoundryPanel.tsx` & Navigation (`src/ui/data/DataFoundryPanel.tsx`, `src/ui/inspector/workspaceTabs.ts`, `scripts/verify-parity.ts`, `src/store/useAppStore.ts`, `src/App.tsx`, `src/ui/inspector/PostProcessInspector.tsx`, `src/ui/command/CommandPalette.tsx`):** Registers top-level **Data Foundry** route (`#/project/:id/data`), `'data-foundry'` inspector tab (`verify:parity` tracked), and `Cmd+K` palette entry with tabbed inline editing (Items, Enemies, Loot Tables, XP Curves), CSV/JSON export, live seeded Mulberry32 Monte Carlo TTK histogram & loot/XP simulation sidebar, 1-click **Push to M36 Playtest**, and M25 `.gd`/`.tres` sync.

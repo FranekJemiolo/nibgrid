@@ -19,6 +19,7 @@ import {
 import { assembleGodotRoomFiles } from '../export/godotRoomExporter';
 import { assembleGodotUiKitFiles, bakeBitmapFontFromConfig } from '../export/godotThemeExporter';
 import { assembleGodotWorldFiles, exportRoomPortalNodes } from '../export/godotWorldExporter';
+import { assembleGodotGameDataFiles } from '../export/godotDataExporter';
 import { toAssetSlug, triggerBlobDownload } from '../export/zipPackager';
 import { bakeNormalMapCpu } from '../processing/distanceField';
 import { decodePngBytesToRgba, encodeRgbaToPngBytes } from '../processing/png';
@@ -553,6 +554,13 @@ export async function collectProjectGodotSyncFiles(
       minimapAtlas,
     });
     for (const file of worldFiles) {
+      deduped.set(file.relativePath, file);
+    }
+  }
+
+  const gameData = await repo.getGameDataRegistry(project.id);
+  if (gameData) {
+    for (const file of assembleGodotGameDataFiles(gameData)) {
       deduped.set(file.relativePath, file);
     }
   }

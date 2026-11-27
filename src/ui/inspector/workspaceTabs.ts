@@ -81,6 +81,12 @@ export const INSPECTOR_TAB_META: Record<InspectorTab, InspectorTabMeta> = {
     shortLabel: 'World Map',
     testId: 'inspector-tab-world-map',
   },
+  'data-foundry': {
+    id: 'data-foundry',
+    label: 'Game Data Foundry & Balance Lab',
+    shortLabel: 'Data Foundry',
+    testId: 'inspector-tab-data-foundry',
+  },
   bmfont: {
     id: 'bmfont',
     label: 'Bitmap Font',
@@ -131,6 +137,7 @@ export const ALL_INSPECTOR_TABS: readonly InspectorTab[] = [
   'parallax',
   'room',
   'world-map',
+  'data-foundry',
   'bmfont',
   'uikit',
   'palette-lut',
@@ -164,7 +171,15 @@ export function resolveInspectorTabs(
   let primary: InspectorTab[];
   switch (assetClass) {
     case 'prop':
-      primary = ['postprocess', 'normal', 'sockets', 'collider', 'palette-lut', 'sandbox'];
+      primary = [
+        'postprocess',
+        'normal',
+        'sockets',
+        'collider',
+        'palette-lut',
+        'sandbox',
+        'data-foundry',
+      ];
       break;
     case 'tile':
       primary = [

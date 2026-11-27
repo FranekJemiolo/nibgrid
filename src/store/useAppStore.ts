@@ -18,6 +18,7 @@ import type { SliceJobRecord } from '../processing/sliceDagRunner';
 import type { PixelTool } from '../processing/pixelEditorCore';
 import type { ShareableRecipe } from '../share/recipeUrlCodec';
 import type { WorldGraph } from '../world/worldGraphCore';
+import type { GameDataRegistry } from '../data/gameDataSchemas';
 
 export type InspectorTab =
   | 'postprocess'
@@ -31,6 +32,7 @@ export type InspectorTab =
   | 'parallax'
   | 'room'
   | 'world-map'
+  | 'data-foundry'
   | 'bmfont'
   | 'uikit'
   | 'palette-lut'
@@ -55,6 +57,7 @@ export type ScreenRoute =
   | { screen: 'audit'; projectId: string }
   | { screen: 'entities'; projectId: string; playtestEntityId?: string }
   | { screen: 'world'; projectId: string }
+  | { screen: 'data'; projectId: string }
   | { screen: 'vault'; projectId?: string };
 
 const VALID_PIXEL_TOOLS = new Set<PixelTool>([
@@ -78,6 +81,7 @@ const VALID_INSPECTOR_TABS = new Set<InspectorTab>([
   'parallax',
   'room',
   'world-map',
+  'data-foundry',
   'bmfont',
   'uikit',
   'palette-lut',
@@ -144,6 +148,10 @@ export function parseHashRoute(hash: string): ScreenRoute {
   if (worldMatch?.[1]) {
     return { screen: 'world', projectId: worldMatch[1] };
   }
+  const dataMatch = /^\/project\/([^/]+)\/data$/.exec(path);
+  if (dataMatch?.[1]) {
+    return { screen: 'data', projectId: dataMatch[1] };
+  }
   if (path === '/vault') {
     return { screen: 'vault' };
   }
@@ -183,6 +191,9 @@ export function formatHashRoute(route: ScreenRoute): string {
   if (route.screen === 'world') {
     return `#/project/${route.projectId}/world`;
   }
+  if (route.screen === 'data') {
+    return `#/project/${route.projectId}/data`;
+  }
   if (route.screen === 'vault') {
     return route.projectId ? `#/project/${route.projectId}/vault` : '#/vault';
   }
@@ -204,6 +215,7 @@ interface AppState {
   entities: EntityDefinition[];
   rooms: StoredRoomRecord[];
   worldGraph: WorldGraph | null;
+  gameDataRegistry: GameDataRegistry | null;
   focusedRoomId: string | null;
   sliceJobs: SliceJobRecord[];
   agentCheckpoints: AgentCheckpoint[];
@@ -277,6 +289,8 @@ interface AppState {
     pngBlob: Blob,
     atlasJson: string,
   ) => Promise<WorldGraph>;
+  refreshGameDataRegistry: (projectId: string) => Promise<void>;
+  saveGameDataRegistryRecord: (registry: GameDataRegistry) => Promise<GameDataRegistry>;
   refreshSliceJobs: (projectId: string) => Promise<void>;
   saveSliceJobRecord: (job: SliceJobRecord) => Promise<SliceJobRecord>;
   deleteSliceJobRecord: (jobId: string, projectId: string) => Promise<void>;
@@ -320,6 +334,7 @@ export const useAppStore = create<AppState>((set, get) => ({
   entities: [],
   rooms: [],
   worldGraph: null,
+  gameDataRegistry: null,
   focusedRoomId: null,
   sliceJobs: [],
   agentCheckpoints: [],
@@ -369,6 +384,7 @@ export const useAppStore = create<AppState>((set, get) => ({
             agentCheckpoints,
             syncTarget,
             worldGraph,
+            gameDataRegistry,
           ] = await Promise.all([
             repository.listSpriteNodes(project.id),
             repository.listAudioAssets(project.id),
@@ -378,6 +394,7 @@ export const useAppStore = create<AppState>((set, get) => ({
             repository.listAgentCheckpoints(project.id),
             repository.getSyncTarget(project.id),
             repository.getWorldGraph(project.id),
+            repository.getGameDataRegistry(project.id),
           ]);
           set({
             route: initialRoute,
@@ -390,6 +407,7 @@ export const useAppStore = create<AppState>((set, get) => ({
             entities,
             rooms,
             worldGraph: worldGraph ?? null,
+            gameDataRegistry: gameDataRegistry ?? null,
             sliceJobs,
             agentCheckpoints,
             syncTarget: syncTarget ?? null,
@@ -408,6 +426,7 @@ export const useAppStore = create<AppState>((set, get) => ({
           entities: [],
           rooms: [],
           worldGraph: null,
+          gameDataRegistry: null,
           sliceJobs: [],
           agentCheckpoints: [],
           syncTarget: null,
@@ -428,6 +447,7 @@ export const useAppStore = create<AppState>((set, get) => ({
             agentCheckpoints,
             syncTarget,
             worldGraph,
+            gameDataRegistry,
           ] = await Promise.all([
             repository.listSpriteNodes(project.id),
             repository.listAudioAssets(project.id),
@@ -437,6 +457,7 @@ export const useAppStore = create<AppState>((set, get) => ({
             repository.listAgentCheckpoints(project.id),
             repository.getSyncTarget(project.id),
             repository.getWorldGraph(project.id),
+            repository.getGameDataRegistry(project.id),
           ]);
           set({
             route: initialRoute,
@@ -449,6 +470,7 @@ export const useAppStore = create<AppState>((set, get) => ({
             entities,
             rooms,
             worldGraph: worldGraph ?? null,
+            gameDataRegistry: gameDataRegistry ?? null,
             sliceJobs,
             agentCheckpoints,
             syncTarget: syncTarget ?? null,
@@ -472,6 +494,7 @@ export const useAppStore = create<AppState>((set, get) => ({
         entities: [],
         rooms: [],
         worldGraph: null,
+        gameDataRegistry: null,
         sliceJobs: [],
         agentCheckpoints: [],
         syncTarget: null,
@@ -510,6 +533,7 @@ export const useAppStore = create<AppState>((set, get) => ({
           agentCheckpoints,
           syncTarget,
           worldGraph,
+          gameDataRegistry,
         ] = await Promise.all([
           repository.listSpriteNodes(project.id),
           repository.listAudioAssets(project.id),
@@ -519,6 +543,7 @@ export const useAppStore = create<AppState>((set, get) => ({
           repository.listAgentCheckpoints(project.id),
           repository.getSyncTarget(project.id),
           repository.getWorldGraph(project.id),
+          repository.getGameDataRegistry(project.id),
         ]);
         set({
           route: { screen: 'vault', projectId: project.id },
@@ -530,6 +555,7 @@ export const useAppStore = create<AppState>((set, get) => ({
           entities,
           rooms,
           worldGraph: worldGraph ?? null,
+          gameDataRegistry: gameDataRegistry ?? null,
           sliceJobs,
           agentCheckpoints,
           syncTarget: syncTarget ?? null,
@@ -546,6 +572,7 @@ export const useAppStore = create<AppState>((set, get) => ({
           entities: [],
           rooms: [],
           worldGraph: null,
+          gameDataRegistry: null,
           sliceJobs: [],
           agentCheckpoints: [],
           syncTarget: null,
@@ -566,6 +593,7 @@ export const useAppStore = create<AppState>((set, get) => ({
         entities: [],
         rooms: [],
         worldGraph: null,
+        gameDataRegistry: null,
         sliceJobs: [],
         agentCheckpoints: [],
         syncTarget: null,
@@ -589,6 +617,7 @@ export const useAppStore = create<AppState>((set, get) => ({
         entities: [],
         rooms: [],
         worldGraph: null,
+        gameDataRegistry: null,
         sliceJobs: [],
         agentCheckpoints: [],
         syncTarget: null,
@@ -608,6 +637,7 @@ export const useAppStore = create<AppState>((set, get) => ({
       agentCheckpoints,
       syncTarget,
       worldGraph,
+      gameDataRegistry,
     ] = await Promise.all([
       repository.listSpriteNodes(project.id),
       repository.listAudioAssets(project.id),
@@ -617,6 +647,7 @@ export const useAppStore = create<AppState>((set, get) => ({
       repository.listAgentCheckpoints(project.id),
       repository.getSyncTarget(project.id),
       repository.getWorldGraph(project.id),
+      repository.getGameDataRegistry(project.id),
     ]);
     set({
       route,
@@ -626,6 +657,7 @@ export const useAppStore = create<AppState>((set, get) => ({
       entities,
       rooms,
       worldGraph: worldGraph ?? null,
+      gameDataRegistry: gameDataRegistry ?? null,
       sliceJobs,
       agentCheckpoints,
       syncTarget: syncTarget ?? null,
@@ -676,6 +708,7 @@ export const useAppStore = create<AppState>((set, get) => ({
         entities: [],
         rooms: [],
         worldGraph: null,
+        gameDataRegistry: null,
         sliceJobs: [],
         agentCheckpoints: [],
         syncTarget: null,
@@ -890,6 +923,17 @@ export const useAppStore = create<AppState>((set, get) => ({
     const committed = await repository.commitWorldGraphWithMinimap(graph, pngBlob, atlasJson);
     set({ worldGraph: committed });
     return committed;
+  },
+
+  refreshGameDataRegistry: async (projectId) => {
+    const gameDataRegistry = await repository.getGameDataRegistry(projectId);
+    set({ gameDataRegistry: gameDataRegistry ?? null });
+  },
+
+  saveGameDataRegistryRecord: async (registry) => {
+    const saved = await repository.saveGameDataRegistry(registry);
+    set({ gameDataRegistry: saved });
+    return saved;
   },
 
   refreshSliceJobs: async (projectId) => {

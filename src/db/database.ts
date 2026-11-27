@@ -51,6 +51,7 @@ import { StoredRoomRecordSchema, type StoredRoomRecord } from '../processing/roo
 import { SliceJobRecordSchema, type SliceJobRecord } from '../processing/sliceDagRunner';
 import { AgentCheckpointSchema, type AgentCheckpoint } from '../agent/stagingTransactions';
 import { WorldGraphSchema, type WorldGraph } from '../world/worldGraphCore';
+import { GameDataRegistrySchema, type GameDataRegistry } from '../data/gameDataSchemas';
 
 export const OFFLINE_MOCK_PROVIDER_ID = 'offline-mock';
 export const ANTIGRAVITY_AGENT_PROVIDER_ID = 'antigravity-agent';
@@ -74,6 +75,7 @@ export class NibgridDatabase extends Dexie {
   sliceJobs!: Table<SliceJobRecord, string>;
   agentCheckpoints!: Table<AgentCheckpoint, string>;
   worldGraphs!: Table<WorldGraph, string>;
+  gameDataRegistries!: Table<GameDataRegistry, string>;
 
   constructor(dbName = 'nibgrid-db') {
     super(dbName);
@@ -173,6 +175,22 @@ export class NibgridDatabase extends Dexie {
       sliceJobs: '&id, projectId, status, updatedAt',
       agentCheckpoints: '&id, projectId, createdAt',
       worldGraphs: '&projectId, id, updatedAt',
+    });
+    this.version(10).stores({
+      projects: 'id, updatedAt, name',
+      blobs: 'id, sha256, createdAt',
+      spriteNodes: 'id, projectId, parentId, [projectId+createdAt]',
+      providerConfigs: 'id, kind, updatedAt',
+      audioAssets: 'id, projectId, presetId, createdAt',
+      entities: '&id, projectId, slug',
+      syncTargets: '&projectId',
+      vaultItems: '&id, kind, name, createdAt',
+      qaReports: '&projectId, sheetHash',
+      rooms: '&id, projectId, slug',
+      sliceJobs: '&id, projectId, status, updatedAt',
+      agentCheckpoints: '&id, projectId, createdAt',
+      worldGraphs: '&projectId, id, updatedAt',
+      gameDataRegistries: '&projectId, updatedAt',
     });
   }
 }
@@ -952,6 +970,30 @@ export class NibgridRepository {
     });
   }
 
+  async getGameDataRegistry(projectId: string): Promise<GameDataRegistry | undefined> {
+    const found = await this.database.gameDataRegistries.get(projectId);
+    return found ? GameDataRegistrySchema.parse(found) : undefined;
+  }
+
+  async saveGameDataRegistry(registry: GameDataRegistry): Promise<GameDataRegistry> {
+    const validated = GameDataRegistrySchema.parse({
+      ...registry,
+      updatedAt: registry.updatedAt || Date.now(),
+    });
+    await this.database.transaction(
+      'rw',
+      [this.database.gameDataRegistries, this.database.projects],
+      async () => {
+        await this.database.gameDataRegistries.put(validated);
+        await this.database.projects
+          .where('id')
+          .equals(validated.projectId)
+          .modify({ updatedAt: nowIso() });
+      },
+    );
+    return validated;
+  }
+
   async deleteVaultItem(id: string): Promise<void> {
     await this.database.transaction('rw', this.blobGcTables, async () => {
       const found = await this.database.vaultItems.get(id);
@@ -1145,6 +1187,7 @@ export class NibgridRepository {
         this.database.sliceJobs,
         this.database.syncTargets,
         this.database.qaReports,
+        this.database.gameDataRegistries,
       ],
       async () => {
         await this.database.spriteNodes.where('projectId').equals(projectId).delete();
@@ -1154,6 +1197,7 @@ export class NibgridRepository {
         await this.database.sliceJobs.where('projectId').equals(projectId).delete();
         await this.database.agentCheckpoints.where('projectId').equals(projectId).delete();
         await this.database.worldGraphs.delete(projectId);
+        await this.database.gameDataRegistries.delete(projectId);
         await this.database.syncTargets.delete(projectId);
         await this.database.qaReports.delete(projectId);
         await this.database.projects.delete(projectId);

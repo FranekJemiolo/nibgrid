@@ -193,6 +193,14 @@ export function CommandPalette({ open, onOpenChange }: CommandPaletteProps) {
           execute: () => navigate({ screen: 'world', projectId: projId }),
         },
         {
+          id: 'act-data-foundry',
+          title: 'Open Game Data Foundry & Balance Lab',
+          subtitle: 'Edit weapons/enemies/loot, simulate Mulberry32 TTK & sync .tres resources',
+          category: 'action',
+          keywords: ['data', 'foundry', 'weapon', 'enemy', 'loot', 'xp', 'ttk', 'tres', 'm46'],
+          execute: () => navigate({ screen: 'data', projectId: projId }),
+        },
+        {
           id: 'act-bmfont',
           title: 'Open Bitmap Font & Damage Numeral Exporter',
           subtitle: 'Art Bible pixel numerals, OKLab Sel-Out, AngelCode .fnt/.xml & crit preview',

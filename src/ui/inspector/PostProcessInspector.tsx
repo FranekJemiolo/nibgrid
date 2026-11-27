@@ -129,6 +129,7 @@ import { TurnaroundSlicer } from './TurnaroundSlicer';
 import { UiKitWorkshop } from './UiKitWorkshop';
 import { VfxBaker } from './VfxBaker';
 import { WorldMapPanel } from '../world/WorldMapPanel';
+import { DataFoundryPanel } from '../data/DataFoundryPanel';
 import {
   ASSET_CLASS_OPTIONS,
   INSPECTOR_TAB_META,
@@ -2242,6 +2243,8 @@ export function PostProcessInspector({
           />
         ) : inspectorTab === 'world-map' ? (
           <WorldMapPanel />
+        ) : inspectorTab === 'data-foundry' ? (
+          <DataFoundryPanel />
         ) : inspectorTab === 'bmfont' && activeSpriteBuffer ? (
           <BitmapFontWorkshop
             sprite={activeSpriteBuffer}

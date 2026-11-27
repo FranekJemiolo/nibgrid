@@ -8,6 +8,7 @@ import {
   Command,
   Compass,
   Cpu,
+  Database,
   Download,
   FolderKanban,
   Grid2X2,
@@ -41,6 +42,7 @@ import { ShareRecipeModal } from './ui/share/ShareRecipeModal';
 import { SpriteStudio } from './ui/studio/SpriteStudio';
 import { VaultAndBrowserView } from './ui/vault/VaultAndBrowserView';
 import { WorldMapPanel } from './ui/world/WorldMapPanel';
+import { DataFoundryPanel } from './ui/data/DataFoundryPanel';
 
 export function App() {
   const {
@@ -228,6 +230,15 @@ export function App() {
                 <Compass className="h-3.5 w-3.5" />
                 World Map
               </button>
+              <button
+                type="button"
+                data-testid="nav-data-foundry"
+                onClick={() => void navigate({ screen: 'data', projectId: activeProject.id })}
+                className={navButtonClass(route.screen === 'data')}
+              >
+                <Database className="h-3.5 w-3.5" />
+                Data Foundry
+              </button>
             </>
           )}
 
@@ -356,6 +367,8 @@ export function App() {
           <EntityHubView />
         ) : route.screen === 'world' ? (
           <WorldMapPanel />
+        ) : route.screen === 'data' ? (
+          <DataFoundryPanel />
         ) : route.screen === 'vault' ? (
           <VaultAndBrowserView />
         ) : (

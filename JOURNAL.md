@@ -786,3 +786,18 @@
 
 - **World Map Editor & Navigation (`src/ui/world/WorldMapPanel.tsx`, `src/ui/inspector/workspaceTabs.ts`, `scripts/verify-parity.ts`, `src/store/useAppStore.ts`, `src/App.tsx`, `src/ui/inspector/PostProcessInspector.tsx`, `src/ui/inspector/RoomPrototyperWorkshop.tsx`, `src/ui/command/CommandPalette.tsx`, `docs/ARCHITECTURE.md`):** Built interactive snap-to-grid room graph, portal transition composer, 1-click BFS/DFS Softlock Audit UI with room jump links, pixelated minimap preview, and M25 `res://` world sync, registered in `ALL_INSPECTOR_TABS` & `EXPECTED_REQUIRED_INSPECTOR_TABS`.
 - **Verification (`tests/e2e/m45c-world-map-e2e.spec.ts`):** Verified seeding 2 M35 rooms, connecting with `red_key` gate, catching `Issues Found` / unreachable warning before granting `red_key`, green `OK` audit after granting `red_key`, baking non-empty minimap canvas, reload persistence, zero `console.error`/`pageerror`, and zero orphan blobs.
+
+## Milestone 46A: Game Data Schemas & Seeded Monte Carlo Simulator
+
+- **Schemas & Balance Simulator (`src/data/gameDataSchemas.ts`, `src/data/balanceSimulator.ts`, `docs/ARCHITECTURE.md`):** Implemented Zod schemas (`WeaponItem`, `EnemyStatBlock`, `LootTable`, `ProgressionCurve`), referential validator `validateGameDataRegistry()`, deterministic Mulberry32 PRNG (`createMulberry32`), `simulateCombatTtk()`, `simulateLootEconomy()`, and `evaluateProgressionCurve()`.
+- **Verification (`tests/unit/m46a-balance-sim.test.ts`):** Verified byte-identical seeded TTK/economy outputs (`seed: 42`), monotonic `p50TtkSec` reduction with increasing `baseDamage`, sponge/lethality warnings, dangling-reference validation failures, and XP progression table math.
+
+## Milestone 46B: Godot 4 Typed `Resource` Exporter & Dexie v10 M25 Sync
+
+- **Resource Schemas, `.tres` Instances & Sync (`src/export/godotDataExporter.ts`, `src/db/database.ts`, `src/sync/fsaaSyncEngine.ts`, `docs/ARCHITECTURE.md`):** Implemented typed `WeaponItemData.gd` / `EnemyStatData.gd` / `LootTableData.gd` schemas, escaped `format=3` `.tres` emitters, `toPlaytestCombatPatch()`, Dexie v10 `gameDataRegistries` persistence + cascade deletion, and M25 `collectProjectGodotSyncFiles()` wiring.
+- **Verification (`tests/unit/m46b-godot-data.test.ts`):** Verified `format=3` / `load_steps=2` / escaped `.tres` syntax with zero `NaN`, all 3 `.gd` schema scripts, atomic Dexie persistence (0 orphans), and full `data/*` emission in M25 sync.
+
+## Milestone 46C: Interactive `DataFoundryPanel.tsx`, Tab/Parity Wiring & E2E Flow
+
+- **Data Foundry Studio & Playtest/Sync Wiring (`src/ui/data/DataFoundryPanel.tsx`, `src/ui/inspector/workspaceTabs.ts`, `scripts/verify-parity.ts`, `src/store/useAppStore.ts`, `src/App.tsx`, `src/ui/inspector/PostProcessInspector.tsx`, `src/ui/command/CommandPalette.tsx`, `docs/ARCHITECTURE.md`):** Built tabbed inline editor (Items, Enemies, Loot Tables, XP Curves), live Balance Lab sidebar with Mulberry32 TTK histogram & balance warnings, **Push to M36 Playtest**, CSV/JSON downloads, and M25 `res://` `.gd`/`.tres` sync, registered in `ALL_INSPECTOR_TABS` & `EXPECTED_REQUIRED_INSPECTOR_TABS`.
+- **Verification (`tests/e2e/m46c-data-foundry-e2e.spec.ts`):** Verified adding `flame_blade`, running seeded Monte Carlo TTK sim vs `goblin_scout`, writing `WeaponItemData.gd` + `flame_blade.tres` + `goblin_scout.tres` to FSAA stub, reload persistence, zero `console.error`/`pageerror`, and zero orphan blobs.
