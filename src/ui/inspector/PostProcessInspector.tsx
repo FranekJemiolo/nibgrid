@@ -464,7 +464,7 @@ export function PostProcessInspector({
     setShaderConfig(node.shaderConfig ?? createDefaultShaderConfig());
     setUiKitConfig(
       node.uiKitConfig ??
-      createDefaultUiKitConfig(latestProjectRef.current?.artBible.palette ?? []),
+        createDefaultUiKitConfig(latestProjectRef.current?.artBible.palette ?? []),
     );
     setPoseClip(node.poseClip ?? createDefaultPoseClip());
     pixelUndoStackRef.current.clear();
@@ -499,7 +499,7 @@ export function PostProcessInspector({
     if (!targetNodeId || !node || !project) return;
     setConfig(
       node.postProcessConfig ??
-      createDefaultPostProcessConfig(project.artBible.targetWidth, project.artBible.targetHeight),
+        createDefaultPostProcessConfig(project.artBible.targetWidth, project.artBible.targetHeight),
     );
     setPuppetConfig(node.puppetAnim ?? createDefaultPuppetAnimConfig());
     setSeamlessConfig(node.seamlessTile ?? createDefaultSeamlessTileConfig());
@@ -518,7 +518,7 @@ export function PostProcessInspector({
     const sliceChanged =
       nineSliceConfig.enabled &&
       JSON.stringify(nodeSnapshot.nineSlice ?? createDefaultNineSliceConfig()) !==
-      JSON.stringify(nineSliceConfig);
+        JSON.stringify(nineSliceConfig);
     const nextLutConfig =
       lutVariants.length > 0
         ? paletteVariantsToConfig(lutVariants, nodeSnapshot.paletteLut)
@@ -754,11 +754,11 @@ export function PostProcessInspector({
               : {}),
             ...(latestLutVariantsRef.current.length > 0
               ? {
-                paletteLut: paletteVariantsToConfig(
-                  latestLutVariantsRef.current,
-                  existing.paletteLut,
-                ),
-              }
+                  paletteLut: paletteVariantsToConfig(
+                    latestLutVariantsRef.current,
+                    existing.paletteLut,
+                  ),
+                }
               : {}),
             ...(latestCollisionShapesRef.current.length > 0
               ? { collisionShapes: latestCollisionShapesRef.current }
@@ -826,7 +826,7 @@ export function PostProcessInspector({
       if (
         maskOverlayCanvasRef.current &&
         inpaintMaskRef.current.length ===
-        processedArtifactRef.current.width * processedArtifactRef.current.height
+          processedArtifactRef.current.width * processedArtifactRef.current.height
       ) {
         const overlay = maskToOverlayRgba(
           inpaintMaskRef.current,
@@ -1454,12 +1454,12 @@ export function PostProcessInspector({
       cachedMesh = mesh;
       const normalBuf = normalConfig.enabled
         ? bakeNormalMapCpu(spriteBuf, {
-          bevelRadiusPx: normalConfig.bevelRadiusPx,
-          bevelProfile: normalConfig.bevelProfile,
-          bevelStrength: normalConfig.bevelStrength,
-          detailStrength: normalConfig.detailStrength,
-          convention: normalConfig.convention,
-        })
+            bevelRadiusPx: normalConfig.bevelRadiusPx,
+            bevelProfile: normalConfig.bevelProfile,
+            bevelStrength: normalConfig.bevelStrength,
+            detailStrength: normalConfig.detailStrength,
+            convention: normalConfig.convention,
+          })
         : undefined;
       const stripRes = buildPuppetStripArtifacts(spriteBuf, mesh, slug, {
         preset: puppetConfig.preset,
@@ -2027,10 +2027,11 @@ export function PostProcessInspector({
                   data-testid="inspector-more-tools-btn"
                   aria-expanded={overflowOpen}
                   onClick={() => setOverflowOpen((o) => !o)}
-                  className={`inline-flex items-center gap-1 rounded px-2.5 py-1 font-medium transition-colors ${activeTabInOverflow
-                    ? 'bg-[var(--accent-primary)]/20 text-[#F5B82E] ring-1 ring-[var(--accent-primary)]/40'
-                    : 'text-[var(--text-muted)] hover:bg-slate-800 hover:text-white'
-                    }`}
+                  className={`inline-flex items-center gap-1 rounded px-2.5 py-1 font-medium transition-colors ${
+                    activeTabInOverflow
+                      ? 'bg-[var(--accent-primary)]/20 text-[#F5B82E] ring-1 ring-[var(--accent-primary)]/40'
+                      : 'text-[var(--text-muted)] hover:bg-slate-800 hover:text-white'
+                  }`}
                 >
                   <span>
                     {activeTabInOverflow
@@ -2054,10 +2055,11 @@ export function PostProcessInspector({
                           type="button"
                           data-testid={meta.testId}
                           onClick={() => selectTab(tabId)}
-                          className={`flex w-full items-center gap-2 rounded px-2.5 py-1.5 text-left text-xs transition-colors ${active
-                            ? 'bg-[var(--accent-primary)]/20 font-semibold text-[#F5B82E]'
-                            : 'text-slate-300 hover:bg-slate-800 hover:text-white'
-                            }`}
+                          className={`flex w-full items-center gap-2 rounded px-2.5 py-1.5 text-left text-xs transition-colors ${
+                            active
+                              ? 'bg-[var(--accent-primary)]/20 font-semibold text-[#F5B82E]'
+                              : 'text-slate-300 hover:bg-slate-800 hover:text-white'
+                          }`}
                         >
                           {tabId === 'sandbox' && <Gamepad2 className="h-3.5 w-3.5" />}
                           {tabId === 'turnaround' && <Scissors className="h-3.5 w-3.5" />}
@@ -2318,10 +2320,11 @@ export function PostProcessInspector({
           />
         ) : (
           <div
-            className={`grid min-w-0 flex-1 grid-cols-1 ${drawerCollapsed
-              ? 'lg:grid-cols-[minmax(0,1fr)]'
-              : 'lg:grid-cols-[minmax(0,1fr)_288px]'
-              }`}
+            className={`grid min-w-0 flex-1 grid-cols-1 ${
+              drawerCollapsed
+                ? 'lg:grid-cols-[minmax(0,1fr)]'
+                : 'lg:grid-cols-[minmax(0,1fr)_288px]'
+            }`}
           >
             {/* Left: Canvas-First Viewport with Floating CanvasHud, Micro-Editor & PiP Biome */}
             <section
@@ -3004,10 +3007,11 @@ export function PostProcessInspector({
                                 targetHeight: dim,
                               }))
                             }
-                            className={`flex-1 rounded border px-2 py-1 font-mono text-[11px] ${config.targetWidth === dim && config.targetHeight === dim
-                              ? 'border-indigo-500 bg-indigo-600 text-white'
-                              : 'border-slate-700 bg-slate-900 text-slate-300'
-                              }`}
+                            className={`flex-1 rounded border px-2 py-1 font-mono text-[11px] ${
+                              config.targetWidth === dim && config.targetHeight === dim
+                                ? 'border-indigo-500 bg-indigo-600 text-white'
+                                : 'border-slate-700 bg-slate-900 text-slate-300'
+                            }`}
                           >
                             {dim}×{dim}
                           </button>
@@ -3202,10 +3206,11 @@ export function PostProcessInspector({
                       setPivotPlaceMode(nextPivot);
                       if (nextPivot) setActivePixelTool(null);
                     }}
-                    className={`flex w-full items-center justify-center gap-1.5 rounded border px-2.5 py-1.5 text-xs font-medium ${pivotPlaceMode
-                      ? 'border-amber-400/60 bg-amber-500/20 text-amber-200'
-                      : 'border-slate-700 bg-slate-900 text-slate-300 hover:bg-slate-800'
-                      }`}
+                    className={`flex w-full items-center justify-center gap-1.5 rounded border px-2.5 py-1.5 text-xs font-medium ${
+                      pivotPlaceMode
+                        ? 'border-amber-400/60 bg-amber-500/20 text-amber-200'
+                        : 'border-slate-700 bg-slate-900 text-slate-300 hover:bg-slate-800'
+                    }`}
                   >
                     <Crosshair className="h-3.5 w-3.5" />
                     {pivotPlaceMode

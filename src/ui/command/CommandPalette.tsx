@@ -246,7 +246,8 @@ export function CommandPalette({ open, onOpenChange }: CommandPaletteProps) {
         {
           id: 'act-pose-keyframer',
           title: 'Open 2D Stick-Figure Pose Keyframer (AI)',
-          subtitle: '15-joint IK rig, OpenPose guides, onion-skinning & run/attack cycle generation',
+          subtitle:
+            '15-joint IK rig, OpenPose guides, onion-skinning & run/attack cycle generation',
           category: 'action',
           keywords: ['pose', 'openpose', 'ik', 'keyframe', 'run', 'attack', 'animation'],
           execute: () =>
@@ -545,10 +546,11 @@ export function CommandPalette({ open, onOpenChange }: CommandPaletteProps) {
                   aria-selected={selected}
                   onMouseEnter={() => setSelectedIndex(idx)}
                   onClick={() => executeItem(item)}
-                  className={`flex w-full items-center justify-between gap-3 rounded-lg px-3 py-2 text-left transition-colors ${selected
-                    ? 'bg-[var(--accent-primary)]/18 text-[#F5B82E]'
-                    : 'text-[var(--text-primary)] hover:bg-[var(--bg-elevated)]'
-                    }`}
+                  className={`flex w-full items-center justify-between gap-3 rounded-lg px-3 py-2 text-left transition-colors ${
+                    selected
+                      ? 'bg-[var(--accent-primary)]/18 text-[#F5B82E]'
+                      : 'text-[var(--text-primary)] hover:bg-[var(--bg-elevated)]'
+                  }`}
                 >
                   <div className="flex min-w-0 items-center gap-2.5">
                     {item.category === 'action' ? (
