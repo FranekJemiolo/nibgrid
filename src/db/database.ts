@@ -406,9 +406,13 @@ export class NibgridRepository {
   async listSpriteNodes(projectId: string): Promise<SpriteNode[]> {
     const rows = await this.database.spriteNodes.where('projectId').equals(projectId).toArray();
     const validated = rows.map((row) => SpriteNodeSchema.parse(row));
-    return validated.sort((a, b) =>
-      a.generationMeta.createdAt.localeCompare(b.generationMeta.createdAt),
-    );
+    return validated.sort((a, b) => {
+      const timeCmp = a.generationMeta.createdAt.localeCompare(b.generationMeta.createdAt);
+      if (timeCmp !== 0) return timeCmp;
+      const kindCmp = (a.kind === 'sketch' ? 0 : 1) - (b.kind === 'sketch' ? 0 : 1);
+      if (kindCmp !== 0) return kindCmp;
+      return a.id.localeCompare(b.id);
+    });
   }
 
   async saveSpriteNode(node: SpriteNode): Promise<SpriteNode> {

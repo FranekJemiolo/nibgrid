@@ -556,6 +556,7 @@ export function CommandPalette({ open, onOpenChange }: CommandPaletteProps) {
     setComposerOpen,
     setModelSettingsOpen,
     setInstallDesktopOpen,
+    setLightingBakerOpen,
   ]);
 
   const ranked = useMemo(() => rankCommands(query, commands), [query, commands]);
