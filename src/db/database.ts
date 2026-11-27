@@ -21,6 +21,7 @@ import {
   AudioAssetSchema,
   AudioBindingsSchema,
   BlobRecordSchema,
+  PoseClipDefinitionSchema,
   ProjectSchema,
   ProviderConfigSchema,
   SpriteNodeSchema,
@@ -32,6 +33,7 @@ import {
   type BitmapFontConfig,
   type BlobRecord,
   type InpaintHistoryEntry,
+  type PoseClipDefinitionSchemaType,
   type PostProcessConfig,
   type Project,
   type ProviderConfig,
@@ -577,6 +579,129 @@ export class NibgridRepository {
     );
   }
 
+  private async upsertPngBlobInTx(bytes: Uint8Array, sha256: string): Promise<string> {
+    const existing = await this.database.blobs.where('sha256').equals(sha256).first();
+    if (existing) return existing.id;
+    const copy = new Uint8Array(bytes.byteLength);
+    copy.set(bytes);
+    const rec = BlobRecordSchema.parse({
+      id: createId(),
+      mimeType: 'image/png',
+      bytes: new Blob([copy.buffer], { type: 'image/png' }),
+      sha256,
+      createdAt: nowIso(),
+    });
+    await this.database.blobs.put(rec);
+    return rec.id;
+  }
+
+  /**
+   * Atomically commits a processed PNG blob and updates a `SpriteNode` in a single
+   * read-write transaction so background pipeline updates never race with orphan GC.
+   */
+  async patchSpriteNodeWithProcessedBlob(
+    nodeId: string,
+    pngBlob: Blob,
+    updater: (existing: SpriteNode, processedBlobId: string) => SpriteNode,
+  ): Promise<SpriteNode | null> {
+    const bytes = new Uint8Array(await pngBlob.arrayBuffer());
+    const sha256 = await sha256Bytes(bytes);
+
+    let updated: SpriteNode | null = null;
+    await this.database.transaction(
+      'rw',
+      [
+        this.database.blobs,
+        this.database.spriteNodes,
+        this.database.projects,
+        this.database.audioAssets,
+        this.database.vaultItems,
+        this.database.agentCheckpoints,
+      ],
+      async () => {
+        const existing = await this.database.spriteNodes.get(nodeId);
+        if (!existing) return;
+        const processedBlobId = await this.upsertPngBlobInTx(bytes, sha256);
+        const validated = SpriteNodeSchema.parse(updater(existing, processedBlobId));
+        await this.database.spriteNodes.put(validated);
+        await this.database.projects
+          .where('id')
+          .equals(validated.projectId)
+          .modify({ updatedAt: nowIso() });
+        await this.cleanupOrphanedBlobsInTx();
+        updated = validated;
+      },
+    );
+    return updated;
+  }
+
+  /**
+   * Atomically persists generated Pose Keyframer frame blobs + horizontal strip blob onto
+   * `SpriteNode.poseClip` in a single Dexie transaction so blobs cannot be garbage-collected mid-save.
+   */
+  async commitPoseClipFrames(
+    nodeId: string,
+    clipBase: PoseClipDefinitionSchemaType,
+    framePngBlobs: readonly Blob[],
+    stripPngBlob: Blob,
+    assetClass?: AssetClass,
+  ): Promise<{ node: SpriteNode; poseClip: PoseClipDefinitionSchemaType }> {
+    const framePayloads = await Promise.all(
+      framePngBlobs.map(async (blob) => {
+        const bytes = new Uint8Array(await blob.arrayBuffer());
+        return { bytes, sha256: await sha256Bytes(bytes) };
+      }),
+    );
+    const stripBytes = new Uint8Array(await stripPngBlob.arrayBuffer());
+    const stripSha = await sha256Bytes(stripBytes);
+
+    let result: { node: SpriteNode; poseClip: PoseClipDefinitionSchemaType } | null = null;
+    await this.database.transaction(
+      'rw',
+      [
+        this.database.blobs,
+        this.database.spriteNodes,
+        this.database.projects,
+        this.database.audioAssets,
+        this.database.vaultItems,
+        this.database.agentCheckpoints,
+      ],
+      async () => {
+        const existingNode = await this.database.spriteNodes.get(nodeId);
+        if (!existingNode) {
+          throw new Error(`SpriteNode "${nodeId}" not found.`);
+        }
+        const frameBlobIds: string[] = [];
+        for (const payload of framePayloads) {
+          frameBlobIds.push(await this.upsertPngBlobInTx(payload.bytes, payload.sha256));
+        }
+        const stripBlobId = await this.upsertPngBlobInTx(stripBytes, stripSha);
+        const nextClip = PoseClipDefinitionSchema.parse({
+          ...clipBase,
+          generatedFrameBlobIds: frameBlobIds,
+          generatedStripBlobId: stripBlobId,
+        });
+        const nextNode = SpriteNodeSchema.parse({
+          ...existingNode,
+          ...(assetClass !== undefined ? { assetClass } : {}),
+          poseClip: nextClip,
+        });
+        await this.database.spriteNodes.put(nextNode);
+        await this.database.projects
+          .where('id')
+          .equals(nextNode.projectId)
+          .modify({ updatedAt: nowIso() });
+        await this.cleanupOrphanedBlobsInTx();
+        result = { node: nextNode, poseClip: nextClip };
+      },
+    );
+
+    if (!result) {
+      throw new Error(`Failed to commit pose clip frames for SpriteNode "${nodeId}".`);
+    }
+    return result;
+  }
+
   /**
    * Atomically persists baked M44 `_n.png` (and optional `_e.png`) blobs + lighting metadata
    * onto `SpriteNode.lightingBake` with SHA-256 deduplication and zero-orphan cleanup.
@@ -615,25 +740,11 @@ export class NibgridRepository {
           throw new Error(`SpriteNode "${nodeId}" not found.`);
         }
 
-        const ensureBlob = async (bytes: Uint8Array, sha256: string): Promise<string> => {
-          const existing = await this.database.blobs.where('sha256').equals(sha256).first();
-          if (existing) return existing.id;
-          const copy = new Uint8Array(bytes.byteLength);
-          copy.set(bytes);
-          const rec = BlobRecordSchema.parse({
-            id: createId(),
-            mimeType: 'image/png',
-            bytes: new Blob([copy.buffer], { type: 'image/png' }),
-            sha256,
-            createdAt: nowIso(),
-          });
-          await this.database.blobs.put(rec);
-          return rec.id;
-        };
-
-        const normalBlobId = await ensureBlob(normalBytes, normalSha);
+        const normalBlobId = await this.upsertPngBlobInTx(normalBytes, normalSha);
         const emissionBlobId =
-          emissionBytes && emissionSha ? await ensureBlob(emissionBytes, emissionSha) : undefined;
+          emissionBytes && emissionSha
+            ? await this.upsertPngBlobInTx(emissionBytes, emissionSha)
+            : undefined;
 
         const nextNode = SpriteNodeSchema.parse({
           ...existingNode,

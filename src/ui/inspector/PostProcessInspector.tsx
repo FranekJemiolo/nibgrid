@@ -733,50 +733,47 @@ export function PostProcessInspector({
           setAiProgress(null);
 
           const nodeSnapshot = latestNodeRef.current;
-          if (!nodeSnapshot || nodeSnapshot.id !== targetNodeId) {
-            setIsProcessing(false);
-            return;
-          }
-          const processedBlob = rgbaToPngBlob(result.rgba, result.width, result.height);
-          const stored = await repository.storeBlob(processedBlob, 'image/png');
           if (
+            !nodeSnapshot ||
+            nodeSnapshot.id !== targetNodeId ||
             cancelled ||
             !guard.isCurrent(token) ||
             useAppStore.getState().activeProject?.id !== startedProjectId
           ) {
-            await repository.cleanupOrphanedBlobs();
-            if (!cancelled && guard.isCurrent(token)) {
-              setIsProcessing(false);
-            }
+            setIsProcessing(false);
             return;
           }
-          await repository.patchSpriteNode(nodeSnapshot.id, (existing) => ({
-            ...existing,
-            assetClass: latestAssetClassRef.current,
-            processedBlobId: stored.id,
-            postProcessConfig: latestConfigRef.current,
-            puppetAnim: latestPuppetRef.current,
-            recipeArtBibleHash: computeArtBibleHash(activeProject.artBible),
-            ...(latestSeamlessRef.current.isSeamlessTile
-              ? { seamlessTile: latestSeamlessRef.current }
-              : {}),
-            ...(latestNineSliceRef.current.enabled
-              ? { nineSlice: latestNineSliceRef.current }
-              : {}),
-            ...(latestLutVariantsRef.current.length > 0
-              ? {
-                  paletteLut: paletteVariantsToConfig(
-                    latestLutVariantsRef.current,
-                    existing.paletteLut,
-                  ),
-                }
-              : {}),
-            ...(latestCollisionShapesRef.current.length > 0
-              ? { collisionShapes: latestCollisionShapesRef.current }
-              : {}),
-            ...(latestSocketsRef.current.length > 0 ? { sockets: latestSocketsRef.current } : {}),
-          }));
-          await repository.cleanupOrphanedBlobs();
+          const processedBlob = rgbaToPngBlob(result.rgba, result.width, result.height);
+          await repository.patchSpriteNodeWithProcessedBlob(
+            nodeSnapshot.id,
+            processedBlob,
+            (existing, processedBlobId) => ({
+              ...existing,
+              assetClass: latestAssetClassRef.current,
+              processedBlobId,
+              postProcessConfig: latestConfigRef.current,
+              puppetAnim: latestPuppetRef.current,
+              recipeArtBibleHash: computeArtBibleHash(activeProject.artBible),
+              ...(latestSeamlessRef.current.isSeamlessTile
+                ? { seamlessTile: latestSeamlessRef.current }
+                : {}),
+              ...(latestNineSliceRef.current.enabled
+                ? { nineSlice: latestNineSliceRef.current }
+                : {}),
+              ...(latestLutVariantsRef.current.length > 0
+                ? {
+                    paletteLut: paletteVariantsToConfig(
+                      latestLutVariantsRef.current,
+                      existing.paletteLut,
+                    ),
+                  }
+                : {}),
+              ...(latestCollisionShapesRef.current.length > 0
+                ? { collisionShapes: latestCollisionShapesRef.current }
+                : {}),
+              ...(latestSocketsRef.current.length > 0 ? { sockets: latestSocketsRef.current } : {}),
+            }),
+          );
           if (
             !cancelled &&
             guard.isCurrent(token) &&
@@ -1754,7 +1751,6 @@ export function PostProcessInspector({
         assetClass: latestAssetClassRef.current,
         parallaxScene: savedConfig,
       }));
-      await repository.cleanupOrphanedBlobs();
       await refreshSpriteNodes(activeProject.id);
     },
     [activeProject, refreshSpriteNodes],

@@ -259,6 +259,7 @@ export function SpriteStudio() {
   } | null>(null);
 
   const generationAbortRef = useRef<AbortController | null>(null);
+  const pendingSketchUploadRef = useRef<Promise<SpriteNode | null> | null>(null);
 
   useEffect(() => {
     return () => {
@@ -373,6 +374,13 @@ export function SpriteStudio() {
   // Hydrate canvas from IndexedDB when opening a project with existing nodes
   useEffect(() => {
     if (!activeProject || spriteNodes.length === 0) return;
+    if (
+      activeNodeId &&
+      lastLoadedNodeIdRef.current === activeNodeId &&
+      !spriteNodes.some((n) => n.id === activeNodeId)
+    ) {
+      return;
+    }
     const targetNode =
       (activeNodeId ? spriteNodes.find((n) => n.id === activeNodeId) : undefined) ??
       spriteNodes[spriteNodes.length - 1];
@@ -411,21 +419,27 @@ export function SpriteStudio() {
 
   const persistRootSketchNode = useCallback(
     async (rgba: Uint8ClampedArray, label: string) => {
-      if (!activeProject) return;
+      if (!activeProject) return undefined;
+      const targetProjectId = activeProject.id;
       const pngBlob = rgbaToPngBlob(rgba, targetWidth, targetHeight);
       const blobRecord = await repository.storeBlob(pngBlob, 'image/png');
-      const existingSketchRoot = spriteNodes.find(
+      const currentNodes = await repository.listSpriteNodes(targetProjectId);
+      if (useAppStore.getState().activeProject?.id !== targetProjectId) {
+        return undefined;
+      }
+
+      const existingSketchRoot = currentNodes.find(
         (n) => n.kind === 'sketch' && n.parentId === null,
       );
       const hasChildren =
-        existingSketchRoot && spriteNodes.some((n) => n.parentId === existingSketchRoot.id);
+        existingSketchRoot && currentNodes.some((n) => n.parentId === existingSketchRoot.id);
 
       const nodeId =
         existingSketchRoot && !hasChildren ? existingSketchRoot.id : globalThis.crypto.randomUUID();
 
       const node: SpriteNode = {
         id: nodeId,
-        projectId: activeProject.id,
+        projectId: targetProjectId,
         parentId: null,
         kind: 'sketch',
         imageBlobId: blobRecord.id,
@@ -446,12 +460,15 @@ export function SpriteStudio() {
 
       lastLoadedNodeIdRef.current = node.id;
       await repository.saveSpriteNode(node);
+      if (useAppStore.getState().activeProject?.id !== targetProjectId) {
+        return undefined;
+      }
       setActiveNodeId(node.id);
       setForkParentId(node.id);
-      await refreshSpriteNodes(activeProject.id);
+      await refreshSpriteNodes(targetProjectId);
       return node;
     },
-    [activeProject, spriteNodes, targetWidth, targetHeight, refreshSpriteNodes],
+    [activeProject, targetWidth, targetHeight, refreshSpriteNodes],
   );
 
   const clientToCanvasCoords = (clientX: number, clientY: number): { x: number; y: number } => {
@@ -643,32 +660,56 @@ export function SpriteStudio() {
     event.target.value = '';
     if (!file) return;
 
+    const startedProjectId = activeProject?.id;
+    const uploadPromise = (async (): Promise<SpriteNode | null> => {
+      try {
+        const decoded = await decodeBlobToRgba(file, targetWidth, targetHeight, 'contain-white');
+        if (!startedProjectId || useAppStore.getState().activeProject?.id !== startedProjectId) {
+          return null;
+        }
+        rawSourceRef.current = {
+          rgba: decoded.sourceRgba,
+          width: decoded.sourceWidth,
+          height: decoded.sourceHeight,
+        };
+        preNormalizeCanvasRef.current = new Uint8ClampedArray(decoded.rgba);
+        sketchBufferRef.current = decoded.rgba;
+        historyRef.current.push(decoded.rgba);
+        setIsNormalized(false);
+        syncHistoryFlags();
+        renderSketchCanvas();
+        const saved = await persistRootSketchNode(decoded.rgba, `uploaded sketch: ${file.name}`);
+        if (useAppStore.getState().activeProject?.id === startedProjectId) {
+          setStatusMessage(
+            `Loaded sketch "${file.name}" (${decoded.sourceWidth}×${decoded.sourceHeight}).`,
+          );
+        }
+        return saved ?? null;
+      } catch (error) {
+        if (!startedProjectId || useAppStore.getState().activeProject?.id === startedProjectId) {
+          setStatusMessage(
+            error instanceof Error ? error.message : 'Failed to decode uploaded sketch.',
+          );
+        }
+        return null;
+      }
+    })();
+
+    pendingSketchUploadRef.current = uploadPromise;
     try {
-      const decoded = await decodeBlobToRgba(file, targetWidth, targetHeight, 'contain-white');
-      rawSourceRef.current = {
-        rgba: decoded.sourceRgba,
-        width: decoded.sourceWidth,
-        height: decoded.sourceHeight,
-      };
-      preNormalizeCanvasRef.current = new Uint8ClampedArray(decoded.rgba);
-      sketchBufferRef.current = decoded.rgba;
-      historyRef.current.push(decoded.rgba);
-      setIsNormalized(false);
-      syncHistoryFlags();
-      renderSketchCanvas();
-      await persistRootSketchNode(decoded.rgba, `uploaded sketch: ${file.name}`);
-      setStatusMessage(
-        `Loaded sketch "${file.name}" (${decoded.sourceWidth}×${decoded.sourceHeight}).`,
-      );
-    } catch (error) {
-      setStatusMessage(
-        error instanceof Error ? error.message : 'Failed to decode uploaded sketch.',
-      );
+      await uploadPromise;
+    } finally {
+      if (pendingSketchUploadRef.current === uploadPromise) {
+        pendingSketchUploadRef.current = null;
+      }
     }
   };
 
   const handleToggleNormalize = async () => {
     if (isNormalizing) return;
+    if (pendingSketchUploadRef.current) {
+      await pendingSketchUploadRef.current;
+    }
 
     if (isNormalized && preNormalizeCanvasRef.current) {
       const restored = new Uint8ClampedArray(preNormalizeCanvasRef.current);
@@ -813,8 +854,22 @@ export function SpriteStudio() {
     setStatusMessage(`Generating ${variantCount} sprite variant(s)...`);
 
     try {
-      let workingNodes = [...spriteNodes];
-      let parentNode = activeParentNode;
+      let uploadedRoot: SpriteNode | null = null;
+      if (pendingSketchUploadRef.current) {
+        uploadedRoot = await pendingSketchUploadRef.current;
+        if (isStaleOrAborted()) return;
+      }
+
+      const latestNodes = await repository.listSpriteNodes(startedProjectId);
+      if (isStaleOrAborted()) return;
+
+      let workingNodes = [...latestNodes];
+      let parentNode =
+        uploadedRoot ??
+        (forkParentId ? latestNodes.find((n) => n.id === forkParentId) : undefined) ??
+        (activeNodeId ? latestNodes.find((n) => n.id === activeNodeId) : undefined) ??
+        latestNodes[latestNodes.length - 1] ??
+        null;
 
       if (!parentNode) {
         const savedRoot = await persistRootSketchNode(sketchBufferRef.current, 'sketch root');
@@ -827,8 +882,9 @@ export function SpriteStudio() {
 
       if (isStaleOrAborted()) return;
 
+      const currentViewportNodeId = uploadedRoot?.id ?? activeViewportNode?.id;
       let sourceRgba: Uint8ClampedArray = new Uint8ClampedArray(sketchBufferRef.current);
-      if (parentNode.id !== activeViewportNode?.id) {
+      if (parentNode.id !== currentViewportNodeId) {
         const parentBlob = await repository.getBlob(parentNode.imageBlobId);
         if (parentBlob) {
           const decoded = await decodeBlobToRgba(
@@ -1131,6 +1187,7 @@ export function SpriteStudio() {
         if (isStaleOrAborted()) return;
         displayRgba = resized.rgba;
       }
+      lastLoadedNodeIdRef.current = inpaintNode.id;
       sketchBufferRef.current = displayRgba;
       historyRef.current.reset(displayRgba);
       maskBufferRef.current = new Uint8Array(targetWidth * targetHeight);

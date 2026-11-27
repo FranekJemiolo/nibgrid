@@ -2,6 +2,7 @@ import 'fake-indexeddb/auto';
 import { describe, expect, it } from 'vitest';
 import { NibgridDatabase, NibgridRepository, findOrphanBlobIds } from '../../src/db/database';
 import { EntityDefinitionSchema } from '../../src/domain/entitySchema';
+import { createDefaultPoseClip } from '../../src/domain/schemas';
 import {
   exportCanvasTextureTres,
   exportEmissionOverlayShader,
@@ -191,6 +192,58 @@ describe('M44B: Godot 4 CanvasTexture, Normal .import, LightOccluder2D & Atomic 
       expect(directAssembled.some((f) => f.relativePath === 'entities/knight/knight_e.png')).toBe(
         true,
       );
+    } finally {
+      testDb.close();
+      await testDb.delete();
+    }
+  });
+
+  it('atomically commits Pose Keyframer frame and strip blobs without leaving orphans', async () => {
+    const testDb = new NibgridDatabase(`m44b-pose-atomic-${Date.now()}-${Math.random()}`);
+    const repo = new NibgridRepository(testDb);
+    try {
+      const project = await repo.createProject('Pose Atomic Test');
+      const baseBlob = await rgbaToPngBlob(new Uint8ClampedArray(4 * 4 * 4).fill(255), 4, 4);
+      const storedBase = await repo.storeBlobDeduplicated(baseBlob, 'image/png');
+      const node = await repo.saveSpriteNode({
+        id: 'node-pose-atomic',
+        projectId: project.id,
+        parentId: null,
+        kind: 'generation',
+        imageBlobId: storedBase.id,
+        sketchSha256: 'b'.repeat(64),
+        generationMeta: {
+          providerId: 'offline-mock',
+          modelId: 'nibgrid-procedural-v1',
+          seed: 9,
+          adherence: 'balanced',
+          promptDelta: 'hero',
+          compiledPrompt: 'hero',
+          createdAt: new Date().toISOString(),
+        },
+      });
+
+      const clipBase = createDefaultPoseClip(4, 4);
+      const frameBlobs = await Promise.all(
+        [10, 20, 30, 40, 50, 60].map((v) =>
+          rgbaToPngBlob(new Uint8ClampedArray(4 * 4 * 4).fill(v), 4, 4),
+        ),
+      );
+      const stripBlob = await rgbaToPngBlob(new Uint8ClampedArray(24 * 4 * 4).fill(77), 24, 4);
+
+      const committed = await repo.commitPoseClipFrames(node.id, clipBase, frameBlobs, stripBlob);
+
+      expect(committed.poseClip.generatedFrameBlobIds).toHaveLength(6);
+      expect(committed.poseClip.generatedStripBlobId).toBeTruthy();
+      expect(await repo.cleanupOrphanedBlobs()).toBe(0);
+      expect(await findOrphanBlobIds(testDb)).toEqual([]);
+
+      for (const blobId of committed.poseClip.generatedFrameBlobIds ?? []) {
+        const rec = await repo.getBlob(blobId);
+        expect(rec).toBeDefined();
+      }
+      const stripRec = await repo.getBlob(committed.poseClip.generatedStripBlobId!);
+      expect(stripRec).toBeDefined();
     } finally {
       testDb.close();
       await testDb.delete();

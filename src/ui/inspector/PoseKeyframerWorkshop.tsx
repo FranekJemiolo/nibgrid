@@ -181,7 +181,7 @@ export function PoseKeyframerWorkshop({
   onChangeClip,
   onSaveToProject,
 }: PoseKeyframerWorkshopProps) {
-  const { entities, saveEntityRecord } = useAppStore();
+  const { entities, saveEntityRecord, refreshSpriteNodes } = useAppStore();
 
   const [selectedFrameIdx, setSelectedFrameIdx] = useState(0);
   const [useIk, setUseIk] = useState(true);
@@ -235,9 +235,10 @@ export function PoseKeyframerWorkshop({
   }, [entities, selectedEntityId]);
 
   // Hydrate persisted generated frame blobs from IndexedDB on mount / reload
+  const frameBlobIdsKey = (poseClip.generatedFrameBlobIds ?? []).join(',');
   useEffect(() => {
-    const blobIds = poseClip.generatedFrameBlobIds;
-    if (!blobIds || blobIds.length === 0) {
+    const blobIds = frameBlobIdsKey ? frameBlobIdsKey.split(',') : [];
+    if (blobIds.length === 0) {
       setGeneratedFrames([]);
       return;
     }
@@ -258,7 +259,7 @@ export function PoseKeyframerWorkshop({
     return () => {
       cancelled = true;
     };
-  }, [poseClip.generatedFrameBlobIds]);
+  }, [frameBlobIdsKey]);
 
   useEffect(() => {
     const guard = guardRef.current;
@@ -397,26 +398,17 @@ export function PoseKeyframerWorkshop({
     frames: readonly RgbaBuffer[],
     strip: RgbaBuffer,
   ): Promise<PoseClipDefinitionSchemaType> => {
-    const frameBlobIds: string[] = [];
-    for (const frame of frames) {
-      const stored = await repository.storeBlob(
-        rgbaToPngBlob(frame.data, frame.width, frame.height),
-        'image/png',
-      );
-      frameBlobIds.push(stored.id);
-    }
-    const stripStored = await repository.storeBlob(
-      rgbaToPngBlob(strip.data, strip.width, strip.height),
-      'image/png',
+    const frameBlobs = frames.map((frame) => rgbaToPngBlob(frame.data, frame.width, frame.height));
+    const stripBlob = rgbaToPngBlob(strip.data, strip.width, strip.height);
+    const committed = await repository.commitPoseClipFrames(
+      targetNode.id,
+      clipBase,
+      frameBlobs,
+      stripBlob,
     );
-    const nextClip: PoseClipDefinitionSchemaType = {
-      ...clipBase,
-      generatedFrameBlobIds: frameBlobIds,
-      generatedStripBlobId: stripStored.id,
-    };
-    onChangeClip(nextClip);
-    await onSaveToProject(nextClip);
-    return nextClip;
+    onChangeClip(committed.poseClip);
+    await refreshSpriteNodes(project.id);
+    return committed.poseClip;
   };
 
   const toSchemaFrame = (frame: PoseKeyframe): PoseClipDefinitionSchemaType['frames'][number] => ({
@@ -544,8 +536,9 @@ export function PoseKeyframerWorkshop({
         },
       );
       if (!guardRef.current.isCurrent(token)) return;
-      setGeneratedFrames(res.frames);
       await persistGeneratedFrames(poseClip, res.frames, res.generatedStrip);
+      if (!guardRef.current.isCurrent(token)) return;
+      setGeneratedFrames(res.frames);
       setStatusNotice(
         `Generated ${res.frames.length} aligned ${poseClip.frameWidthPx}×${poseClip.frameHeightPx} frames via ${res.providerLabel}.`,
       );
@@ -581,9 +574,9 @@ export function PoseKeyframerWorkshop({
       const nextFrames = poseClip.frames.map((_, fi) =>
         fi === idx ? frame : (generatedFrames[fi] ?? sprite),
       );
-      setGeneratedFrames(nextFrames);
       const strip = packFramesToHorizontalStrip(nextFrames);
       await persistGeneratedFrames(poseClip, nextFrames, strip);
+      setGeneratedFrames(nextFrames);
       setStatusNotice(`Re-rolled Frame ${idx + 1} cleanly.`);
     } catch (err) {
       setErrorMsg(err instanceof Error ? err.message : 'Frame re-roll failed.');
@@ -1174,7 +1167,7 @@ export function PoseKeyframerWorkshop({
           <button
             type="button"
             data-testid="pose-save-btn"
-            disabled={saving}
+            disabled={saving || generating}
             onClick={() => void handleSave()}
             className="flex w-full items-center justify-center gap-1.5 rounded-md bg-emerald-600 px-3 py-2 text-xs font-semibold text-white hover:bg-emerald-500 disabled:opacity-50"
           >
@@ -1185,7 +1178,7 @@ export function PoseKeyframerWorkshop({
           <button
             type="button"
             data-testid="pose-commit-entity-btn"
-            disabled={committing}
+            disabled={committing || generating}
             onClick={() => void handleCommitToEntity()}
             className="flex w-full items-center justify-center gap-1.5 rounded-md border border-[#F5B82E]/50 bg-[#F5B82E]/15 px-3 py-2 text-xs font-semibold text-[#F5B82E] hover:bg-[#F5B82E]/25 disabled:opacity-50"
           >
