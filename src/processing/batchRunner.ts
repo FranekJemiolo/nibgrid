@@ -525,6 +525,7 @@ export async function rollbackBatchRun(
       database.blobs,
       database.vaultItems,
       database.agentCheckpoints,
+      database.worldGraphs,
     ],
     async () => {
       for (let i = rollbackManifest.length - 1; i >= 0; i--) {
@@ -603,6 +604,7 @@ export async function cleanupSupersededBatchBlobs(database: NibgridDatabase): Pr
       database.blobs,
       database.vaultItems,
       database.agentCheckpoints,
+      database.worldGraphs,
     ],
     async () => {
       const orphans = await findOrphanBlobIds(database);

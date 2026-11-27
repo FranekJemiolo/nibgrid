@@ -128,6 +128,7 @@ import { TileAndSliceWorkshop } from './TileAndSliceWorkshop';
 import { TurnaroundSlicer } from './TurnaroundSlicer';
 import { UiKitWorkshop } from './UiKitWorkshop';
 import { VfxBaker } from './VfxBaker';
+import { WorldMapPanel } from '../world/WorldMapPanel';
 import {
   ASSET_CLASS_OPTIONS,
   INSPECTOR_TAB_META,
@@ -2239,6 +2240,8 @@ export function PostProcessInspector({
             rawWidth={rawSize.width}
             rawHeight={rawSize.height}
           />
+        ) : inspectorTab === 'world-map' ? (
+          <WorldMapPanel />
         ) : inspectorTab === 'bmfont' && activeSpriteBuffer ? (
           <BitmapFontWorkshop
             sprite={activeSpriteBuffer}

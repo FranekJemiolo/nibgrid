@@ -42,6 +42,7 @@ export const EXPECTED_REQUIRED_INSPECTOR_TABS: readonly string[] = [
   'autotile',
   'parallax',
   'room',
+  'world-map',
   'bmfont',
   'uikit',
   'palette-lut',

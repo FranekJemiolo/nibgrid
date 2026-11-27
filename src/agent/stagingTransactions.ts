@@ -89,6 +89,7 @@ export async function commitStagedTurn(
       database.agentCheckpoints,
       database.vaultItems,
       database.blobs,
+      database.worldGraphs,
     ],
     async () => {
       const spriteSnaps = new Map<string, SpriteNode>();
@@ -200,6 +201,7 @@ export async function rejectStagedTurn(
       database.agentCheckpoints,
       database.vaultItems,
       database.blobs,
+      database.worldGraphs,
     ],
     async () => {
       const orphans = await findOrphanBlobIds(database);
@@ -239,6 +241,7 @@ export async function restoreCheckpoint(
       database.agentCheckpoints,
       database.vaultItems,
       database.blobs,
+      database.worldGraphs,
     ],
     async () => {
       const raw = await database.agentCheckpoints.get(checkpointId);

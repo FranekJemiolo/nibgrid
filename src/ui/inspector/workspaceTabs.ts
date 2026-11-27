@@ -75,6 +75,12 @@ export const INSPECTOR_TAB_META: Record<InspectorTab, InspectorTabMeta> = {
     shortLabel: 'Room Builder',
     testId: 'inspector-tab-room',
   },
+  'world-map': {
+    id: 'world-map',
+    label: 'World Map & Softlock Auditor',
+    shortLabel: 'World Map',
+    testId: 'inspector-tab-world-map',
+  },
   bmfont: {
     id: 'bmfont',
     label: 'Bitmap Font',
@@ -124,6 +130,7 @@ export const ALL_INSPECTOR_TABS: readonly InspectorTab[] = [
   'autotile',
   'parallax',
   'room',
+  'world-map',
   'bmfont',
   'uikit',
   'palette-lut',
@@ -166,6 +173,7 @@ export function resolveInspectorTabs(
         'autotile',
         'parallax',
         'room',
+        'world-map',
         'normal',
         'palette-lut',
       ];

@@ -16,6 +16,7 @@ export interface ExportGodotRoomTscnParams {
   readonly parallaxResPath?: string;
   readonly entityResPaths?: Readonly<Record<string, string>>;
   readonly isPixelArt?: boolean;
+  readonly portalNodesSnippet?: string;
 }
 
 function escapeGodotString(value: string): string {
@@ -145,6 +146,10 @@ export function exportGodotRoomTscn(params: ExportGodotRoomTscnParams): string {
       lines.push('scale = Vector2(-1, 1)');
     }
   });
+
+  if (params.portalNodesSnippet?.trim()) {
+    lines.push('', params.portalNodesSnippet.trimEnd());
+  }
 
   lines.push('');
   return lines.join('\n');

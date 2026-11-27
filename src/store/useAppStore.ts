@@ -17,6 +17,7 @@ import type { StoredRoomRecord } from '../processing/roomLayoutCore';
 import type { SliceJobRecord } from '../processing/sliceDagRunner';
 import type { PixelTool } from '../processing/pixelEditorCore';
 import type { ShareableRecipe } from '../share/recipeUrlCodec';
+import type { WorldGraph } from '../world/worldGraphCore';
 
 export type InspectorTab =
   | 'postprocess'
@@ -29,6 +30,7 @@ export type InspectorTab =
   | 'autotile'
   | 'parallax'
   | 'room'
+  | 'world-map'
   | 'bmfont'
   | 'uikit'
   | 'palette-lut'
@@ -52,6 +54,7 @@ export type ScreenRoute =
   | { screen: 'audio'; projectId: string }
   | { screen: 'audit'; projectId: string }
   | { screen: 'entities'; projectId: string; playtestEntityId?: string }
+  | { screen: 'world'; projectId: string }
   | { screen: 'vault'; projectId?: string };
 
 const VALID_PIXEL_TOOLS = new Set<PixelTool>([
@@ -74,6 +77,7 @@ const VALID_INSPECTOR_TABS = new Set<InspectorTab>([
   'autotile',
   'parallax',
   'room',
+  'world-map',
   'bmfont',
   'uikit',
   'palette-lut',
@@ -136,6 +140,10 @@ export function parseHashRoute(hash: string): ScreenRoute {
   if (projectVaultMatch?.[1]) {
     return { screen: 'vault', projectId: projectVaultMatch[1] };
   }
+  const worldMatch = /^\/project\/([^/]+)\/world$/.exec(path);
+  if (worldMatch?.[1]) {
+    return { screen: 'world', projectId: worldMatch[1] };
+  }
   if (path === '/vault') {
     return { screen: 'vault' };
   }
@@ -172,6 +180,9 @@ export function formatHashRoute(route: ScreenRoute): string {
       ? `${base}?playtest=${encodeURIComponent(route.playtestEntityId)}`
       : base;
   }
+  if (route.screen === 'world') {
+    return `#/project/${route.projectId}/world`;
+  }
   if (route.screen === 'vault') {
     return route.projectId ? `#/project/${route.projectId}/vault` : '#/vault';
   }
@@ -192,6 +203,8 @@ interface AppState {
   audioAssets: AudioAsset[];
   entities: EntityDefinition[];
   rooms: StoredRoomRecord[];
+  worldGraph: WorldGraph | null;
+  focusedRoomId: string | null;
   sliceJobs: SliceJobRecord[];
   agentCheckpoints: AgentCheckpoint[];
   syncTarget: GodotSyncTargetRecord | null;
@@ -256,6 +269,14 @@ interface AppState {
   refreshRooms: (projectId: string) => Promise<void>;
   saveRoomRecord: (room: StoredRoomRecord) => Promise<StoredRoomRecord>;
   deleteRoomRecord: (roomId: string, projectId: string) => Promise<void>;
+  setFocusedRoomId: (roomId: string | null) => void;
+  refreshWorldGraph: (projectId: string) => Promise<void>;
+  saveWorldGraphRecord: (graph: WorldGraph) => Promise<WorldGraph>;
+  commitWorldGraphMinimap: (
+    graph: WorldGraph,
+    pngBlob: Blob,
+    atlasJson: string,
+  ) => Promise<WorldGraph>;
   refreshSliceJobs: (projectId: string) => Promise<void>;
   saveSliceJobRecord: (job: SliceJobRecord) => Promise<SliceJobRecord>;
   deleteSliceJobRecord: (jobId: string, projectId: string) => Promise<void>;
@@ -298,6 +319,8 @@ export const useAppStore = create<AppState>((set, get) => ({
   audioAssets: [],
   entities: [],
   rooms: [],
+  worldGraph: null,
+  focusedRoomId: null,
   sliceJobs: [],
   agentCheckpoints: [],
   syncTarget: null,
@@ -345,6 +368,7 @@ export const useAppStore = create<AppState>((set, get) => ({
             sliceJobs,
             agentCheckpoints,
             syncTarget,
+            worldGraph,
           ] = await Promise.all([
             repository.listSpriteNodes(project.id),
             repository.listAudioAssets(project.id),
@@ -353,6 +377,7 @@ export const useAppStore = create<AppState>((set, get) => ({
             repository.listSliceJobs(project.id),
             repository.listAgentCheckpoints(project.id),
             repository.getSyncTarget(project.id),
+            repository.getWorldGraph(project.id),
           ]);
           set({
             route: initialRoute,
@@ -364,6 +389,7 @@ export const useAppStore = create<AppState>((set, get) => ({
             audioAssets,
             entities,
             rooms,
+            worldGraph: worldGraph ?? null,
             sliceJobs,
             agentCheckpoints,
             syncTarget: syncTarget ?? null,
@@ -381,6 +407,7 @@ export const useAppStore = create<AppState>((set, get) => ({
           audioAssets: [],
           entities: [],
           rooms: [],
+          worldGraph: null,
           sliceJobs: [],
           agentCheckpoints: [],
           syncTarget: null,
@@ -400,6 +427,7 @@ export const useAppStore = create<AppState>((set, get) => ({
             sliceJobs,
             agentCheckpoints,
             syncTarget,
+            worldGraph,
           ] = await Promise.all([
             repository.listSpriteNodes(project.id),
             repository.listAudioAssets(project.id),
@@ -408,6 +436,7 @@ export const useAppStore = create<AppState>((set, get) => ({
             repository.listSliceJobs(project.id),
             repository.listAgentCheckpoints(project.id),
             repository.getSyncTarget(project.id),
+            repository.getWorldGraph(project.id),
           ]);
           set({
             route: initialRoute,
@@ -419,6 +448,7 @@ export const useAppStore = create<AppState>((set, get) => ({
             audioAssets,
             entities,
             rooms,
+            worldGraph: worldGraph ?? null,
             sliceJobs,
             agentCheckpoints,
             syncTarget: syncTarget ?? null,
@@ -441,6 +471,7 @@ export const useAppStore = create<AppState>((set, get) => ({
         audioAssets: [],
         entities: [],
         rooms: [],
+        worldGraph: null,
         sliceJobs: [],
         agentCheckpoints: [],
         syncTarget: null,
@@ -470,16 +501,25 @@ export const useAppStore = create<AppState>((set, get) => ({
       const targetProjectId = route.projectId ?? get().activeProject?.id;
       const project = targetProjectId ? await repository.getProject(targetProjectId) : undefined;
       if (project) {
-        const [spriteNodes, audioAssets, entities, rooms, sliceJobs, agentCheckpoints, syncTarget] =
-          await Promise.all([
-            repository.listSpriteNodes(project.id),
-            repository.listAudioAssets(project.id),
-            repository.listEntities(project.id),
-            repository.listRooms(project.id),
-            repository.listSliceJobs(project.id),
-            repository.listAgentCheckpoints(project.id),
-            repository.getSyncTarget(project.id),
-          ]);
+        const [
+          spriteNodes,
+          audioAssets,
+          entities,
+          rooms,
+          sliceJobs,
+          agentCheckpoints,
+          syncTarget,
+          worldGraph,
+        ] = await Promise.all([
+          repository.listSpriteNodes(project.id),
+          repository.listAudioAssets(project.id),
+          repository.listEntities(project.id),
+          repository.listRooms(project.id),
+          repository.listSliceJobs(project.id),
+          repository.listAgentCheckpoints(project.id),
+          repository.getSyncTarget(project.id),
+          repository.getWorldGraph(project.id),
+        ]);
         set({
           route: { screen: 'vault', projectId: project.id },
           projects,
@@ -489,6 +529,7 @@ export const useAppStore = create<AppState>((set, get) => ({
           audioAssets,
           entities,
           rooms,
+          worldGraph: worldGraph ?? null,
           sliceJobs,
           agentCheckpoints,
           syncTarget: syncTarget ?? null,
@@ -504,6 +545,7 @@ export const useAppStore = create<AppState>((set, get) => ({
           audioAssets: [],
           entities: [],
           rooms: [],
+          worldGraph: null,
           sliceJobs: [],
           agentCheckpoints: [],
           syncTarget: null,
@@ -523,6 +565,7 @@ export const useAppStore = create<AppState>((set, get) => ({
         audioAssets: [],
         entities: [],
         rooms: [],
+        worldGraph: null,
         sliceJobs: [],
         agentCheckpoints: [],
         syncTarget: null,
@@ -545,6 +588,7 @@ export const useAppStore = create<AppState>((set, get) => ({
         audioAssets: [],
         entities: [],
         rooms: [],
+        worldGraph: null,
         sliceJobs: [],
         agentCheckpoints: [],
         syncTarget: null,
@@ -555,16 +599,25 @@ export const useAppStore = create<AppState>((set, get) => ({
 
     const prevProjectId = get().activeProject?.id;
     const isSwitchingProject = prevProjectId !== project.id;
-    const [spriteNodes, audioAssets, entities, rooms, sliceJobs, agentCheckpoints, syncTarget] =
-      await Promise.all([
-        repository.listSpriteNodes(project.id),
-        repository.listAudioAssets(project.id),
-        repository.listEntities(project.id),
-        repository.listRooms(project.id),
-        repository.listSliceJobs(project.id),
-        repository.listAgentCheckpoints(project.id),
-        repository.getSyncTarget(project.id),
-      ]);
+    const [
+      spriteNodes,
+      audioAssets,
+      entities,
+      rooms,
+      sliceJobs,
+      agentCheckpoints,
+      syncTarget,
+      worldGraph,
+    ] = await Promise.all([
+      repository.listSpriteNodes(project.id),
+      repository.listAudioAssets(project.id),
+      repository.listEntities(project.id),
+      repository.listRooms(project.id),
+      repository.listSliceJobs(project.id),
+      repository.listAgentCheckpoints(project.id),
+      repository.getSyncTarget(project.id),
+      repository.getWorldGraph(project.id),
+    ]);
     set({
       route,
       activeProject: project,
@@ -572,6 +625,7 @@ export const useAppStore = create<AppState>((set, get) => ({
       audioAssets,
       entities,
       rooms,
+      worldGraph: worldGraph ?? null,
       sliceJobs,
       agentCheckpoints,
       syncTarget: syncTarget ?? null,
@@ -621,6 +675,7 @@ export const useAppStore = create<AppState>((set, get) => ({
         audioAssets: [],
         entities: [],
         rooms: [],
+        worldGraph: null,
         sliceJobs: [],
         agentCheckpoints: [],
         syncTarget: null,
@@ -816,6 +871,25 @@ export const useAppStore = create<AppState>((set, get) => ({
     await repository.deleteRoom(roomId);
     const rooms = await repository.listRooms(projectId);
     set({ rooms });
+  },
+
+  setFocusedRoomId: (roomId) => set({ focusedRoomId: roomId }),
+
+  refreshWorldGraph: async (projectId) => {
+    const worldGraph = await repository.getWorldGraph(projectId);
+    set({ worldGraph: worldGraph ?? null });
+  },
+
+  saveWorldGraphRecord: async (graph) => {
+    const saved = await repository.saveWorldGraph(graph);
+    set({ worldGraph: saved });
+    return saved;
+  },
+
+  commitWorldGraphMinimap: async (graph, pngBlob, atlasJson) => {
+    const committed = await repository.commitWorldGraphWithMinimap(graph, pngBlob, atlasJson);
+    set({ worldGraph: committed });
+    return committed;
   },
 
   refreshSliceJobs: async (projectId) => {

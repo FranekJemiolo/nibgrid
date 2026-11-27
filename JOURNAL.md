@@ -771,3 +771,18 @@
 
 - **WebGL2 Lighting Studio & Navigation (`src/ui/lighting/LightingBakerPanel.tsx`, `src/ui/entities/EntityHubView.tsx`, `src/ui/inspector/PostProcessInspector.tsx`, `src/ui/command/CommandPalette.tsx`, `src/store/useAppStore.ts`, `docs/ARCHITECTURE.md`):** Built draggable `PointLight2D` WebGL2/CPU preview, 5-channel switcher (`lit`/`diffuse`/`normal`/`emission`/`occluder`), ArtBible emissive swatch extractor, and atomic **Bake & Attach to Asset** persisted to Dexie for M25 FSAA sync.
 - **Verification (`tests/e2e/m44c-lighting-e2e.spec.ts`):** Verified live pointer light drag, normal strength adjustment, `_n.png`/`_n.png.import`/`_canvas.tres` FSAA sync, persistence across `page.reload()`, zero `pageerror`/`console.error`, and zero orphan blobs.
+
+## Milestone 45A: Pure-TS World Map Graph & Softlock Auditor (`worldGraphCore.ts`)
+
+- **Core Graph & Auditor (`src/world/worldGraphCore.ts`, `docs/ARCHITECTURE.md`):** Implemented Zod schemas (`WorldRoomNodeSchema`, `WorldPortalEdgeSchema`, `WorldGraphSchema`), `createDefaultWorldGraph()`, and `auditWorldReachability()` with fixed-point progression BFS, one-way softlock trap detection, cycle-safe traversal, missing `isStart` / dangling edge checks, and duplicate door/spawn validation.
+- **Verification (`tests/unit/m45a-world-auditor.test.ts`):** Verified 4-room key-gated progression (`progressionOrder: ['boss_key']`), unreachable room flagging on missing key, one-way pit softlock detection (`softlockTrapRoomIds`), and cyclic graph termination + structural integrity flags.
+
+## Milestone 45B: Pixel-Art Minimap Baker, Godot 4 World Exporter & Atomic Dexie Sync
+
+- **Minimap Baker & Godot World Exporter (`src/world/minimapBaker.ts`, `src/export/godotWorldExporter.ts`, `src/export/godotRoomExporter.ts`, `src/db/database.ts`, `src/sync/fsaaSyncEngine.ts`, `docs/ARCHITECTURE.md`):** Implemented pure-TS `bakeWorldMinimapRgba()`, `exportRoomPortalNodes()` (`Area2D` portals + `Marker2D` spawns), typed `WorldTransitionManager.gd`, Dexie v9 `worldGraphs` + atomic `commitWorldGraphWithMinimap()` (0 orphan blobs), and M25 `collectProjectGodotSyncFiles()` wiring.
+- **Verification (`tests/unit/m45b-minimap-godot.test.ts`):** Verified minimap RGBA dimensions/borders/doors, matching `minimap_atlas.json`, valid `Area2D`/`Marker2D` + GDScript output with zero `NaN`, atomic zero-orphan replacement, and full M25 `world/*` + `.tscn` sync output.
+
+## Milestone 45C: Interactive `WorldMapPanel.tsx`, Tab/Parity Wiring & E2E Flow
+
+- **World Map Editor & Navigation (`src/ui/world/WorldMapPanel.tsx`, `src/ui/inspector/workspaceTabs.ts`, `scripts/verify-parity.ts`, `src/store/useAppStore.ts`, `src/App.tsx`, `src/ui/inspector/PostProcessInspector.tsx`, `src/ui/inspector/RoomPrototyperWorkshop.tsx`, `src/ui/command/CommandPalette.tsx`, `docs/ARCHITECTURE.md`):** Built interactive snap-to-grid room graph, portal transition composer, 1-click BFS/DFS Softlock Audit UI with room jump links, pixelated minimap preview, and M25 `res://` world sync, registered in `ALL_INSPECTOR_TABS` & `EXPECTED_REQUIRED_INSPECTOR_TABS`.
+- **Verification (`tests/e2e/m45c-world-map-e2e.spec.ts`):** Verified seeding 2 M35 rooms, connecting with `red_key` gate, catching `Issues Found` / unreachable warning before granting `red_key`, green `OK` audit after granting `red_key`, baking non-empty minimap canvas, reload persistence, zero `console.error`/`pageerror`, and zero orphan blobs.

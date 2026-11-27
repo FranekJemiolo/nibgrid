@@ -185,6 +185,14 @@ export function CommandPalette({ open, onOpenChange }: CommandPaletteProps) {
             }),
         },
         {
+          id: 'act-world-map',
+          title: 'Open World Map & Minimap Graph',
+          subtitle: 'Connect M35 rooms via portals, check softlocks & bake pixel-art minimaps',
+          category: 'action',
+          keywords: ['world', 'map', 'minimap', 'portal', 'softlock', 'reachability', 'bfs', 'm45'],
+          execute: () => navigate({ screen: 'world', projectId: projId }),
+        },
+        {
           id: 'act-bmfont',
           title: 'Open Bitmap Font & Damage Numeral Exporter',
           subtitle: 'Art Bible pixel numerals, OKLab Sel-Out, AngelCode .fnt/.xml & crit preview',

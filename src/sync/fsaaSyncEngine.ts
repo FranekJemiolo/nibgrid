@@ -18,11 +18,18 @@ import {
 } from '../export/godotPrefabAssembler';
 import { assembleGodotRoomFiles } from '../export/godotRoomExporter';
 import { assembleGodotUiKitFiles, bakeBitmapFontFromConfig } from '../export/godotThemeExporter';
+import { assembleGodotWorldFiles, exportRoomPortalNodes } from '../export/godotWorldExporter';
 import { toAssetSlug, triggerBlobDownload } from '../export/zipPackager';
 import { bakeNormalMapCpu } from '../processing/distanceField';
 import { decodePngBytesToRgba, encodeRgbaToPngBytes } from '../processing/png';
 import { sanitizeRoomSlug, type StoredRoomRecord } from '../processing/roomLayoutCore';
 import { bakeProceduralUiKit } from '../processing/uiKitCore';
+import {
+  bakeWorldMinimapRgba,
+  deriveMinimapPaletteFromArtBible,
+  type MinimapAtlas,
+  type RoomCellGrid,
+} from '../world/minimapBaker';
 import { computeSyncDiff, virtualFileToBytes, type SyncDiffPlan } from './syncDiff';
 
 type WindowWithDirectoryPicker = Window & {
@@ -472,7 +479,14 @@ export async function collectProjectGodotSyncFiles(
     }
   }
 
-  const effectiveRooms = rooms ?? (await new NibgridRepository(database).listRooms(project.id));
+  const repo = new NibgridRepository(database);
+  const effectiveRooms = rooms ?? (await repo.listRooms(project.id));
+  const worldGraph = await repo.getWorldGraph(project.id);
+  const roomSlugById = new Map<string, string>();
+  for (const room of effectiveRooms) {
+    roomSlugById.set(room.id, sanitizeRoomSlug(room.slug || room.blueprint.slug));
+  }
+
   for (const room of effectiveRooms) {
     const tileNode = room.tileSetNodeId ? nodeById.get(room.tileSetNodeId) : undefined;
     const parallaxNode = room.parallaxNodeId ? nodeById.get(room.parallaxNodeId) : undefined;
@@ -482,16 +496,63 @@ export async function collectProjectGodotSyncFiles(
     const parallaxResPath = parallaxNode
       ? `res://parallax/${sanitizeRoomSlug(parallaxNode.generationMeta.promptDelta || parallaxNode.id)}_parallax.tscn`
       : undefined;
+    const portalNodesSnippet = worldGraph
+      ? exportRoomPortalNodes(room.id, worldGraph.edges, roomSlugById, {
+          cols: room.blueprint.cols,
+          rows: room.blueprint.rows,
+          tileSizePx: room.blueprint.tileSizePx,
+        })
+      : undefined;
 
     const roomFiles = assembleGodotRoomFiles({
       blueprint: room.blueprint,
       tileSetMode: room.tileSetMode,
       ...(tileSetResPath ? { tileSetResPath } : {}),
       ...(parallaxResPath ? { parallaxResPath } : {}),
+      ...(portalNodesSnippet ? { portalNodesSnippet } : {}),
       entityResPaths,
       isPixelArt,
     });
     for (const file of roomFiles) {
+      deduped.set(file.relativePath, file);
+    }
+  }
+
+  if (worldGraph && (worldGraph.rooms.length > 0 || worldGraph.edges.length > 0)) {
+    const grids = new Map<string, RoomCellGrid>(effectiveRooms.map((r) => [r.id, r.blueprint]));
+    const palette = deriveMinimapPaletteFromArtBible(project.artBible.palette);
+    const baked = bakeWorldMinimapRgba(worldGraph, grids, { pxPerTile: 2, palette });
+
+    let minimapPngBytes: Uint8Array | null = null;
+    if (worldGraph.minimapBlobId) {
+      const rec = await repo.getBlob(worldGraph.minimapBlobId);
+      if (rec) {
+        minimapPngBytes = await readBlobBytes(rec.bytes);
+      }
+    }
+    if (!minimapPngBytes) {
+      minimapPngBytes = encodeRgbaToPngBytes(baked.rgba, baked.width, baked.height);
+    }
+
+    let minimapAtlas: MinimapAtlas = baked.atlas;
+    if (worldGraph.minimapAtlasJson) {
+      try {
+        const parsed = JSON.parse(worldGraph.minimapAtlasJson) as MinimapAtlas;
+        if (parsed && typeof parsed === 'object' && parsed.rooms) {
+          minimapAtlas = parsed;
+        }
+      } catch {
+        minimapAtlas = baked.atlas;
+      }
+    }
+
+    const worldFiles = assembleGodotWorldFiles({
+      graph: worldGraph,
+      roomSlugById,
+      minimapPngBytes,
+      minimapAtlas,
+    });
+    for (const file of worldFiles) {
       deduped.set(file.relativePath, file);
     }
   }

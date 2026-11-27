@@ -116,6 +116,8 @@ export function RoomPrototyperWorkshop({
     entities,
     audioAssets,
     syncTarget,
+    focusedRoomId,
+    setFocusedRoomId,
     saveRoomRecord,
     deleteRoomRecord,
     refreshSyncTarget,
@@ -184,6 +186,20 @@ export function RoomPrototyperWorkshop({
   const isPaintingRef = useRef(false);
   const lastPaintedCellRef = useRef<string | null>(null);
   const hasDirtyLocalEditsRef = useRef(false);
+
+  // Focus a flagged room when jumping from M45 World Map Softlock Audit
+  useEffect(() => {
+    if (!focusedRoomId) return;
+    const match = rooms.find((r) => r.id === focusedRoomId);
+    if (!match) return;
+    hasDirtyLocalEditsRef.current = false;
+    setActiveRoomId(match.id);
+    setBlueprint(match.blueprint);
+    setTileSetNodeId(match.tileSetNodeId);
+    setTileSetMode(match.tileSetMode);
+    setParallaxNodeId(match.parallaxNodeId);
+    setFocusedRoomId(null);
+  }, [focusedRoomId, rooms, setFocusedRoomId]);
 
   // Hydrate first saved room when IndexedDB store loads asynchronously on page reload
   useEffect(() => {

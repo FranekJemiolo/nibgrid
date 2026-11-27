@@ -6,6 +6,7 @@ import {
   Boxes,
   ClipboardCheck,
   Command,
+  Compass,
   Cpu,
   Download,
   FolderKanban,
@@ -39,6 +40,7 @@ import { ModelProvidersPanel } from './ui/settings/ModelProvidersPanel';
 import { ShareRecipeModal } from './ui/share/ShareRecipeModal';
 import { SpriteStudio } from './ui/studio/SpriteStudio';
 import { VaultAndBrowserView } from './ui/vault/VaultAndBrowserView';
+import { WorldMapPanel } from './ui/world/WorldMapPanel';
 
 export function App() {
   const {
@@ -217,6 +219,15 @@ export function App() {
                 <Boxes className="h-3.5 w-3.5" />
                 Entities
               </button>
+              <button
+                type="button"
+                data-testid="nav-world-map"
+                onClick={() => void navigate({ screen: 'world', projectId: activeProject.id })}
+                className={navButtonClass(route.screen === 'world')}
+              >
+                <Compass className="h-3.5 w-3.5" />
+                World Map
+              </button>
             </>
           )}
 
@@ -343,6 +354,8 @@ export function App() {
           <AuditMatrixView />
         ) : route.screen === 'entities' ? (
           <EntityHubView />
+        ) : route.screen === 'world' ? (
+          <WorldMapPanel />
         ) : route.screen === 'vault' ? (
           <VaultAndBrowserView />
         ) : (

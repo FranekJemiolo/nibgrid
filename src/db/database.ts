@@ -50,6 +50,7 @@ import {
 import { StoredRoomRecordSchema, type StoredRoomRecord } from '../processing/roomLayoutCore';
 import { SliceJobRecordSchema, type SliceJobRecord } from '../processing/sliceDagRunner';
 import { AgentCheckpointSchema, type AgentCheckpoint } from '../agent/stagingTransactions';
+import { WorldGraphSchema, type WorldGraph } from '../world/worldGraphCore';
 
 export const OFFLINE_MOCK_PROVIDER_ID = 'offline-mock';
 export const ANTIGRAVITY_AGENT_PROVIDER_ID = 'antigravity-agent';
@@ -72,6 +73,7 @@ export class NibgridDatabase extends Dexie {
   rooms!: Table<StoredRoomRecord, string>;
   sliceJobs!: Table<SliceJobRecord, string>;
   agentCheckpoints!: Table<AgentCheckpoint, string>;
+  worldGraphs!: Table<WorldGraph, string>;
 
   constructor(dbName = 'nibgrid-db') {
     super(dbName);
@@ -157,6 +159,21 @@ export class NibgridDatabase extends Dexie {
       sliceJobs: '&id, projectId, status, updatedAt',
       agentCheckpoints: '&id, projectId, createdAt',
     });
+    this.version(9).stores({
+      projects: 'id, updatedAt, name',
+      blobs: 'id, sha256, createdAt',
+      spriteNodes: 'id, projectId, parentId, [projectId+createdAt]',
+      providerConfigs: 'id, kind, updatedAt',
+      audioAssets: 'id, projectId, presetId, createdAt',
+      entities: '&id, projectId, slug',
+      syncTargets: '&projectId',
+      vaultItems: '&id, kind, name, createdAt',
+      qaReports: '&projectId, sheetHash',
+      rooms: '&id, projectId, slug',
+      sliceJobs: '&id, projectId, status, updatedAt',
+      agentCheckpoints: '&id, projectId, createdAt',
+      worldGraphs: '&projectId, id, updatedAt',
+    });
   }
 }
 
@@ -213,6 +230,18 @@ export class NibgridRepository {
 
   constructor(database: NibgridDatabase = db) {
     this.database = database;
+  }
+
+  private get blobGcTables() {
+    return [
+      this.database.projects,
+      this.database.spriteNodes,
+      this.database.audioAssets,
+      this.database.blobs,
+      this.database.vaultItems,
+      this.database.agentCheckpoints,
+      this.database.worldGraphs,
+    ];
   }
 
   async ensureDefaultProviderConfigs(): Promise<ProviderConfig[]> {
@@ -419,28 +448,17 @@ export class NibgridRepository {
 
   async saveSpriteNode(node: SpriteNode): Promise<SpriteNode> {
     const validated = SpriteNodeSchema.parse(node);
-    await this.database.transaction(
-      'rw',
-      [
-        this.database.spriteNodes,
-        this.database.projects,
-        this.database.audioAssets,
-        this.database.blobs,
-        this.database.vaultItems,
-        this.database.agentCheckpoints,
-      ],
-      async () => {
-        const existing = await this.database.spriteNodes.get(validated.id);
-        await this.database.spriteNodes.put(validated);
-        await this.database.projects
-          .where('id')
-          .equals(validated.projectId)
-          .modify({ updatedAt: nowIso() });
-        if (existing) {
-          await this.cleanupOrphanedBlobsInTx();
-        }
-      },
-    );
+    await this.database.transaction('rw', this.blobGcTables, async () => {
+      const existing = await this.database.spriteNodes.get(validated.id);
+      await this.database.spriteNodes.put(validated);
+      await this.database.projects
+        .where('id')
+        .equals(validated.projectId)
+        .modify({ updatedAt: nowIso() });
+      if (existing) {
+        await this.cleanupOrphanedBlobsInTx();
+      }
+    });
     return validated;
   }
 
@@ -453,44 +471,25 @@ export class NibgridRepository {
     updater: (existing: SpriteNode) => SpriteNode,
   ): Promise<SpriteNode | null> {
     let updated: SpriteNode | null = null;
-    await this.database.transaction(
-      'rw',
-      [
-        this.database.spriteNodes,
-        this.database.projects,
-        this.database.audioAssets,
-        this.database.blobs,
-        this.database.vaultItems,
-        this.database.agentCheckpoints,
-      ],
-      async () => {
-        const existing = await this.database.spriteNodes.get(nodeId);
-        if (!existing) return;
-        const validated = SpriteNodeSchema.parse(updater(existing));
-        await this.database.spriteNodes.put(validated);
-        await this.database.projects
-          .where('id')
-          .equals(validated.projectId)
-          .modify({ updatedAt: nowIso() });
-        await this.cleanupOrphanedBlobsInTx();
-        updated = validated;
-      },
-    );
+    await this.database.transaction('rw', this.blobGcTables, async () => {
+      const existing = await this.database.spriteNodes.get(nodeId);
+      if (!existing) return;
+      const validated = SpriteNodeSchema.parse(updater(existing));
+      await this.database.spriteNodes.put(validated);
+      await this.database.projects
+        .where('id')
+        .equals(validated.projectId)
+        .modify({ updatedAt: nowIso() });
+      await this.cleanupOrphanedBlobsInTx();
+      updated = validated;
+    });
     return updated;
   }
 
   async deleteSpriteNode(nodeId: string): Promise<void> {
     await this.database.transaction(
       'rw',
-      [
-        this.database.spriteNodes,
-        this.database.projects,
-        this.database.audioAssets,
-        this.database.blobs,
-        this.database.vaultItems,
-        this.database.qaReports,
-        this.database.agentCheckpoints,
-      ],
+      [...this.blobGcTables, this.database.qaReports],
       async () => {
         const node = await this.database.spriteNodes.get(nodeId);
         if (!node) return;
@@ -520,63 +519,52 @@ export class NibgridRepository {
     const mimeType = pngBlob.type || 'image/png';
     const sha256 = await sha256Bytes(bytes);
 
-    return this.database.transaction(
-      'rw',
-      [
-        this.database.blobs,
-        this.database.spriteNodes,
-        this.database.projects,
-        this.database.audioAssets,
-        this.database.vaultItems,
-        this.database.agentCheckpoints,
-      ],
-      async () => {
-        const existingNode = await this.database.spriteNodes.get(nodeId);
-        if (!existingNode) {
-          throw new Error(`SpriteNode "${nodeId}" not found.`);
-        }
+    return this.database.transaction('rw', this.blobGcTables, async () => {
+      const existingNode = await this.database.spriteNodes.get(nodeId);
+      if (!existingNode) {
+        throw new Error(`SpriteNode "${nodeId}" not found.`);
+      }
 
-        let blobRecord = await this.database.blobs.where('sha256').equals(sha256).first();
-        if (!blobRecord) {
-          const copy = new Uint8Array(bytes.byteLength);
-          copy.set(bytes);
-          blobRecord = BlobRecordSchema.parse({
-            id: createId(),
-            mimeType,
-            bytes: new Blob([copy.buffer], { type: mimeType }),
-            sha256,
-            createdAt: nowIso(),
-          });
-          await this.database.blobs.put(blobRecord);
-        }
-
-        const nextNode = SpriteNodeSchema.parse({
-          ...existingNode,
-          processedBlobId: blobRecord.id,
-          ...(updates.assetClass !== undefined ? { assetClass: updates.assetClass } : {}),
-          ...(updates.postProcessConfig !== undefined
-            ? { postProcessConfig: updates.postProcessConfig }
-            : {}),
-          ...(updates.recipeArtBibleHash !== undefined
-            ? { recipeArtBibleHash: updates.recipeArtBibleHash }
-            : {}),
-          ...(updates.manualPixelEditCount !== undefined
-            ? { manualPixelEditCount: updates.manualPixelEditCount }
-            : {}),
-          ...(updates.inpaintHistory !== undefined
-            ? { inpaintHistory: [...updates.inpaintHistory] }
-            : {}),
+      let blobRecord = await this.database.blobs.where('sha256').equals(sha256).first();
+      if (!blobRecord) {
+        const copy = new Uint8Array(bytes.byteLength);
+        copy.set(bytes);
+        blobRecord = BlobRecordSchema.parse({
+          id: createId(),
+          mimeType,
+          bytes: new Blob([copy.buffer], { type: mimeType }),
+          sha256,
+          createdAt: nowIso(),
         });
+        await this.database.blobs.put(blobRecord);
+      }
 
-        await this.database.spriteNodes.put(nextNode);
-        await this.database.projects
-          .where('id')
-          .equals(nextNode.projectId)
-          .modify({ updatedAt: nowIso() });
-        await this.cleanupOrphanedBlobsInTx();
-        return nextNode;
-      },
-    );
+      const nextNode = SpriteNodeSchema.parse({
+        ...existingNode,
+        processedBlobId: blobRecord.id,
+        ...(updates.assetClass !== undefined ? { assetClass: updates.assetClass } : {}),
+        ...(updates.postProcessConfig !== undefined
+          ? { postProcessConfig: updates.postProcessConfig }
+          : {}),
+        ...(updates.recipeArtBibleHash !== undefined
+          ? { recipeArtBibleHash: updates.recipeArtBibleHash }
+          : {}),
+        ...(updates.manualPixelEditCount !== undefined
+          ? { manualPixelEditCount: updates.manualPixelEditCount }
+          : {}),
+        ...(updates.inpaintHistory !== undefined
+          ? { inpaintHistory: [...updates.inpaintHistory] }
+          : {}),
+      });
+
+      await this.database.spriteNodes.put(nextNode);
+      await this.database.projects
+        .where('id')
+        .equals(nextNode.projectId)
+        .modify({ updatedAt: nowIso() });
+      await this.cleanupOrphanedBlobsInTx();
+      return nextNode;
+    });
   }
 
   private async upsertPngBlobInTx(bytes: Uint8Array, sha256: string): Promise<string> {
@@ -608,30 +596,19 @@ export class NibgridRepository {
     const sha256 = await sha256Bytes(bytes);
 
     let updated: SpriteNode | null = null;
-    await this.database.transaction(
-      'rw',
-      [
-        this.database.blobs,
-        this.database.spriteNodes,
-        this.database.projects,
-        this.database.audioAssets,
-        this.database.vaultItems,
-        this.database.agentCheckpoints,
-      ],
-      async () => {
-        const existing = await this.database.spriteNodes.get(nodeId);
-        if (!existing) return;
-        const processedBlobId = await this.upsertPngBlobInTx(bytes, sha256);
-        const validated = SpriteNodeSchema.parse(updater(existing, processedBlobId));
-        await this.database.spriteNodes.put(validated);
-        await this.database.projects
-          .where('id')
-          .equals(validated.projectId)
-          .modify({ updatedAt: nowIso() });
-        await this.cleanupOrphanedBlobsInTx();
-        updated = validated;
-      },
-    );
+    await this.database.transaction('rw', this.blobGcTables, async () => {
+      const existing = await this.database.spriteNodes.get(nodeId);
+      if (!existing) return;
+      const processedBlobId = await this.upsertPngBlobInTx(bytes, sha256);
+      const validated = SpriteNodeSchema.parse(updater(existing, processedBlobId));
+      await this.database.spriteNodes.put(validated);
+      await this.database.projects
+        .where('id')
+        .equals(validated.projectId)
+        .modify({ updatedAt: nowIso() });
+      await this.cleanupOrphanedBlobsInTx();
+      updated = validated;
+    });
     return updated;
   }
 
@@ -656,45 +633,34 @@ export class NibgridRepository {
     const stripSha = await sha256Bytes(stripBytes);
 
     let result: { node: SpriteNode; poseClip: PoseClipDefinitionSchemaType } | null = null;
-    await this.database.transaction(
-      'rw',
-      [
-        this.database.blobs,
-        this.database.spriteNodes,
-        this.database.projects,
-        this.database.audioAssets,
-        this.database.vaultItems,
-        this.database.agentCheckpoints,
-      ],
-      async () => {
-        const existingNode = await this.database.spriteNodes.get(nodeId);
-        if (!existingNode) {
-          throw new Error(`SpriteNode "${nodeId}" not found.`);
-        }
-        const frameBlobIds: string[] = [];
-        for (const payload of framePayloads) {
-          frameBlobIds.push(await this.upsertPngBlobInTx(payload.bytes, payload.sha256));
-        }
-        const stripBlobId = await this.upsertPngBlobInTx(stripBytes, stripSha);
-        const nextClip = PoseClipDefinitionSchema.parse({
-          ...clipBase,
-          generatedFrameBlobIds: frameBlobIds,
-          generatedStripBlobId: stripBlobId,
-        });
-        const nextNode = SpriteNodeSchema.parse({
-          ...existingNode,
-          ...(assetClass !== undefined ? { assetClass } : {}),
-          poseClip: nextClip,
-        });
-        await this.database.spriteNodes.put(nextNode);
-        await this.database.projects
-          .where('id')
-          .equals(nextNode.projectId)
-          .modify({ updatedAt: nowIso() });
-        await this.cleanupOrphanedBlobsInTx();
-        result = { node: nextNode, poseClip: nextClip };
-      },
-    );
+    await this.database.transaction('rw', this.blobGcTables, async () => {
+      const existingNode = await this.database.spriteNodes.get(nodeId);
+      if (!existingNode) {
+        throw new Error(`SpriteNode "${nodeId}" not found.`);
+      }
+      const frameBlobIds: string[] = [];
+      for (const payload of framePayloads) {
+        frameBlobIds.push(await this.upsertPngBlobInTx(payload.bytes, payload.sha256));
+      }
+      const stripBlobId = await this.upsertPngBlobInTx(stripBytes, stripSha);
+      const nextClip = PoseClipDefinitionSchema.parse({
+        ...clipBase,
+        generatedFrameBlobIds: frameBlobIds,
+        generatedStripBlobId: stripBlobId,
+      });
+      const nextNode = SpriteNodeSchema.parse({
+        ...existingNode,
+        ...(assetClass !== undefined ? { assetClass } : {}),
+        poseClip: nextClip,
+      });
+      await this.database.spriteNodes.put(nextNode);
+      await this.database.projects
+        .where('id')
+        .equals(nextNode.projectId)
+        .modify({ updatedAt: nowIso() });
+      await this.cleanupOrphanedBlobsInTx();
+      result = { node: nextNode, poseClip: nextClip };
+    });
 
     if (!result) {
       throw new Error(`Failed to commit pose clip frames for SpriteNode "${nodeId}".`);
@@ -724,50 +690,39 @@ export class NibgridRepository {
       : null;
     const emissionSha = emissionBytes ? await sha256Bytes(emissionBytes) : null;
 
-    return this.database.transaction(
-      'rw',
-      [
-        this.database.blobs,
-        this.database.spriteNodes,
-        this.database.projects,
-        this.database.audioAssets,
-        this.database.vaultItems,
-        this.database.agentCheckpoints,
-      ],
-      async () => {
-        const existingNode = await this.database.spriteNodes.get(nodeId);
-        if (!existingNode) {
-          throw new Error(`SpriteNode "${nodeId}" not found.`);
-        }
+    return this.database.transaction('rw', this.blobGcTables, async () => {
+      const existingNode = await this.database.spriteNodes.get(nodeId);
+      if (!existingNode) {
+        throw new Error(`SpriteNode "${nodeId}" not found.`);
+      }
 
-        const normalBlobId = await this.upsertPngBlobInTx(normalBytes, normalSha);
-        const emissionBlobId =
-          emissionBytes && emissionSha
-            ? await this.upsertPngBlobInTx(emissionBytes, emissionSha)
-            : undefined;
+      const normalBlobId = await this.upsertPngBlobInTx(normalBytes, normalSha);
+      const emissionBlobId =
+        emissionBytes && emissionSha
+          ? await this.upsertPngBlobInTx(emissionBytes, emissionSha)
+          : undefined;
 
-        const nextNode = SpriteNodeSchema.parse({
-          ...existingNode,
-          lightingBake: {
-            normalBlobId,
-            ...(emissionBlobId ? { emissionBlobId } : {}),
-            normalConfig: opts.normalConfig,
-            emissionConfig: opts.emissionConfig,
-            emissivePixelCount: opts.emissivePixelCount,
-            occluderVertexCount: opts.occluderVertexCount,
-            bakedAt: nowIso(),
-          },
-        });
+      const nextNode = SpriteNodeSchema.parse({
+        ...existingNode,
+        lightingBake: {
+          normalBlobId,
+          ...(emissionBlobId ? { emissionBlobId } : {}),
+          normalConfig: opts.normalConfig,
+          emissionConfig: opts.emissionConfig,
+          emissivePixelCount: opts.emissivePixelCount,
+          occluderVertexCount: opts.occluderVertexCount,
+          bakedAt: nowIso(),
+        },
+      });
 
-        await this.database.spriteNodes.put(nextNode);
-        await this.database.projects
-          .where('id')
-          .equals(nextNode.projectId)
-          .modify({ updatedAt: nowIso() });
-        await this.cleanupOrphanedBlobsInTx();
-        return nextNode;
-      },
-    );
+      await this.database.spriteNodes.put(nextNode);
+      await this.database.projects
+        .where('id')
+        .equals(nextNode.projectId)
+        .modify({ updatedAt: nowIso() });
+      await this.cleanupOrphanedBlobsInTx();
+      return nextNode;
+    });
   }
 
   async listAudioAssets(projectId: string): Promise<AudioAsset[]> {
@@ -779,49 +734,27 @@ export class NibgridRepository {
 
   async saveAudioAsset(asset: AudioAsset): Promise<AudioAsset> {
     const validated = AudioAssetSchema.parse(asset);
-    await this.database.transaction(
-      'rw',
-      [
-        this.database.audioAssets,
-        this.database.spriteNodes,
-        this.database.projects,
-        this.database.blobs,
-        this.database.vaultItems,
-        this.database.agentCheckpoints,
-      ],
-      async () => {
-        const existing = await this.database.audioAssets.get(validated.id);
-        await this.database.audioAssets.put(validated);
-        await this.database.projects
-          .where('id')
-          .equals(validated.projectId)
-          .modify({ updatedAt: nowIso() });
-        if (existing) {
-          await this.cleanupOrphanedBlobsInTx();
-        }
-      },
-    );
+    await this.database.transaction('rw', this.blobGcTables, async () => {
+      const existing = await this.database.audioAssets.get(validated.id);
+      await this.database.audioAssets.put(validated);
+      await this.database.projects
+        .where('id')
+        .equals(validated.projectId)
+        .modify({ updatedAt: nowIso() });
+      if (existing) {
+        await this.cleanupOrphanedBlobsInTx();
+      }
+    });
     return validated;
   }
 
   async deleteAudioAsset(assetId: string): Promise<void> {
-    await this.database.transaction(
-      'rw',
-      [
-        this.database.audioAssets,
-        this.database.projects,
-        this.database.spriteNodes,
-        this.database.blobs,
-        this.database.vaultItems,
-        this.database.agentCheckpoints,
-      ],
-      async () => {
-        const found = await this.database.audioAssets.get(assetId);
-        if (!found) return;
-        await this.database.audioAssets.delete(assetId);
-        await this.cleanupOrphanedBlobsInTx();
-      },
-    );
+    await this.database.transaction('rw', this.blobGcTables, async () => {
+      const found = await this.database.audioAssets.get(assetId);
+      if (!found) return;
+      await this.database.audioAssets.delete(assetId);
+      await this.cleanupOrphanedBlobsInTx();
+    });
   }
 
   async listEntities(projectId: string): Promise<EntityDefinition[]> {
@@ -965,24 +898,67 @@ export class NibgridRepository {
     return validated;
   }
 
-  async deleteVaultItem(id: string): Promise<void> {
+  async getWorldGraph(projectId: string): Promise<WorldGraph | undefined> {
+    const found = await this.database.worldGraphs.get(projectId);
+    return found ? WorldGraphSchema.parse(found) : undefined;
+  }
+
+  async saveWorldGraph(graph: WorldGraph): Promise<WorldGraph> {
+    const validated = WorldGraphSchema.parse({
+      ...graph,
+      updatedAt: graph.updatedAt || Date.now(),
+    });
     await this.database.transaction(
       'rw',
-      [
-        this.database.vaultItems,
-        this.database.projects,
-        this.database.spriteNodes,
-        this.database.audioAssets,
-        this.database.blobs,
-        this.database.agentCheckpoints,
-      ],
+      [this.database.worldGraphs, this.database.projects],
       async () => {
-        const found = await this.database.vaultItems.get(id);
-        if (!found) return;
-        await this.database.vaultItems.delete(id);
-        await this.cleanupOrphanedBlobsInTx();
+        await this.database.worldGraphs.put(validated);
+        await this.database.projects
+          .where('id')
+          .equals(validated.projectId)
+          .modify({ updatedAt: nowIso() });
       },
     );
+    return validated;
+  }
+
+  /**
+   * Atomically commits the `WorldGraph` and its baked pixel-art `minimap.png` blob + atlas JSON
+   * in one Dexie transaction so replaced minimap blobs are garbage-collected with zero orphans.
+   */
+  async commitWorldGraphWithMinimap(
+    graph: WorldGraph,
+    minimapPngBlob: Blob,
+    minimapAtlasJson: string,
+  ): Promise<WorldGraph> {
+    const bytes = new Uint8Array(await minimapPngBlob.arrayBuffer());
+    const sha256 = await sha256Bytes(bytes);
+
+    return this.database.transaction('rw', this.blobGcTables, async () => {
+      const minimapBlobId = await this.upsertPngBlobInTx(bytes, sha256);
+      const nextGraph = WorldGraphSchema.parse({
+        ...graph,
+        minimapBlobId,
+        minimapAtlasJson,
+        updatedAt: Date.now(),
+      });
+      await this.database.worldGraphs.put(nextGraph);
+      await this.database.projects
+        .where('id')
+        .equals(nextGraph.projectId)
+        .modify({ updatedAt: nowIso() });
+      await this.cleanupOrphanedBlobsInTx();
+      return nextGraph;
+    });
+  }
+
+  async deleteVaultItem(id: string): Promise<void> {
+    await this.database.transaction('rw', this.blobGcTables, async () => {
+      const found = await this.database.vaultItems.get(id);
+      if (!found) return;
+      await this.database.vaultItems.delete(id);
+      await this.cleanupOrphanedBlobsInTx();
+    });
   }
 
   async promoteSpriteNodeToVault(
@@ -1163,16 +1139,11 @@ export class NibgridRepository {
     await this.database.transaction(
       'rw',
       [
-        this.database.projects,
-        this.database.spriteNodes,
-        this.database.audioAssets,
+        ...this.blobGcTables,
         this.database.entities,
         this.database.rooms,
         this.database.sliceJobs,
-        this.database.agentCheckpoints,
         this.database.syncTargets,
-        this.database.blobs,
-        this.database.vaultItems,
         this.database.qaReports,
       ],
       async () => {
@@ -1182,6 +1153,7 @@ export class NibgridRepository {
         await this.database.rooms.where('projectId').equals(projectId).delete();
         await this.database.sliceJobs.where('projectId').equals(projectId).delete();
         await this.database.agentCheckpoints.where('projectId').equals(projectId).delete();
+        await this.database.worldGraphs.delete(projectId);
         await this.database.syncTargets.delete(projectId);
         await this.database.qaReports.delete(projectId);
         await this.database.projects.delete(projectId);
@@ -1231,17 +1203,8 @@ export class NibgridRepository {
   }
 
   async cleanupOrphanedBlobs(): Promise<number> {
-    return this.database.transaction(
-      'rw',
-      [
-        this.database.projects,
-        this.database.spriteNodes,
-        this.database.audioAssets,
-        this.database.blobs,
-        this.database.vaultItems,
-        this.database.agentCheckpoints,
-      ],
-      async () => this.cleanupOrphanedBlobsInTx(),
+    return this.database.transaction('rw', this.blobGcTables, async () =>
+      this.cleanupOrphanedBlobsInTx(),
     );
   }
 
@@ -1320,6 +1283,13 @@ export async function findOrphanBlobIds(database: NibgridDatabase = db): Promise
   for (const checkpoint of allCheckpoints) {
     for (const blobId of checkpoint.referencedBlobIds ?? []) {
       referencedBlobIds.add(blobId);
+    }
+  }
+
+  const allWorldGraphs = await database.worldGraphs.toArray();
+  for (const worldGraph of allWorldGraphs) {
+    if (worldGraph.minimapBlobId) {
+      referencedBlobIds.add(worldGraph.minimapBlobId);
     }
   }
 

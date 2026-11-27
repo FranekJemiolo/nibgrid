@@ -556,3 +556,16 @@ All image-manipulation stages operate on raw `Uint8ClampedArray` buffers in `src
 ## 106. Interactive WebGL2 Lighting Baker & Entity Sync UX (Milestone 44C)
 
 - **`LightingBakerPanel.tsx` & UI Integration (`src/ui/lighting/LightingBakerPanel.tsx`, `src/ui/inspector/PostProcessInspector.tsx`, `src/ui/entities/EntityHubView.tsx`, `src/ui/command/CommandPalette.tsx`, `src/store/useAppStore.ts`):** Renders an interactive draggable `PointLight2D` stage in WebGL2 (with transparent 2D Canvas CPU fallback and full GL resource disposal on unmount), 5-channel toggles (`Lit Preview`, `Diffuse`, `Normal Map (_n)`, `Emission (_e)`, `Occluder Hull`), `ArtBible` emissive swatches, and 1-click **Bake & Attach to Asset** committing `_n.png`, `_e.png`, and `_canvas.tres` metadata atomically into Dexie for M25 `res://` sync.
+
+## 107. Pure-TS World Map Graph & Softlock Reachability Auditor (Milestone 45A)
+
+- **World Graph Schemas & Progression Auditor (`src/world/worldGraphCore.ts`):** Defines Zod schemas (`WorldRoomNodeSchema`, `WorldPortalEdgeSchema`, `WorldGraphSchema`) connecting M35 rooms via portal triggers (`fromDoorId -> toSpawnId`), flag grants (`grantsFlags`), and flag gates (`requiredFlags`), plus `auditWorldReachability()` implementing fixed-point progression BFS from `isStart`, secondary softlock trap verification (confirming every reachable non-goal room can still reach a `isGoal` room or the `isStart` hub), cyclic graph termination, dangling edge checks, and duplicate door/spawn detection.
+
+## 108. Pixel-Art Minimap Baker, Godot 4 Portal Exporter & Atomic World Sync (Milestone 45B)
+
+- **Minimap Baker (`src/world/minimapBaker.ts`):** Renders nearest-neighbor RGBA minimaps snapped to `ArtBible` colors (`deriveMinimapPaletteFromArtBible`, `bakeWorldMinimapRgba` at `1px`/`2px` per tile) with 1px room borders, door connector lines, Start/Goal pips, and `minimap_atlas.json` room bounding boxes.
+- **Godot 4 World Exporter & M25 Sync (`src/export/godotWorldExporter.ts`, `src/export/godotRoomExporter.ts`, `src/db/database.ts`, `src/sync/fsaaSyncEngine.ts`):** Emits per-room `Area2D` portal triggers and `Marker2D` spawn markers inside `levels/<slug>.tscn`, generates typed `WorldTransitionManager.gd` autoload scripts and nearest-neighbor `minimap.png.import`, adds Dexie v9 `worldGraphs` with atomic `commitWorldGraphWithMinimap()` / zero-orphan `findOrphanBlobIds()` tracking, and wires `world/*` files into `collectProjectGodotSyncFiles()`.
+
+## 109. Interactive World Map Graph, Audit & Minimap UI (Milestone 45C)
+
+- **`WorldMapPanel.tsx` & Parity Registration (`src/ui/world/WorldMapPanel.tsx`, `src/ui/inspector/workspaceTabs.ts`, `scripts/verify-parity.ts`, `src/store/useAppStore.ts`, `src/App.tsx`, `src/ui/inspector/PostProcessInspector.tsx`, `src/ui/inspector/RoomPrototyperWorkshop.tsx`, `src/ui/command/CommandPalette.tsx`):** Exposes a top-level **World Map** header route (`#/project/:id/world`), `'world-map'` inspector tab (`verify:parity` tracked), and `Cmd+K` Command Palette action with pan/zoom snap-to-grid room cards, portal link editor, 1-click softlock audit badges (jumping directly to flagged M35 rooms), nearest-neighbor minimap canvas preview, and Godot `res://` world sync.
