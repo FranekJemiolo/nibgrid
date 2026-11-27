@@ -589,7 +589,7 @@ export const BitmapFontConfigSchema = z.object({
   customFontFamily: z.string().max(120).default('monospace'),
   rasterSizePx: z.number().int().min(10).max(48).default(16),
   charsetPreset: BitmapFontCharsetPresetSchema.default('damage-numerals'),
-  customCharset: z.string().min(1).max(256).default('0123456789+-!%x.,CRITMS'),
+  customCharset: z.string().min(1).max(1024).default('0123456789+-!%x.,CRITMS'),
   scale: z.number().int().min(1).max(4).default(2),
   topHex: HexColorSchema.default('#FFCD75'),
   bottomHex: HexColorSchema.default('#EF7D57'),

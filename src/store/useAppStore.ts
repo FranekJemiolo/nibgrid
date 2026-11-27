@@ -19,6 +19,7 @@ import type { PixelTool } from '../processing/pixelEditorCore';
 import type { ShareableRecipe } from '../share/recipeUrlCodec';
 import type { WorldGraph } from '../world/worldGraphCore';
 import type { GameDataRegistry } from '../data/gameDataSchemas';
+import type { ProjectNarrativeBundle } from '../narrative/dialogueSchemas';
 
 export type InspectorTab =
   | 'postprocess'
@@ -33,6 +34,7 @@ export type InspectorTab =
   | 'room'
   | 'world-map'
   | 'data-foundry'
+  | 'dialogue-l10n'
   | 'bmfont'
   | 'uikit'
   | 'palette-lut'
@@ -58,6 +60,7 @@ export type ScreenRoute =
   | { screen: 'entities'; projectId: string; playtestEntityId?: string }
   | { screen: 'world'; projectId: string }
   | { screen: 'data'; projectId: string }
+  | { screen: 'dialogue'; projectId: string }
   | { screen: 'vault'; projectId?: string };
 
 const VALID_PIXEL_TOOLS = new Set<PixelTool>([
@@ -82,6 +85,7 @@ const VALID_INSPECTOR_TABS = new Set<InspectorTab>([
   'room',
   'world-map',
   'data-foundry',
+  'dialogue-l10n',
   'bmfont',
   'uikit',
   'palette-lut',
@@ -152,6 +156,10 @@ export function parseHashRoute(hash: string): ScreenRoute {
   if (dataMatch?.[1]) {
     return { screen: 'data', projectId: dataMatch[1] };
   }
+  const dialogueMatch = /^\/project\/([^/]+)\/dialogue$/.exec(path);
+  if (dialogueMatch?.[1]) {
+    return { screen: 'dialogue', projectId: dialogueMatch[1] };
+  }
   if (path === '/vault') {
     return { screen: 'vault' };
   }
@@ -194,6 +202,9 @@ export function formatHashRoute(route: ScreenRoute): string {
   if (route.screen === 'data') {
     return `#/project/${route.projectId}/data`;
   }
+  if (route.screen === 'dialogue') {
+    return `#/project/${route.projectId}/dialogue`;
+  }
   if (route.screen === 'vault') {
     return route.projectId ? `#/project/${route.projectId}/vault` : '#/vault';
   }
@@ -216,6 +227,7 @@ interface AppState {
   rooms: StoredRoomRecord[];
   worldGraph: WorldGraph | null;
   gameDataRegistry: GameDataRegistry | null;
+  narrativeBundle: ProjectNarrativeBundle | null;
   focusedRoomId: string | null;
   sliceJobs: SliceJobRecord[];
   agentCheckpoints: AgentCheckpoint[];
@@ -291,6 +303,12 @@ interface AppState {
   ) => Promise<WorldGraph>;
   refreshGameDataRegistry: (projectId: string) => Promise<void>;
   saveGameDataRegistryRecord: (registry: GameDataRegistry) => Promise<GameDataRegistry>;
+  refreshNarrativeBundle: (projectId: string) => Promise<void>;
+  saveNarrativeBundleRecord: (bundle: ProjectNarrativeBundle) => Promise<ProjectNarrativeBundle>;
+  appendNarrativeFontGlyphs: (
+    projectId: string,
+    missingChars: readonly string[],
+  ) => Promise<ProjectNarrativeBundle>;
   refreshSliceJobs: (projectId: string) => Promise<void>;
   saveSliceJobRecord: (job: SliceJobRecord) => Promise<SliceJobRecord>;
   deleteSliceJobRecord: (jobId: string, projectId: string) => Promise<void>;
@@ -335,6 +353,7 @@ export const useAppStore = create<AppState>((set, get) => ({
   rooms: [],
   worldGraph: null,
   gameDataRegistry: null,
+  narrativeBundle: null,
   focusedRoomId: null,
   sliceJobs: [],
   agentCheckpoints: [],
@@ -385,6 +404,7 @@ export const useAppStore = create<AppState>((set, get) => ({
             syncTarget,
             worldGraph,
             gameDataRegistry,
+            narrativeBundle,
           ] = await Promise.all([
             repository.listSpriteNodes(project.id),
             repository.listAudioAssets(project.id),
@@ -395,6 +415,7 @@ export const useAppStore = create<AppState>((set, get) => ({
             repository.getSyncTarget(project.id),
             repository.getWorldGraph(project.id),
             repository.getGameDataRegistry(project.id),
+            repository.getNarrativeBundle(project.id),
           ]);
           set({
             route: initialRoute,
@@ -408,6 +429,7 @@ export const useAppStore = create<AppState>((set, get) => ({
             rooms,
             worldGraph: worldGraph ?? null,
             gameDataRegistry: gameDataRegistry ?? null,
+            narrativeBundle: narrativeBundle ?? null,
             sliceJobs,
             agentCheckpoints,
             syncTarget: syncTarget ?? null,
@@ -427,6 +449,7 @@ export const useAppStore = create<AppState>((set, get) => ({
           rooms: [],
           worldGraph: null,
           gameDataRegistry: null,
+          narrativeBundle: null,
           sliceJobs: [],
           agentCheckpoints: [],
           syncTarget: null,
@@ -448,6 +471,7 @@ export const useAppStore = create<AppState>((set, get) => ({
             syncTarget,
             worldGraph,
             gameDataRegistry,
+            narrativeBundle,
           ] = await Promise.all([
             repository.listSpriteNodes(project.id),
             repository.listAudioAssets(project.id),
@@ -458,6 +482,7 @@ export const useAppStore = create<AppState>((set, get) => ({
             repository.getSyncTarget(project.id),
             repository.getWorldGraph(project.id),
             repository.getGameDataRegistry(project.id),
+            repository.getNarrativeBundle(project.id),
           ]);
           set({
             route: initialRoute,
@@ -471,6 +496,7 @@ export const useAppStore = create<AppState>((set, get) => ({
             rooms,
             worldGraph: worldGraph ?? null,
             gameDataRegistry: gameDataRegistry ?? null,
+            narrativeBundle: narrativeBundle ?? null,
             sliceJobs,
             agentCheckpoints,
             syncTarget: syncTarget ?? null,
@@ -534,6 +560,7 @@ export const useAppStore = create<AppState>((set, get) => ({
           syncTarget,
           worldGraph,
           gameDataRegistry,
+          narrativeBundle,
         ] = await Promise.all([
           repository.listSpriteNodes(project.id),
           repository.listAudioAssets(project.id),
@@ -544,6 +571,7 @@ export const useAppStore = create<AppState>((set, get) => ({
           repository.getSyncTarget(project.id),
           repository.getWorldGraph(project.id),
           repository.getGameDataRegistry(project.id),
+          repository.getNarrativeBundle(project.id),
         ]);
         set({
           route: { screen: 'vault', projectId: project.id },
@@ -556,6 +584,7 @@ export const useAppStore = create<AppState>((set, get) => ({
           rooms,
           worldGraph: worldGraph ?? null,
           gameDataRegistry: gameDataRegistry ?? null,
+          narrativeBundle: narrativeBundle ?? null,
           sliceJobs,
           agentCheckpoints,
           syncTarget: syncTarget ?? null,
@@ -573,6 +602,7 @@ export const useAppStore = create<AppState>((set, get) => ({
           rooms: [],
           worldGraph: null,
           gameDataRegistry: null,
+          narrativeBundle: null,
           sliceJobs: [],
           agentCheckpoints: [],
           syncTarget: null,
@@ -594,6 +624,7 @@ export const useAppStore = create<AppState>((set, get) => ({
         rooms: [],
         worldGraph: null,
         gameDataRegistry: null,
+        narrativeBundle: null,
         sliceJobs: [],
         agentCheckpoints: [],
         syncTarget: null,
@@ -618,6 +649,7 @@ export const useAppStore = create<AppState>((set, get) => ({
         rooms: [],
         worldGraph: null,
         gameDataRegistry: null,
+        narrativeBundle: null,
         sliceJobs: [],
         agentCheckpoints: [],
         syncTarget: null,
@@ -638,6 +670,7 @@ export const useAppStore = create<AppState>((set, get) => ({
       syncTarget,
       worldGraph,
       gameDataRegistry,
+      narrativeBundle,
     ] = await Promise.all([
       repository.listSpriteNodes(project.id),
       repository.listAudioAssets(project.id),
@@ -648,6 +681,7 @@ export const useAppStore = create<AppState>((set, get) => ({
       repository.getSyncTarget(project.id),
       repository.getWorldGraph(project.id),
       repository.getGameDataRegistry(project.id),
+      repository.getNarrativeBundle(project.id),
     ]);
     set({
       route,
@@ -658,6 +692,7 @@ export const useAppStore = create<AppState>((set, get) => ({
       rooms,
       worldGraph: worldGraph ?? null,
       gameDataRegistry: gameDataRegistry ?? null,
+      narrativeBundle: narrativeBundle ?? null,
       sliceJobs,
       agentCheckpoints,
       syncTarget: syncTarget ?? null,
@@ -709,6 +744,7 @@ export const useAppStore = create<AppState>((set, get) => ({
         rooms: [],
         worldGraph: null,
         gameDataRegistry: null,
+        narrativeBundle: null,
         sliceJobs: [],
         agentCheckpoints: [],
         syncTarget: null,
@@ -934,6 +970,24 @@ export const useAppStore = create<AppState>((set, get) => ({
     const saved = await repository.saveGameDataRegistry(registry);
     set({ gameDataRegistry: saved });
     return saved;
+  },
+
+  refreshNarrativeBundle: async (projectId) => {
+    const narrativeBundle = await repository.getNarrativeBundle(projectId);
+    set({ narrativeBundle: narrativeBundle ?? null });
+  },
+
+  saveNarrativeBundleRecord: async (bundle) => {
+    const saved = await repository.saveNarrativeBundle(bundle);
+    set({ narrativeBundle: saved });
+    return saved;
+  },
+
+  appendNarrativeFontGlyphs: async (projectId, missingChars) => {
+    const updated = await repository.appendNarrativeFontGlyphs(projectId, missingChars);
+    const spriteNodes = await repository.listSpriteNodes(projectId);
+    set({ narrativeBundle: updated, spriteNodes });
+    return updated;
   },
 
   refreshSliceJobs: async (projectId) => {

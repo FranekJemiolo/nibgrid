@@ -87,6 +87,12 @@ export const INSPECTOR_TAB_META: Record<InspectorTab, InspectorTabMeta> = {
     shortLabel: 'Data Foundry',
     testId: 'inspector-tab-data-foundry',
   },
+  'dialogue-l10n': {
+    id: 'dialogue-l10n',
+    label: 'Dialogue & Localization Studio',
+    shortLabel: 'Dialogue & L10n',
+    testId: 'inspector-tab-dialogue-l10n',
+  },
   bmfont: {
     id: 'bmfont',
     label: 'Bitmap Font',
@@ -138,6 +144,7 @@ export const ALL_INSPECTOR_TABS: readonly InspectorTab[] = [
   'room',
   'world-map',
   'data-foundry',
+  'dialogue-l10n',
   'bmfont',
   'uikit',
   'palette-lut',
@@ -179,6 +186,7 @@ export function resolveInspectorTabs(
         'palette-lut',
         'sandbox',
         'data-foundry',
+        'dialogue-l10n',
       ];
       break;
     case 'tile':

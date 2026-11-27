@@ -13,6 +13,7 @@ import {
   FolderKanban,
   Grid2X2,
   KeyRound,
+  Languages,
   Layers,
   Music,
   Paintbrush,
@@ -43,6 +44,7 @@ import { SpriteStudio } from './ui/studio/SpriteStudio';
 import { VaultAndBrowserView } from './ui/vault/VaultAndBrowserView';
 import { WorldMapPanel } from './ui/world/WorldMapPanel';
 import { DataFoundryPanel } from './ui/data/DataFoundryPanel';
+import { DialogueLocalizationPanel } from './ui/narrative/DialogueLocalizationPanel';
 
 export function App() {
   const {
@@ -239,6 +241,15 @@ export function App() {
                 <Database className="h-3.5 w-3.5" />
                 Data Foundry
               </button>
+              <button
+                type="button"
+                data-testid="nav-dialogue-l10n"
+                onClick={() => void navigate({ screen: 'dialogue', projectId: activeProject.id })}
+                className={navButtonClass(route.screen === 'dialogue')}
+              >
+                <Languages className="h-3.5 w-3.5" />
+                Dialogue &amp; L10n
+              </button>
             </>
           )}
 
@@ -369,6 +380,8 @@ export function App() {
           <WorldMapPanel />
         ) : route.screen === 'data' ? (
           <DataFoundryPanel />
+        ) : route.screen === 'dialogue' ? (
+          <DialogueLocalizationPanel />
         ) : route.screen === 'vault' ? (
           <VaultAndBrowserView />
         ) : (

@@ -44,6 +44,7 @@ export const EXPECTED_REQUIRED_INSPECTOR_TABS: readonly string[] = [
   'room',
   'world-map',
   'data-foundry',
+  'dialogue-l10n',
   'bmfont',
   'uikit',
   'palette-lut',

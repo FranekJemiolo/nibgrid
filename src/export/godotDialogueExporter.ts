@@ -1,0 +1,302 @@
+import { strToU8 } from 'fflate';
+import type { DialogueGraph, LocalizationTable } from '../narrative/dialogueSchemas';
+import type { VirtualSyncFile } from './godotPrefabAssembler';
+
+/**
+ * Escapes a single CSV field strictly per RFC 4180 (doubling internal `"` and quoting
+ * fields that contain `,`, `"`, `\n`, or `\r`, or when `forceQuote` is enabled).
+ */
+export function escapeCsvField(value: string, forceQuote = false): string {
+  const normalized = value.replace(/\r\n/g, '\n');
+  const needsQuote =
+    forceQuote ||
+    normalized.includes(',') ||
+    normalized.includes('"') ||
+    normalized.includes('\n') ||
+    normalized.includes('\r');
+  if (!needsQuote) {
+    return normalized;
+  }
+  return `"${normalized.replace(/"/g, '""')}"`;
+}
+
+/**
+ * Exports a Godot 4.3+ `TranslationServer` CSV (`res://localization/strings.csv`) with
+ * `keys,<locales...>` header and RFC 4180 UTF-8 quoting for commas, quotes, and newlines.
+ */
+export function exportGodotTranslationCsv(table: LocalizationTable): string {
+  const locales = table.locales;
+  const header = ['keys', ...locales.map((l) => escapeCsvField(l))].join(',');
+  const sortedKeys = Object.keys(table.strings).sort();
+  const rows: string[] = [header];
+
+  for (const key of sortedKeys) {
+    const entry = table.strings[key] ?? {};
+    const cells = [
+      escapeCsvField(key),
+      ...locales.map((locale) => escapeCsvField(entry[locale] ?? '', true)),
+    ];
+    rows.push(cells.join(','));
+  }
+
+  return `${rows.join('\n')}\n`;
+}
+
+/**
+ * Strict RFC 4180 state-machine CSV parser supporting quoted commas, `""` quotes, and
+ * embedded newlines, returning a normalized `LocalizationTable`.
+ */
+export function parseGodotTranslationCsv(csv: string): LocalizationTable {
+  const clean = csv.replace(/^\uFEFF/, '');
+  const records: string[][] = [];
+  let currentRow: string[] = [];
+  let currentField = '';
+  let inQuotes = false;
+
+  for (let i = 0; i < clean.length; i++) {
+    const ch = clean[i]!;
+    if (inQuotes) {
+      if (ch === '"') {
+        if (clean[i + 1] === '"') {
+          currentField += '"';
+          i += 1;
+        } else {
+          inQuotes = false;
+        }
+      } else {
+        currentField += ch;
+      }
+      continue;
+    }
+
+    if (ch === '"') {
+      inQuotes = true;
+    } else if (ch === ',') {
+      currentRow.push(currentField);
+      currentField = '';
+    } else if (ch === '\r') {
+      if (clean[i + 1] === '\n') {
+        i += 1;
+      }
+      currentRow.push(currentField);
+      records.push(currentRow);
+      currentRow = [];
+      currentField = '';
+    } else if (ch === '\n') {
+      currentRow.push(currentField);
+      records.push(currentRow);
+      currentRow = [];
+      currentField = '';
+    } else {
+      currentField += ch;
+    }
+  }
+
+  if (inQuotes || currentField.length > 0 || currentRow.length > 0) {
+    currentRow.push(currentField);
+    records.push(currentRow);
+  }
+
+  const nonEmptyRows = records.filter(
+    (row) => row.length > 1 || (row.length === 1 && (row[0] ?? '').trim().length > 0),
+  );
+  const header = nonEmptyRows[0] ?? ['keys', 'en'];
+  const rawLocales = header
+    .slice(1)
+    .map((l) => l.trim())
+    .filter(Boolean);
+  const locales = rawLocales.length > 0 ? rawLocales : ['en'];
+  const strings: Record<string, Record<string, string>> = {};
+
+  for (let r = 1; r < nonEmptyRows.length; r++) {
+    const row = nonEmptyRows[r]!;
+    const key = (row[0] ?? '').trim();
+    if (!key) continue;
+    const localized: Record<string, string> = {};
+    locales.forEach((locale, idx) => {
+      localized[locale] = row[idx + 1] ?? '';
+    });
+    strings[key] = localized;
+  }
+
+  return {
+    locales,
+    defaultLocale: locales[0] ?? 'en',
+    strings,
+  };
+}
+
+/**
+ * Exports deterministic snake_case runtime JSON for `DialogueRunner.gd` (`res://narrative/dialogue_graph.json`).
+ */
+export function exportDialogueGraphJson(graph: DialogueGraph): string {
+  const payload = {
+    id: graph.id,
+    entry_node_id: graph.entryNodeId,
+    nodes: graph.nodes.map((node) => ({
+      id: node.id,
+      speaker_id: node.speakerId,
+      portrait_emotion: node.portraitEmotion,
+      text_key: node.textKey,
+      next_node_id: node.nextNodeId ?? null,
+      ...(node.uiBoxPresetId ? { ui_box_preset_id: node.uiBoxPresetId } : {}),
+      choices: node.choices.map((choice) => ({
+        id: choice.id,
+        label_key: choice.labelKey,
+        next_node_id: choice.nextNodeId ?? null,
+        required_flags: [...choice.requiredFlags],
+        set_flags: [...choice.setFlags],
+      })),
+    })),
+  };
+  return `${JSON.stringify(payload, null, 2)}\n`;
+}
+
+/**
+ * Generates a typed Godot 4.3+ `DialogueRunner.gd` script resolving localized lines via `tr(...)`,
+ * filtering choices against M45 `WorldTransitionManager` flags, and emitting portrait emotion signals.
+ */
+export function exportDialogueRunnerGd(): string {
+  return [
+    'extends Node',
+    'class_name DialogueRunner',
+    '',
+    '## Auto-generated by Nibgrid Milestone 47',
+    'const DIALOGUE_GRAPH_PATH: String = "res://narrative/dialogue_graph.json"',
+    'const TRANSLATION_CSV_PATH: String = "res://localization/strings.csv"',
+    '',
+    'signal dialogue_started(graph_id: String)',
+    'signal line_presented(node_id: String, speaker_id: String, emotion: String, text: String, choices: Array)',
+    'signal portrait_emotion_changed(speaker_id: String, emotion: String)',
+    'signal dialogue_ended(graph_id: String)',
+    '',
+    'var world_transition_manager: Node = null',
+    'var flags: Dictionary = {}',
+    'var _graph: Dictionary = {}',
+    'var _nodes_by_id: Dictionary = {}',
+    'var _current_node_id: String = ""',
+    '',
+    'func load_graph(path: String = DIALOGUE_GRAPH_PATH) -> bool:',
+    '\tif not FileAccess.file_exists(path):',
+    '\t\treturn false',
+    '\tvar file := FileAccess.open(path, FileAccess.READ)',
+    '\tif file == null:',
+    '\t\treturn false',
+    '\tvar parsed: Variant = JSON.parse_string(file.get_as_text())',
+    '\tif typeof(parsed) != TYPE_DICTIONARY:',
+    '\t\treturn false',
+    '\t_graph = parsed as Dictionary',
+    '\t_nodes_by_id.clear()',
+    '\tfor raw_node in _graph.get("nodes", []):',
+    '\t\tif raw_node is Dictionary and raw_node.has("id"):',
+    '\t\t\t_nodes_by_id[String(raw_node["id"])] = raw_node',
+    '\treturn not _nodes_by_id.is_empty()',
+    '',
+    'func start_dialogue(entry_override: String = "") -> void:',
+    '\tif _nodes_by_id.is_empty():',
+    '\t\tload_graph()',
+    '\tvar start_id: String = entry_override if not entry_override.is_empty() else String(_graph.get("entry_node_id", ""))',
+    '\tif start_id.is_empty() or not _nodes_by_id.has(start_id):',
+    '\t\tdialogue_ended.emit(String(_graph.get("id", "")))',
+    '\t\treturn',
+    '\tdialogue_started.emit(String(_graph.get("id", "")))',
+    '\t_present_node(start_id)',
+    '',
+    'func _has_required_flags(required: Array) -> bool:',
+    '\tif required.is_empty():',
+    '\t\treturn true',
+    '\tif world_transition_manager != null and world_transition_manager.has_method("has_required_flags"):',
+    '\t\treturn bool(world_transition_manager.call("has_required_flags", PackedStringArray(required)))',
+    '\tfor raw_flag in required:',
+    '\t\tvar clean := String(raw_flag).strip_edges().to_lower()',
+    '\t\tif not flags.get(clean, false):',
+    '\t\t\treturn false',
+    '\treturn true',
+    '',
+    'func _grant_flags(granted: Array) -> void:',
+    '\tfor raw_flag in granted:',
+    '\t\tvar clean := String(raw_flag).strip_edges().to_lower()',
+    '\t\tif clean.is_empty():',
+    '\t\t\tcontinue',
+    '\t\tflags[clean] = true',
+    '\t\tif world_transition_manager != null and world_transition_manager.has_method("grant_flag"):',
+    '\t\t\tworld_transition_manager.call("grant_flag", clean)',
+    '',
+    'func _present_node(node_id: String) -> void:',
+    '\tif not _nodes_by_id.has(node_id):',
+    '\t\t_current_node_id = ""',
+    '\t\tdialogue_ended.emit(String(_graph.get("id", "")))',
+    '\t\treturn',
+    '\t_current_node_id = node_id',
+    '\tvar node: Dictionary = _nodes_by_id[node_id]',
+    '\tvar speaker_id := String(node.get("speaker_id", ""))',
+    '\tvar emotion := String(node.get("portrait_emotion", "neutral"))',
+    '\tvar localized_text := tr(String(node.get("text_key", "")))',
+    '\tvar available_choices: Array = []',
+    '\tfor raw_choice in node.get("choices", []):',
+    '\t\tif not (raw_choice is Dictionary):',
+    '\t\t\tcontinue',
+    '\t\tvar req: Array = raw_choice.get("required_flags", [])',
+    '\t\tif not _has_required_flags(req):',
+    '\t\t\tcontinue',
+    '\t\tavailable_choices.append({',
+    '\t\t\t"id": String(raw_choice.get("id", "")),',
+    '\t\t\t"label": tr(String(raw_choice.get("label_key", ""))),',
+    '\t\t\t"next_node_id": raw_choice.get("next_node_id", null),',
+    '\t\t\t"set_flags": raw_choice.get("set_flags", []),',
+    '\t\t})',
+    '\tportrait_emotion_changed.emit(speaker_id, emotion)',
+    '\tline_presented.emit(node_id, speaker_id, emotion, localized_text, available_choices)',
+    '',
+    'func advance_linear() -> void:',
+    '\tif _current_node_id.is_empty() or not _nodes_by_id.has(_current_node_id):',
+    '\t\treturn',
+    '\tvar node: Dictionary = _nodes_by_id[_current_node_id]',
+    '\tvar next_id: Variant = node.get("next_node_id", null)',
+    '\tif next_id == null or String(next_id).is_empty():',
+    '\t\t_current_node_id = ""',
+    '\t\tdialogue_ended.emit(String(_graph.get("id", "")))',
+    '\t\treturn',
+    '\t_present_node(String(next_id))',
+    '',
+    'func choose_option(choice_id: String) -> void:',
+    '\tif _current_node_id.is_empty() or not _nodes_by_id.has(_current_node_id):',
+    '\t\treturn',
+    '\tvar node: Dictionary = _nodes_by_id[_current_node_id]',
+    '\tfor raw_choice in node.get("choices", []):',
+    '\t\tif raw_choice is Dictionary and String(raw_choice.get("id", "")) == choice_id:',
+    '\t\t\t_grant_flags(raw_choice.get("set_flags", []))',
+    '\t\t\tvar next_id: Variant = raw_choice.get("next_node_id", null)',
+    '\t\t\tif next_id == null or String(next_id).is_empty():',
+    '\t\t\t\t_current_node_id = ""',
+    '\t\t\t\tdialogue_ended.emit(String(_graph.get("id", "")))',
+    '\t\t\telse:',
+    '\t\t\t\t_present_node(String(next_id))',
+    '\t\t\treturn',
+    '',
+  ].join('\n');
+}
+
+/**
+ * Assembles virtual files for M25 `res://` SHA-256 sync: `localization/strings.csv`,
+ * `narrative/dialogue_graph.json`, and `narrative/DialogueRunner.gd`.
+ */
+export function assembleGodotDialogueFiles(
+  graph: DialogueGraph,
+  table: LocalizationTable,
+): VirtualSyncFile[] {
+  return [
+    {
+      relativePath: 'localization/strings.csv',
+      content: strToU8(exportGodotTranslationCsv(table)),
+    },
+    {
+      relativePath: 'narrative/dialogue_graph.json',
+      content: strToU8(exportDialogueGraphJson(graph)),
+    },
+    {
+      relativePath: 'narrative/DialogueRunner.gd',
+      content: strToU8(exportDialogueRunnerGd()),
+    },
+  ];
+}

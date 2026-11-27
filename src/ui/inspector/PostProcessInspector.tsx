@@ -130,6 +130,7 @@ import { UiKitWorkshop } from './UiKitWorkshop';
 import { VfxBaker } from './VfxBaker';
 import { WorldMapPanel } from '../world/WorldMapPanel';
 import { DataFoundryPanel } from '../data/DataFoundryPanel';
+import { DialogueLocalizationPanel } from '../narrative/DialogueLocalizationPanel';
 import {
   ASSET_CLASS_OPTIONS,
   INSPECTOR_TAB_META,
@@ -2245,6 +2246,8 @@ export function PostProcessInspector({
           <WorldMapPanel />
         ) : inspectorTab === 'data-foundry' ? (
           <DataFoundryPanel />
+        ) : inspectorTab === 'dialogue-l10n' ? (
+          <DialogueLocalizationPanel />
         ) : inspectorTab === 'bmfont' && activeSpriteBuffer ? (
           <BitmapFontWorkshop
             sprite={activeSpriteBuffer}

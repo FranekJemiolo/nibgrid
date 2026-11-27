@@ -20,6 +20,7 @@ import { assembleGodotRoomFiles } from '../export/godotRoomExporter';
 import { assembleGodotUiKitFiles, bakeBitmapFontFromConfig } from '../export/godotThemeExporter';
 import { assembleGodotWorldFiles, exportRoomPortalNodes } from '../export/godotWorldExporter';
 import { assembleGodotGameDataFiles } from '../export/godotDataExporter';
+import { assembleGodotDialogueFiles } from '../export/godotDialogueExporter';
 import { toAssetSlug, triggerBlobDownload } from '../export/zipPackager';
 import { bakeNormalMapCpu } from '../processing/distanceField';
 import { decodePngBytesToRgba, encodeRgbaToPngBytes } from '../processing/png';
@@ -561,6 +562,16 @@ export async function collectProjectGodotSyncFiles(
   const gameData = await repo.getGameDataRegistry(project.id);
   if (gameData) {
     for (const file of assembleGodotGameDataFiles(gameData)) {
+      deduped.set(file.relativePath, file);
+    }
+  }
+
+  const narrativeBundle = await repo.getNarrativeBundle(project.id);
+  if (narrativeBundle) {
+    for (const file of assembleGodotDialogueFiles(
+      narrativeBundle.graph,
+      narrativeBundle.localization,
+    )) {
       deduped.set(file.relativePath, file);
     }
   }

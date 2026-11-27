@@ -52,6 +52,11 @@ import { SliceJobRecordSchema, type SliceJobRecord } from '../processing/sliceDa
 import { AgentCheckpointSchema, type AgentCheckpoint } from '../agent/stagingTransactions';
 import { WorldGraphSchema, type WorldGraph } from '../world/worldGraphCore';
 import { GameDataRegistrySchema, type GameDataRegistry } from '../data/gameDataSchemas';
+import {
+  createDefaultProjectNarrative,
+  ProjectNarrativeBundleSchema,
+  type ProjectNarrativeBundle,
+} from '../narrative/dialogueSchemas';
 
 export const OFFLINE_MOCK_PROVIDER_ID = 'offline-mock';
 export const ANTIGRAVITY_AGENT_PROVIDER_ID = 'antigravity-agent';
@@ -76,6 +81,7 @@ export class NibgridDatabase extends Dexie {
   agentCheckpoints!: Table<AgentCheckpoint, string>;
   worldGraphs!: Table<WorldGraph, string>;
   gameDataRegistries!: Table<GameDataRegistry, string>;
+  narrativeBundles!: Table<ProjectNarrativeBundle, string>;
 
   constructor(dbName = 'nibgrid-db') {
     super(dbName);
@@ -191,6 +197,23 @@ export class NibgridDatabase extends Dexie {
       agentCheckpoints: '&id, projectId, createdAt',
       worldGraphs: '&projectId, id, updatedAt',
       gameDataRegistries: '&projectId, updatedAt',
+    });
+    this.version(11).stores({
+      projects: 'id, updatedAt, name',
+      blobs: 'id, sha256, createdAt',
+      spriteNodes: 'id, projectId, parentId, [projectId+createdAt]',
+      providerConfigs: 'id, kind, updatedAt',
+      audioAssets: 'id, projectId, presetId, createdAt',
+      entities: '&id, projectId, slug',
+      syncTargets: '&projectId',
+      vaultItems: '&id, kind, name, createdAt',
+      qaReports: '&projectId, sheetHash',
+      rooms: '&id, projectId, slug',
+      sliceJobs: '&id, projectId, status, updatedAt',
+      agentCheckpoints: '&id, projectId, createdAt',
+      worldGraphs: '&projectId, id, updatedAt',
+      gameDataRegistries: '&projectId, updatedAt',
+      narrativeBundles: '&projectId, updatedAt',
     });
   }
 }
@@ -994,6 +1017,86 @@ export class NibgridRepository {
     return validated;
   }
 
+  async getNarrativeBundle(projectId: string): Promise<ProjectNarrativeBundle | undefined> {
+    const found = await this.database.narrativeBundles.get(projectId);
+    return found ? ProjectNarrativeBundleSchema.parse(found) : undefined;
+  }
+
+  async saveNarrativeBundle(bundle: ProjectNarrativeBundle): Promise<ProjectNarrativeBundle> {
+    const validated = ProjectNarrativeBundleSchema.parse({
+      ...bundle,
+      updatedAt: nowIso(),
+    });
+    await this.database.transaction(
+      'rw',
+      [this.database.narrativeBundles, this.database.projects],
+      async () => {
+        await this.database.narrativeBundles.put(validated);
+        await this.database.projects
+          .where('id')
+          .equals(validated.projectId)
+          .modify({ updatedAt: validated.updatedAt });
+      },
+    );
+    return validated;
+  }
+
+  async appendNarrativeFontGlyphs(
+    projectId: string,
+    missingChars: readonly string[],
+  ): Promise<ProjectNarrativeBundle> {
+    return this.database.transaction(
+      'rw',
+      [this.database.narrativeBundles, this.database.spriteNodes, this.database.projects],
+      async () => {
+        const existing = await this.database.narrativeBundles.get(projectId);
+        const base = existing
+          ? ProjectNarrativeBundleSchema.parse(existing)
+          : createDefaultProjectNarrative(projectId);
+        const existingSet = new Set(Array.from(base.fontCharset));
+        for (const ch of missingChars) {
+          for (const glyph of ch) {
+            existingSet.add(glyph);
+          }
+        }
+        const mergedCharset = Array.from(existingSet).join('');
+        const updatedBundle = ProjectNarrativeBundleSchema.parse({
+          ...base,
+          fontCharset: mergedCharset,
+          updatedAt: nowIso(),
+        });
+        await this.database.narrativeBundles.put(updatedBundle);
+
+        const nodes = await this.database.spriteNodes
+          .where('projectId')
+          .equals(projectId)
+          .toArray();
+        for (const rawNode of nodes) {
+          if (!rawNode.bitmapFont) continue;
+          const nodeCharsetSet = new Set(Array.from(rawNode.bitmapFont.customCharset));
+          for (const glyph of Array.from(mergedCharset)) {
+            nodeCharsetSet.add(glyph);
+          }
+          const updatedNode = SpriteNodeSchema.parse({
+            ...rawNode,
+            bitmapFont: {
+              ...rawNode.bitmapFont,
+              charsetPreset: 'custom',
+              customCharset: Array.from(nodeCharsetSet).join('').slice(0, 1024),
+            },
+          });
+          await this.database.spriteNodes.put(updatedNode);
+        }
+
+        await this.database.projects
+          .where('id')
+          .equals(projectId)
+          .modify({ updatedAt: updatedBundle.updatedAt });
+        return updatedBundle;
+      },
+    );
+  }
+
   async deleteVaultItem(id: string): Promise<void> {
     await this.database.transaction('rw', this.blobGcTables, async () => {
       const found = await this.database.vaultItems.get(id);
@@ -1188,6 +1291,7 @@ export class NibgridRepository {
         this.database.syncTargets,
         this.database.qaReports,
         this.database.gameDataRegistries,
+        this.database.narrativeBundles,
       ],
       async () => {
         await this.database.spriteNodes.where('projectId').equals(projectId).delete();
@@ -1198,6 +1302,7 @@ export class NibgridRepository {
         await this.database.agentCheckpoints.where('projectId').equals(projectId).delete();
         await this.database.worldGraphs.delete(projectId);
         await this.database.gameDataRegistries.delete(projectId);
+        await this.database.narrativeBundles.delete(projectId);
         await this.database.syncTargets.delete(projectId);
         await this.database.qaReports.delete(projectId);
         await this.database.projects.delete(projectId);

@@ -201,6 +201,14 @@ export function CommandPalette({ open, onOpenChange }: CommandPaletteProps) {
           execute: () => navigate({ screen: 'data', projectId: projId }),
         },
         {
+          id: 'act-dialogue-l10n',
+          title: 'Open Dialogue & Localization Studio',
+          subtitle: 'Author branching dialogue, audit M24 glyphs & M33 overflow, sync strings.csv',
+          category: 'action',
+          keywords: ['dialogue', 'l10n', 'localization', 'translation', 'csv', 'bmfont', 'm47'],
+          execute: () => navigate({ screen: 'dialogue', projectId: projId }),
+        },
+        {
           id: 'act-bmfont',
           title: 'Open Bitmap Font & Damage Numeral Exporter',
           subtitle: 'Art Bible pixel numerals, OKLab Sel-Out, AngelCode .fnt/.xml & crit preview',
