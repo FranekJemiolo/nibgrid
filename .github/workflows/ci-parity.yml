@@ -1,0 +1,66 @@
+name: CI Parity
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  parity-gate:
+    name: PWA + Extension + Desktop Dry-Run Parity Gate
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'npm'
+          cache-dependency-path: package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Format check
+        run: npm run format:check
+
+      - name: Version & PWA-Desktop Parity check
+        run: npm run verify:parity
+
+      - name: Unit tests
+        run: npm run test:unit
+
+      - name: Build VS Code Extension & MCP server
+        run: npm run build:ext
+
+      - name: Build Desktop-mode Web UI (relative base path) & stage dry-run bundle
+        run: |
+          VITE_BASE_PATH=./ npm run build
+          node --experimental-strip-types desktop/scripts/build-desktop.ts --dry-run --stage-dir desktop/stage --vsix
+          node --experimental-strip-types desktop/scripts/verify-release-artifacts.ts --stage-dir desktop/stage --require-web-ui --require-ext --vsix desktop/stage/nibgrid-studio-*.vsix
+          rm -rf desktop/stage
+
+      - name: Smoke check desktop manifest recipe
+        run: npm run smoke:desktop
+
+      - name: Build GitHub Pages PWA bundle
+        run: npm run build
+        env:
+          VITE_BASE_PATH: /nibgrid/
+
+      - name: Install Playwright Chromium & run E2E parity suite
+        run: |
+          npx playwright install --with-deps chromium
+          npm run test:e2e

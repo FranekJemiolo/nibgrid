@@ -702,3 +702,18 @@
 
 - **MCP Server, `vscode.lm` Adapter & Bundler (`packages/vscode-extension/src/mcpToolServer.ts`, `packages/vscode-extension/vite.config.ts`, `packages/vscode-extension/scripts/verify-extension-bundle.ts`, `package.json`, `.gitignore`):** Added lowercase JSON Schema export, Zod argument validation, `sync_godot_diff` confirmation gating, duplex `Content-Length`/`NDJSON` stdio framing (`startMcpStdioServer()`), `registerNibgridLanguageModelTools()`, and `npm run build:ext` bundling & offline smoke validation.
 - **Verification (`packages/vscode-extension/test/m39c-mcp-tools.test.ts`, `tests/e2e/m39c-host-e2e.spec.ts`):** Verified duplex MCP streams, malformed JSON `-32700` recovery, secret scrubbing (`AIzaSyMCP39SECRET`, `sk-mcp-leak-999`, `AIzaSyERR39LEAK`), `vscode.lm` tool invocation, and Playwright E2E persistence + zero orphan blobs across both `BrowserHostAdapter` and mocked `acquireVsCodeApi()` `VscodeHostAdapter` RPC bridges.
+
+## Milestone 41A: Automated PWA ↔ Desktop Parity Contract & Version Lock
+
+- **Parity Verifier (`scripts/verify-parity.ts`, `package.json`, `tsconfig.json`, `eslint.config.js`, `docs/RELEASING.md`):** Implemented `evaluateParityReport()` and `runRepoParityCheck()` wired to `npm run verify:parity` enforcing version sync across all 4 manifests, disabled desktop telemetry, bundled extension presence, all 17 Screen 4A–4P tabs, all 9 MCP/`vscode.lm` tools, and `AssetRecipe` schema locking.
+- **Verification (`tests/unit/m41a-parity-contract.test.ts`):** Verified exact alignment across live repo TypeScript constants and immediate failure reporting on `desktop/product.json` version drift, omitted M38 tools (`repalette_sprites`), missing tabs, or re-enabled telemetry.
+
+## Milestone 41B: Local First-Run Configurability, Portable Settings & Release Artifact Verifier
+
+- **First-Run Config & Settings UI (`packages/vscode-extension/src/firstRunConfig.ts`, `src/ui/settings/ModelProvidersPanel.tsx`):** Implemented Zod-validated `LocalStudioConfigSchema`, deep credential stripping (`stripSecretFieldsDeep()`), and `Export JSON` / `Import JSON` UI controls alongside shell-safe Godot 4 binary and `res://` subdirectory inputs.
+- **Desktop Staging & Artifact Gates (`desktop/scripts/build-desktop.ts`, `desktop/scripts/verify-release-artifacts.ts`, `tests/unit/m41b-first-run-config.test.ts`, `tests/e2e/m41b-desktop-parity-e2e.spec.ts`):** Added `--dry-run` / `--vsix` packaging, binary/ZIP/secret/localhost artifact verification, and dual Playwright E2E testing proving strict inspector-tab, Autopilot, Composer, local-config, and zero-orphan-blob parity between Browser PWA and VS Code Desktop Webview modes.
+
+## Milestone 41C: Checksums, Lockstep CI/CD Workflows (`ci-parity.yml`, `release.yml`) & Release Runbook
+
+- **Checksums & Workflows (`scripts/generate-checksums.ts`, `.github/workflows/ci-parity.yml`, `.github/workflows/release.yml`, `docs/RELEASING.md`):** Added deterministic `SHA256SUMS.txt` generator, PR/`main` parity workflow, and tag/`workflow_dispatch` (`dry_run` toggle) multi-OS release pipeline packaging `macos-arm64`, `win-x64`, `linux-x64`, `.vsix`, and GitHub Pages PWA in lockstep.
+- **Verification (`tests/unit/m41c-checksums.test.ts`):** Verified SHA-256 sorting & self-exclusion, YAML workflow syntax, local dry-run bundle + `.vsix` artifact verification, and full TypeScript/ESLint/Prettier/Vitest/Playwright/Pages build gates.

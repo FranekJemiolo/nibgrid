@@ -1,0 +1,221 @@
+name: Release Nibgrid (Desktop + Extension + PWA)
+
+on:
+  push:
+    tags:
+      - 'v*.*.*'
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: 'Run full release pipeline without publishing GitHub Release or deploying Pages'
+        required: true
+        default: true
+        type: boolean
+
+jobs:
+  preflight-parity:
+    name: Preflight Parity, Tests, PWA & .vsix Build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    outputs:
+      version: ${{ steps.meta.outputs.version }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'npm'
+          cache-dependency-path: package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Typecheck, Lint, Format & Parity
+        run: |
+          npm run typecheck
+          npm run lint
+          npm run format:check
+          npm run verify:parity
+
+      - name: Read synchronized version
+        id: meta
+        run: echo "version=$(node -p 'require("./package.json").version')" >> "$GITHUB_OUTPUT"
+
+      - name: Run Unit tests & Build Extension
+        run: |
+          npm run test:unit
+          npm run build:ext
+
+      - name: Install Playwright Chromium & run E2E tests
+        run: |
+          npx playwright install --with-deps chromium
+          npm run test:e2e
+
+      - name: Build GitHub Pages PWA dist
+        run: npm run build
+        env:
+          VITE_BASE_PATH: /nibgrid/
+
+      - name: Package .vsix extension archive
+        run: node --experimental-strip-types desktop/scripts/build-desktop.ts --vsix-only --stage-dir desktop/vsix-stage
+
+      - name: Upload PWA dist artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: pwa-dist
+          path: dist
+
+      - name: Upload .vsix extension artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: nibgrid-vsix
+          path: desktop/vsix-stage/*.vsix
+
+  build-desktop:
+    name: Build Desktop Bundle (${{ matrix.label }})
+    needs: preflight-parity
+    permissions:
+      contents: read
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: macos-14
+            label: macos-arm64
+            archive_ext: tar.gz
+          - os: windows-latest
+            label: win-x64
+            archive_ext: zip
+          - os: ubuntu-latest
+            label: linux-x64
+            archive_ext: tar.gz
+    runs-on: ${{ matrix.os }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'npm'
+          cache-dependency-path: package-lock.json
+
+      - name: Cache desktop staging artifacts
+        uses: actions/cache@v4
+        with:
+          path: |
+            packages/vscode-extension/dist
+            desktop/cache
+          key: nibgrid-desktop-${{ matrix.label }}-${{ hashFiles('package-lock.json', 'packages/vscode-extension/package.json') }}
+          restore-keys: |
+            nibgrid-desktop-${{ matrix.label }}-
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build Desktop Web UI, Extension & Stage Bundle
+        shell: bash
+        run: |
+          VITE_BASE_PATH=./ npm run build
+          npm run build:ext
+          node --experimental-strip-types desktop/scripts/build-desktop.ts --dry-run --stage-dir desktop/stage --vsix
+          node --experimental-strip-types desktop/scripts/verify-release-artifacts.ts --stage-dir desktop/stage --expected-version "${{ needs.preflight-parity.outputs.version }}" --require-web-ui --require-ext --vsix "desktop/stage/nibgrid-studio-${{ needs.preflight-parity.outputs.version }}.vsix"
+
+      - name: Package Archive (Unix tar.gz)
+        if: matrix.archive_ext == 'tar.gz'
+        shell: bash
+        run: |
+          mkdir -p release-out
+          tar -czf "release-out/Nibgrid-Studio-${{ needs.preflight-parity.outputs.version }}-${{ matrix.label }}.tar.gz" -C desktop/stage .
+
+      - name: Package Archive (Windows zip)
+        if: matrix.archive_ext == 'zip'
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force -Path release-out | Out-Null
+          Compress-Archive -Path desktop/stage/* -DestinationPath "release-out/Nibgrid-Studio-${{ needs.preflight-parity.outputs.version }}-${{ matrix.label }}.zip" -Force
+
+      - name: Upload Desktop Release Archive
+        uses: actions/upload-artifact@v4
+        with:
+          name: nibgrid-desktop-${{ matrix.label }}
+          path: release-out/*
+
+  publish-release:
+    name: Generate Checksums & Publish GitHub Release
+    needs: [preflight-parity, build-desktop]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'npm'
+          cache-dependency-path: package-lock.json
+
+      - name: Download release artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: downloaded-artifacts
+
+      - name: Flatten release assets & generate SHA256SUMS.txt
+        run: |
+          mkdir -p release-assets
+          find downloaded-artifacts -type f \( -name '*.tar.gz' -o -name '*.zip' -o -name '*.vsix' \) -exec cp {} release-assets/ \;
+          node --experimental-strip-types scripts/generate-checksums.ts --dir release-assets --out release-assets/SHA256SUMS.txt
+          cat release-assets/SHA256SUMS.txt
+
+      - name: Upload Checksums & Packaged Assets
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-assets-with-checksums
+          path: release-assets
+
+      - name: Publish GitHub Release
+        if: ${{ github.event_name == 'push' || !inputs.dry_run }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          TAG_NAME="${GITHUB_REF_NAME}"
+          gh release create "${TAG_NAME}" release-assets/* \
+            --title "Nibgrid Studio ${TAG_NAME}" \
+            --generate-notes \
+            --notes $'Local-first 2D Game Asset Studio + Godot 4 Sync + Google Antigravity / Ollama / LiteRT ModelRouter.\n\nVerify downloads:\n`sha256sum -c SHA256SUMS.txt` (Linux) or `shasum -a 256 -c SHA256SUMS.txt` (macOS).'
+
+  deploy-pages:
+    name: Deploy Synchronized GitHub Pages PWA
+    needs: [preflight-parity]
+    if: ${{ github.event_name == 'push' || !inputs.dry_run }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Download verified PWA dist
+        uses: actions/download-artifact@v4
+        with:
+          name: pwa-dist
+          path: ./dist
+
+      - name: Upload Pages artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: ./dist
+
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4

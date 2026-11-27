@@ -3,10 +3,12 @@ import {
   Activity,
   CheckCircle2,
   Cpu,
+  Download,
   Link2,
   PlugZap,
   RefreshCw,
   ShieldCheck,
+  Upload,
   X,
 } from 'lucide-react';
 import {
@@ -20,10 +22,17 @@ import {
   type ProviderHealthStatus,
   type TaskRoutingTable,
 } from '../../../packages/model-router/src/routerCore';
+import {
+  createDefaultLocalStudioConfig,
+  exportPortableSettingsJson,
+  importPortableSettingsJson,
+  type LocalStudioConfig,
+} from '../../../packages/vscode-extension/src/firstRunConfig';
 import { getActiveHostAdapter } from '../../platform/browserHostAdapter';
 import { useAppStore } from '../../store/useAppStore';
 
 const ROUTING_STORAGE_KEY = 'nibgrid.modelRouter.v1';
+const LOCAL_CONFIG_STORAGE_KEY = 'nibgrid.localConfig.v1';
 
 const TASK_LABELS: Record<ModelTaskKind, { readonly title: string; readonly subtitle: string }> = {
   'planning-composer': {
@@ -57,11 +66,30 @@ function loadPersistedRoutingTable(): TaskRoutingTable {
   }
 }
 
+function loadPersistedLocalConfig(): LocalStudioConfig {
+  if (typeof window === 'undefined') return createDefaultLocalStudioConfig();
+  try {
+    const raw = window.localStorage.getItem(LOCAL_CONFIG_STORAGE_KEY);
+    if (!raw) return createDefaultLocalStudioConfig();
+    return importPortableSettingsJson(raw);
+  } catch {
+    return createDefaultLocalStudioConfig();
+  }
+}
+
 export function ModelProvidersPanel() {
   const { modelSettingsOpen, setModelSettingsOpen, providers, activeProject } = useAppStore();
 
   const [profiles] = useState<ModelProviderProfile[]>(() => createDefaultModelProfiles());
   const [routingTable, setRoutingTable] = useState<TaskRoutingTable>(loadPersistedRoutingTable);
+  const [localConfig, setLocalConfig] = useState<LocalStudioConfig>(loadPersistedLocalConfig);
+  const [portableSettingsDraft, setPortableSettingsDraft] = useState<string>(() =>
+    exportPortableSettingsJson({
+      ...loadPersistedLocalConfig(),
+      taskRoutingTable: loadPersistedRoutingTable(),
+    }),
+  );
+  const [portableStatus, setPortableStatus] = useState<string | null>(null);
   const [availability, setAvailability] = useState<Record<string, boolean>>({});
   const [healthMap, setHealthMap] = useState<Record<string, ProviderHealthStatus>>({});
   const [linkStatus, setLinkStatus] = useState<string | null>(null);
@@ -75,6 +103,16 @@ export function ModelProvidersPanel() {
       // Ignore storage quota restrictions
     }
   }, [routingTable]);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    try {
+      const merged = { ...localConfig, taskRoutingTable: routingTable };
+      window.localStorage.setItem(LOCAL_CONFIG_STORAGE_KEY, exportPortableSettingsJson(merged));
+    } catch {
+      // Ignore invalid draft or storage quota restrictions
+    }
+  }, [localConfig, routingTable]);
 
   // Reflect configured cloud/bridge entries in availability without emitting noisy HTTP errors
   const effectiveAvailability = useMemo<Record<string, boolean>>(() => {
@@ -342,6 +380,118 @@ export function ModelProvidersPanel() {
                 );
               })}
             </div>
+          </div>
+
+          {/* 4. Local Godot 4 & Portable Settings (M41B) */}
+          <div
+            data-testid="local-config-card"
+            className="space-y-3 rounded-lg border border-[#2A2A2E] bg-[#121216] p-4"
+          >
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <div>
+                <h3 className="text-xs font-semibold uppercase tracking-wider text-zinc-300">
+                  Local Godot 4 &amp; Portable Settings (`nibgrid.settings.json`)
+                </h3>
+                <p className="text-[11px] text-zinc-400">
+                  100% offline-usable with secret fields automatically stripped on export/import.
+                </p>
+              </div>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  data-testid="export-portable-settings-btn"
+                  onClick={() => {
+                    try {
+                      const json = exportPortableSettingsJson({
+                        ...localConfig,
+                        taskRoutingTable: routingTable,
+                      });
+                      setPortableSettingsDraft(json);
+                      setPortableStatus(
+                        'Exported clean nibgrid.settings.json (zero secrets included).',
+                      );
+                    } catch (err) {
+                      setPortableStatus(
+                        err instanceof Error ? err.message : 'Failed to export local settings.',
+                      );
+                    }
+                  }}
+                  className="inline-flex items-center gap-1 rounded border border-[#2E2E35] bg-[#1B1B20] px-2.5 py-1 text-[11px] font-medium text-zinc-200 hover:border-zinc-500"
+                >
+                  <Download className="h-3 w-3 text-sky-400" />
+                  Export JSON
+                </button>
+                <button
+                  type="button"
+                  data-testid="import-portable-settings-btn"
+                  onClick={() => {
+                    try {
+                      const imported = importPortableSettingsJson(portableSettingsDraft);
+                      setLocalConfig(imported);
+                      setRoutingTable(imported.taskRoutingTable);
+                      setPortableSettingsDraft(exportPortableSettingsJson(imported));
+                      setPortableStatus(
+                        'Imported nibgrid.settings.json (local routing + Godot path updated).',
+                      );
+                    } catch (err) {
+                      setPortableStatus(
+                        err instanceof Error ? err.message : 'Invalid nibgrid.settings.json input.',
+                      );
+                    }
+                  }}
+                  className="inline-flex items-center gap-1 rounded bg-emerald-600/90 px-2.5 py-1 text-[11px] font-semibold text-white hover:bg-emerald-500"
+                >
+                  <Upload className="h-3 w-3" />
+                  Import JSON
+                </button>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+              <label className="space-y-1 text-[11px] text-zinc-300">
+                <span className="block font-medium text-zinc-400">Godot 4 Executable Path</span>
+                <input
+                  type="text"
+                  data-testid="godot-binary-input"
+                  value={localConfig.godotBinaryPath}
+                  onChange={(e) =>
+                    setLocalConfig((prev) => ({ ...prev, godotBinaryPath: e.target.value }))
+                  }
+                  placeholder="godot"
+                  className="w-full rounded border border-[#2E2E35] bg-[#18181E] px-2.5 py-1.5 font-mono text-xs text-zinc-100"
+                />
+              </label>
+              <label className="space-y-1 text-[11px] text-zinc-300">
+                <span className="block font-medium text-zinc-400">Default Godot res:// Subdir</span>
+                <input
+                  type="text"
+                  data-testid="res-subdir-input"
+                  value={localConfig.defaultResSyncSubdir}
+                  onChange={(e) =>
+                    setLocalConfig((prev) => ({ ...prev, defaultResSyncSubdir: e.target.value }))
+                  }
+                  placeholder="assets/nibgrid"
+                  className="w-full rounded border border-[#2E2E35] bg-[#18181E] px-2.5 py-1.5 font-mono text-xs text-zinc-100"
+                />
+              </label>
+            </div>
+
+            <textarea
+              data-testid="portable-settings-textarea"
+              rows={5}
+              value={portableSettingsDraft}
+              onChange={(e) => setPortableSettingsDraft(e.target.value)}
+              spellCheck={false}
+              className="w-full rounded border border-[#2E2E35] bg-[#0D0D11] p-2.5 font-mono text-[10px] text-zinc-300"
+            />
+            {portableStatus && (
+              <p
+                data-testid="portable-settings-status"
+                className="rounded border border-emerald-500/35 bg-emerald-950/30 px-2.5 py-1 text-[11px] text-emerald-200"
+              >
+                {portableStatus}
+              </p>
+            )}
           </div>
         </div>
       </div>
