@@ -15,7 +15,7 @@
     "typecheck": "tsc --noEmit",
     "verify:parity": "node --experimental-strip-types scripts/verify-parity.ts",
     "test:unit": "vitest run",
-    "build:ext": "vite build --config packages/vscode-extension/vite.config.ts && node --experimental-strip-types packages/vscode-extension/scripts/verify-extension-bundle.ts",
+    "build:ext": "vite build --config packages/vscode-extension/vite.config.ts && node packages/vscode-extension/scripts/build-vscode-entry.mjs && node --experimental-strip-types packages/vscode-extension/scripts/verify-extension-bundle.ts",
     "smoke:desktop": "node --experimental-strip-types desktop/scripts/smoke-desktop-bundle.ts",
     "smoke:release": "node scripts/smoke-release.mjs",
     "test:e2e": "playwright test"

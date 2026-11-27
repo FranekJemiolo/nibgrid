@@ -5,14 +5,14 @@
   "version": "0.1.0",
   "publisher": "franekjemiolo",
   "engines": {
-    "vscode": "^1.93.0"
+    "vscode": "^1.82.0"
   },
   "categories": [
     "Other",
     "AI",
     "Visualization"
   ],
-  "main": "./dist/extension.js",
+  "main": "./dist/vscodeMain.cjs",
   "activationEvents": [
     "onStartupFinished",
     "onCustomEditor:nibgrid.spriteRecipe",
@@ -114,39 +114,48 @@
     "languageModelTools": [
       {
         "name": "nibgrid_inpaint_sprite_region",
-        "displayName": "Inpaint Sprite Region"
+        "displayName": "Inpaint Sprite Region",
+        "modelDescription": "Inpaint a masked pixel region of an existing Nibgrid sprite asset."
       },
       {
         "name": "nibgrid_repalette_sprites",
-        "displayName": "Repalette Sprites (OKLab)"
+        "displayName": "Repalette Sprites (OKLab)",
+        "modelDescription": "Quantize and snap sprite colors to the active Art Bible palette in OKLab space."
       },
       {
         "name": "nibgrid_update_gdshader_uniforms",
-        "displayName": "Update Godot 4 Shader"
+        "displayName": "Update Godot 4 Shader",
+        "modelDescription": "Update uniform values on a Godot 4 .gdshader preset for a Nibgrid sprite."
       },
       {
         "name": "nibgrid_add_or_move_socket",
-        "displayName": "Add/Move Marker2D Socket"
+        "displayName": "Add/Move Marker2D Socket",
+        "modelDescription": "Create or reposition a Godot Marker2D attachment socket on an entity sprite."
       },
       {
         "name": "nibgrid_recompute_colliders",
-        "displayName": "Recompute 2D Collision Hull"
+        "displayName": "Recompute 2D Collision Hull",
+        "modelDescription": "Recompute simplified 2D convex hull colliders, hurtboxes, or hitboxes from sprite alpha."
       },
       {
         "name": "nibgrid_generate_sfx_cue",
-        "displayName": "Generate Procedural SFX WAV"
+        "displayName": "Generate Procedural SFX WAV",
+        "modelDescription": "Synthesize a deterministic procedural WAV sound effect cue for an entity action."
       },
       {
         "name": "nibgrid_patch_room_layout",
-        "displayName": "Patch TileMapLayer Room"
+        "displayName": "Patch TileMapLayer Room",
+        "modelDescription": "Place tiles, entities, or spawn markers inside an M35 TileMapLayer room blueprint."
       },
       {
         "name": "nibgrid_sync_godot_diff",
-        "displayName": "Sync Diff to Godot res://"
+        "displayName": "Sync Diff to Godot res://",
+        "modelDescription": "Compute SHA-256 diff and synchronize updated Nibgrid assets into Godot res://."
       },
       {
         "name": "nibgrid_run_vertical_slice",
-        "displayName": "Run Vertical Slice Autopilot"
+        "displayName": "Run Vertical Slice Autopilot",
+        "modelDescription": "Run the single-prompt Nibgrid Vertical Slice Autopilot DAG to assemble res://main.tscn."
       }
     ]
   }

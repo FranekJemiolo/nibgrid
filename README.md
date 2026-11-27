@@ -6,17 +6,27 @@ Local-first, zero-server Bring-Your-Own-Key / Bring-Your-Own-Model (BYOK/BYOM) P
 
 ## Screenshots
 
-### GitHub Pages PWA
+### GitHub Pages PWA (`https://franekjemiolo.github.io/nibgrid/`)
 
-Dialogue & Localization Studio with the live M24 missing-glyph and M33 text-overflow audits:
+Dialogue & Localization Studio with live M24 glyph-coverage and M33 text-overflow audits:
 
 ![Nibgrid PWA — Dialogue & Localization Studio](docs/screenshots/pwa-dialogue-l10n.png)
 
-Project hub:
+Project Hub:
 
 ![Nibgrid PWA — Project Hub](docs/screenshots/pwa-project-hub.png)
 
-_Regenerate with `npm run build && npx vite preview --port 4173` and `node scripts/capture-readme-screenshots.mjs` (`SHOT_URL` selects the target)._
+### VS Code Extension (`Nibgrid Studio` Webview)
+
+Nibgrid Studio running directly inside Visual Studio Code (`packages/vscode-extension`) with the `Dialogue & Localization Studio`:
+
+![Nibgrid VS Code Extension — Dialogue & Localization Studio](docs/screenshots/vscode-dialogue-l10n.png)
+
+Nibgrid Studio Project Hub inside Visual Studio Code:
+
+![Nibgrid VS Code Extension — Project Hub](docs/screenshots/vscode-project-hub.png)
+
+_Regenerate PWA screenshots against GitHub Pages (`SHOT_URL=https://franekjemiolo.github.io/nibgrid/ node scripts/capture-readme-screenshots.mjs`) or a local preview (`npm run build && npx vite preview --port 4173`), and regenerate VS Code screenshots against local Visual Studio Code (`npm run build:ext && node scripts/capture-vscode-screenshot.mjs`)._
 
 ---
 

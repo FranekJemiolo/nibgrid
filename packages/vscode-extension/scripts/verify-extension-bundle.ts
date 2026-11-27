@@ -47,7 +47,7 @@ export async function verifyExtensionBundle(
     throw new Error(`Expected >= 9 languageModelTools, found ${lmTools.length}.`);
   }
 
-  const bundleFiles = ['dist/extension.js', 'dist/mcpToolServer.js'];
+  const bundleFiles = ['dist/extension.js', 'dist/mcpToolServer.js', 'dist/vscodeMain.cjs'];
   for (const rel of bundleFiles) {
     const abs = join(extRoot, rel);
     const info = await stat(abs);
