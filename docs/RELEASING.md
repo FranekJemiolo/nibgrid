@@ -1,135 +1,139 @@
-# Releasing Nibgrid (PWA, VS Code Extension & Nibgrid Studio Desktop)
+# Releasing Nibgrid (PWA + Standalone Desktop Studio + VS Code Extension)
 
-Nibgrid ships three synchronized surfaces from the same TypeScript core and React Web UI:
-
-1. **GitHub Pages PWA** (`https://franekjemiolo.github.io/nibgrid/`, built with `VITE_BASE_PATH=/nibgrid/`)
-2. **VS Code / Cursor / Google Antigravity IDE Extension** (`packages/vscode-extension`, `.vsix`)
-3. **Standalone Nibgrid Studio Desktop App** (`desktop/`, telemetry-free VSCodium-style workbench packaging the PWA + Extension)
+Nibgrid ships the **GitHub Pages PWA**, the **VS Code / Cursor / Antigravity `.vsix` extension**, and the **Standalone Nibgrid Studio Desktop App** (macOS, Windows, Linux) in lockstep from a single SemVer tag (`vX.Y.Z`).
 
 ---
 
-## 1. Version Synchronization & Parity Contract
+## 1. Version Bump (Strict Lockstep)
 
-All four manifests MUST stay on the exact same SemVer version:
+Update the version string identically across all four manifests before tagging. Any mismatch will fail `npm run verify:parity` and block CI:
 
-- `package.json` (`version`)
-- `packages/vscode-extension/package.json` (`version`)
-- `packages/model-router/package.json` (`version`)
-- `desktop/product.json` (`version`)
+1. `package.json` (`"version": "X.Y.Z"`)
+2. `packages/vscode-extension/package.json` (`"version": "X.Y.Z"`)
+3. `packages/model-router/package.json` (`"version": "X.Y.Z"`)
+4. `desktop/product.json` (`"version": "X.Y.Z"`)
 
-Before cutting any release or opening a release PR, run:
+Update `JOURNAL.md` with the release summary, then commit the bump:
 
 ```bash
-npm run verify:parity
+git add package.json packages/vscode-extension/package.json packages/model-router/package.json desktop/product.json JOURNAL.md
+git commit -m "chore(release): bump version to vX.Y.Z"
 ```
 
-`scripts/verify-parity.ts` blocks on any version drift, telemetry regression, missing bundled extension ID, missing Screen 4A–4P tab in `src/ui/inspector/workspaceTabs.ts`, or unregistered M37/M38 tool in `mcpToolServer.ts`.
-
 ---
 
-## 2. Local First-Run Settings (`nibgrid.settings.json`)
+## 2. Local Preflight & Parity Gate
 
-Nibgrid Studio works 100% locally on launch with zero required cloud login. Inside **Models & Providers**, users can configure:
-
-- **Per-Task Routing:** Google Antigravity ACP/MCP, on-device LiteRT, local Ollama/LM Studio, local ComfyUI (`127.0.0.1:8188`), Cloud BYOK (stored solely in OS Keychain `SecretStorage`), or `$0.00` Offline Mock Mode.
-- **Godot 4 Execution & Sync:** Custom Godot binary path (validated without shell concatenation) and default `res://` output directory.
-- **Portable Export/Import:** `Export JSON` / `Import JSON` emits `nibgrid.settings.json` with all API keys and tokens automatically stripped.
-
----
-
-## 3. Staging & Verifying the Desktop Bundle + `.vsix` Locally
+Run the full local gate before pushing a release tag:
 
 ```bash
+# Typecheck, lint, formatting, and PWA <-> Desktop parity
+npm run typecheck
+npm run lint
+npm run format:check
+npm run verify:parity
+
+# Unit, E2E, Python loopback bridge, and CLI installer syntax
+npm run test:unit
+npm run test:e2e
+uv run python -m unittest discover -s tests/python -v
+python3 -m unittest tests/unit/test_nibgrid_bridge.py -v
+sh -n public/install.sh
+
+# Desktop bundle staging, extension bundle, and production PWA build
 VITE_BASE_PATH=./ npm run build
 npm run build:ext
+npm run smoke:desktop
 node --experimental-strip-types desktop/scripts/build-desktop.ts --dry-run --stage-dir desktop/stage --vsix
-node --experimental-strip-types desktop/scripts/verify-release-artifacts.ts --stage-dir desktop/stage --require-web-ui --require-ext --vsix desktop/stage/nibgrid-studio-0.1.0.vsix
-```
+node --experimental-strip-types desktop/scripts/verify-release-artifacts.ts --stage-dir desktop/stage --require-web-ui --require-ext --vsix desktop/stage/nibgrid-studio-X.Y.Z.vsix
+rm -rf desktop/stage
 
----
-
-## 4. Dry-Run & Tag-Triggered GitHub Releases (`.github/workflows/release.yml`)
-
-- **Pull Requests & `main` CI Parity (`.github/workflows/ci-parity.yml`):** Automatically runs `verify:parity`, typecheck, lint, Prettier check, Vitest unit tests, VS Code extension build (`build:ext`), desktop `--dry-run` artifact verification, Playwright PWA + Desktop Webview E2E tests, and the GitHub Pages build (`VITE_BASE_PATH=/nibgrid/`).
-- **Manual Dry-Run (`workflow_dispatch` with `dry_run: true`):** Exercises `preflight-parity`, all 3 OS matrix builds (`macos-14` arm64, `windows-latest` x64, `ubuntu-latest` x64), `.vsix` packaging, and `SHA256SUMS.txt` generation (`scripts/generate-checksums.ts`) without creating a public GitHub Release or overwriting Pages.
-- **Production Tag Release:**
-
-```bash
-# 1. Align versions cleanly in package.json, packages/vscode-extension/package.json,
-#    packages/model-router/package.json, and desktop/product.json
-npm run verify:parity
-
-# 2. Commit version bump, tag vX.Y.Z, and push
-git tag v0.1.0
-git push origin main v0.1.0
-```
-
-After downloading release artifacts, verify cryptographic integrity:
-
-```bash
-# macOS
-shasum -a 256 -c SHA256SUMS.txt
-
-# Linux
-sha256sum -c SHA256SUMS.txt
-```
-
----
-
-## 5. Desktop Distribution & Client Lookup Contract (`src/platform/desktopInstaller.ts`)
-
-Every GitHub Release attaches platform binaries matching:
-
-- `Nibgrid-Studio-<version>-macos-arm64.dmg`
-- `Nibgrid-Studio-<version>-macos-x64.dmg`
-- `Nibgrid-Studio-<version>-win-x64-setup.exe`
-- `Nibgrid-Studio-<version>-linux-x64.AppImage`
-
-One-line CLI installers are hosted on GitHub Pages at `https://franekjemiolo.github.io/nibgrid/` and automatically verify `SHA256SUMS.txt` before installing:
-
-```bash
-# macOS (Apple Silicon / Intel) & Linux (x64 AppImage)
-curl -fsSL https://franekjemiolo.github.io/nibgrid/install.sh | sh
-```
-
-```powershell
-# Windows (x64)
-irm https://franekjemiolo.github.io/nibgrid/install.ps1 | iex
-```
-
-Browser PWA users can also click **Get Desktop App** in the top navigation bar (or **Get Nibgrid Studio Desktop** in `Cmd+K`) to open `InstallDesktopModal`, switch OS tabs, download directly from GitHub Releases, or copy the matching SHA-256-verified CLI command.
-
----
-
-## 6. Zero-Server Desktop Self-Update Checker (Milestone 43)
-
-Nibgrid Studio Desktop checks `https://api.github.com/repos/FranekJemiolo/nibgrid/releases/latest` using conditional `If-None-Match` ETag requests (`packages/vscode-extension/src/updateCheckerCore.ts`), avoiding dedicated update servers and preventing rate-limit burn (`304 Not Modified`). Checks run at most once every 24 hours on startup (or manually via `Nibgrid: Check for Updates`), ignore pre-releases, respect skipped versions, and reuse the M41/M42 asset naming + `SHA256SUMS.txt` release artifacts.
-
-Before launching any downloaded installer, `packages/vscode-extension/src/desktopUpdater.ts` verifies its streaming SHA-256 digest with `crypto.timingSafeEqual` against `SHA256SUMS.txt` inside an isolated temporary directory (deleting temp files immediately on mismatch) and invokes the OS installer via `execFile` (`open` on macOS, detached `/SILENT` on Windows, `chmod 0o755` under `~/.local/bin/nibgrid-studio` on Linux).
-
-In **Nibgrid Studio Desktop**, available updates appear unobtrusively in the status bar (`$(cloud-download) Nibgrid vX.Y.Z`) with **Install Update**, **Release Notes**, and **Skip This Version** actions, and users can trigger **Nibgrid: Check for Updates** (`nibgrid.checkForUpdates`) from the Command Palette or disable automatic checks via `nibgrid.updates.autoCheck`.
-
----
-
-## 7. Pre-Release Checklist & Automated Post-Deploy Smoke Gate (`scripts/smoke-release.mjs`)
-
-Before cutting a release tag or approving a live release, verify every gate in sequence:
-
-- [ ] **Versions Synchronized:** `package.json`, `packages/vscode-extension/package.json`, `packages/model-router/package.json`, and `desktop/product.json` match (`npm run verify:parity`).
-- [ ] **Static, Unit & Build Checks Green:** `npm run typecheck`, `npm run lint`, `npm run format:check`, `npm run test:unit`, `npm run build:ext`, and `npm run smoke:desktop` pass with zero failures.
-- [ ] **Python Loopback Bridge Green:** `uv run python -m unittest discover -s tests/python -v` and `python3 -m unittest tests/unit/test_nibgrid_bridge.py -v` pass with zero failures.
-- [ ] **Local Preview Smoke Gate Passed:**
-
-```bash
+# Production GitHub Pages build
 VITE_BASE_PATH=/nibgrid/ npm run build
+```
+
+Optional local preview smoke test:
+
+```bash
 VITE_BASE_PATH=/nibgrid/ npx vite preview --host 127.0.0.1 --port 4173 --strictPort &
 PREVIEW_PID=$!
-SMOKE_URL=http://127.0.0.1:4173/nibgrid/ npm run smoke:release
+SMOKE_URL=http://127.0.0.1:4173/nibgrid/ node scripts/smoke-release.mjs
 kill "$PREVIEW_PID"
 ```
 
-- [ ] **Live GitHub Pages Smoke Gate Passed (`smoke-pages` in `release.yml`):** Automatically runs `node scripts/smoke-release.mjs` (up to 3 CDN propagation retries) against `needs.deploy-pages.outputs.page_url` after `deploy-pages` completes, verifying `install.sh` (`sh -n`), `install.ps1` (`Get-FileHash`), `manifest.webmanifest`, cold boot + active Service Worker + `InstallDesktopModal`, offline PWA reload, and zero `console.error`/`pageerror`s.
+---
+
+## 3. Running a `release.yml` Dry-Run
+
+Before publishing a public GitHub Release, validate the multi-OS build matrix without creating a release or deploying Pages:
+
+1. Push your branch or `main` to GitHub.
+2. Open **Actions → Release Nibgrid (Desktop + Extension + PWA) (`release.yml`) → Run workflow**.
+3. Keep **`dry_run: true`** (default) and click **Run workflow**.
+4. Confirm all jobs succeed:
+   - `preflight-parity` (typecheck, lint, format, parity, unit, E2E, `.vsix`, and `pwa-dist`)
+   - `build-desktop` (`macos-14`, `macos-15-intel`, `windows-latest`, `ubuntu-latest` + `verify-release-artifacts.ts`)
+   - `publish-release` (generates `SHA256SUMS.txt` and skips GitHub Release creation)
+
+---
+
+## 4. Tagging & Publishing (`v*.*.*`)
+
+Once the dry-run is green on `main`, create and push an annotated SemVer tag:
 
 ```bash
-SMOKE_URL=https://franekjemiolo.github.io/nibgrid/ npm run smoke:release
+git tag -a vX.Y.Z -m "Nibgrid vX.Y.Z"
+git push origin main --follow-tags
 ```
+
+Pushing `v*.*.*` executes the full pipeline in `.github/workflows/release.yml`:
+
+1. **`preflight-parity`** — Blocks downstream jobs on any test, E2E, build, or parity failure.
+2. **`build-desktop`** — Packages `Nibgrid-Studio-X.Y.Z-macos-arm64.dmg`, `Nibgrid-Studio-X.Y.Z-macos-x64.dmg`, `Nibgrid-Studio-X.Y.Z-win-x64-setup.exe`, and `Nibgrid-Studio-X.Y.Z-linux-x64.AppImage` (plus `.zip`/`.tar.gz` archives).
+3. **`publish-release`** — Computes `SHA256SUMS.txt` via `scripts/generate-checksums.ts` and publishes the GitHub Release with all desktop binaries and `.vsix` package.
+4. **`deploy-pages`** — Deploys the matching `dist/` PWA build (including `install.sh` and `install.ps1`) to GitHub Pages and exposes `outputs.page_url`.
+5. **`smoke-pages`** — Runs `scripts/smoke-release.mjs` (with up to 3 CDN propagation retries) against `needs.deploy-pages.outputs.page_url`.
+
+---
+
+## 5. Verifying `SHA256SUMS.txt` Locally
+
+Download the release artifact and `SHA256SUMS.txt` from the GitHub Release page, then verify integrity:
+
+- **macOS:**
+  ```bash
+  shasum -a 256 -c SHA256SUMS.txt --ignore-missing
+  ```
+- **Linux:**
+  ```bash
+  sha256sum -c SHA256SUMS.txt --ignore-missing
+  ```
+- **Windows (PowerShell):**
+  ```powershell
+  $Asset = "Nibgrid-Studio-X.Y.Z-win-x64-setup.exe"
+  $Expected = (Select-String -Path SHA256SUMS.txt -Pattern "  $Asset$").Line.Split(" ")[0].ToLower()
+  $Actual = (Get-FileHash -Path $Asset -Algorithm SHA256).Hash.ToLower()
+  if ($Expected -eq $Actual) { "OK: $Asset" } else { throw "CHECKSUM MISMATCH" }
+  ```
+
+*(The one-line CLI installers `install.sh` and `install.ps1` and the in-app M43 updater `desktopUpdater.ts` perform this SHA-256 verification automatically before installing.)*
+
+---
+
+## 6. Troubleshooting `smoke-pages`
+
+| Symptom in `smoke-pages` | Likely Cause | Fix |
+| :--- | :--- | :--- |
+| **`GET install.sh` or `manifest.webmanifest` returns `404`** | GitHub Pages CDN still propagating or `VITE_BASE_PATH` was not `/nibgrid/`. | Wait 1–2 minutes and re-run `smoke-pages`; verify `preflight-parity` built `pwa-dist` with `VITE_BASE_PATH=/nibgrid/`. |
+| **`Service Worker did not activate within 8s`** | Stale SW registration or broken `manifest.webmanifest` / `sw.js` path under `/nibgrid/`. | Run the local preview smoke test (`VITE_BASE_PATH=/nibgrid/ npx vite preview --host 127.0.0.1 --port 4173 --strictPort &` then `SMOKE_URL=http://127.0.0.1:4173/nibgrid/ npm run smoke:release`) to inspect SW errors in Chromium. |
+| **`Offline reload rendered empty body`** | Missing precache entry or `Vary: Origin` mismatch on CORS `<script>`/`<link>` tags. | Check `nibgridPwaPlugin` (`PRECACHE_URLS` and `{ ignoreVary: true }` in `caches.match(...)`) in `vite.config.ts` and confirm `dist/` contains `sw.js` and `manifest.webmanifest`. |
+| **`Uncaught pageerrors` or `Console errors`** | Runtime exception on cold boot or unhandled network error. | Inspect the `smoke-pages` log output for the exact stack trace; ensure external calls (e.g., `fetchLatestDesktopRelease` in `InstallDesktopModal`) degrade cleanly without throwing. |
+| **`sh -n install.sh` failed** | Bash-specific syntax (`[[ ... ]]`, `local`, arrays) introduced into `public/install.sh`. | Keep `public/install.sh` strictly POSIX `sh` (`#!/usr/bin/env sh`) and re-run `sh -n public/install.sh`. |
+
+---
+
+## 7. CLI Installers, Web Modal & Zero-Server Self-Updates (M42–M43)
+
+- **One-Line CLI Installers (`public/install.sh`, `public/install.ps1`):** Hosted at `https://franekjemiolo.github.io/nibgrid/install.sh` and `install.ps1`, verifying `SHA256SUMS.txt` before installing locally.
+- **Browser Modal (`InstallDesktopModal.tsx`):** Accessible via **Get Desktop App** in PWA mode to download platform installers or copy CLI commands, falling back to `/releases/latest` on `403`/`429`/offline errors.
+- **Zero-Server Desktop Self-Updater (`updateCheckerCore.ts`, `desktopUpdater.ts`):** Uses ETag-cached (`If-None-Match` -> `304`) GitHub Release checks throttled to 24h (`nibgrid.updates.autoCheck`), manual **Nibgrid: Check for Updates** (`nibgrid.checkForUpdates`), `crypto.timingSafeEqual` streaming SHA-256 verification, and shell-free `execFile` OS handoff.
