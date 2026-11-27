@@ -1,6 +1,6 @@
 # Nibgrid
 
-Local-first, zero-server Bring-Your-Own-Key / Bring-Your-Own-Model (BYOK/BYOM) Progressive Web App for turning hand-drawn sketches and vocal hums into style-locked, engine-ready 2D game sprites, 4-view turnarounds, normal maps, animations, 2D stick-figure pose-to-sprite run/attack keyframing, auto-tiles, mesh-tracked sockets, VFX flipbooks, parallax backgrounds, bitmap fonts & damage numerals, colliders, UI panels, matched Godot 4 `Theme` `.tres` UI kits, Godot 4 `.gdshader` + `ShaderMaterial` `.tres` shaders, Godot 4 `.tscn` + typed `.gd` prefabs, Godot 4.3+ `TileMapLayer` `.tscn` rooms, in-browser Entity Mini-Playtest Stage & live `res://` sync, surgical pixel micro-editing & region-masked AI inpainting, Vision-LLM Art Director QA reviews, reusable Global Asset Vault libraries, `.nibgrid.zip` snapshots, zero-server `#share=` URL/Pack Feeds, WebRTC P2P direct transfers, and audio.
+Local-first, zero-server Bring-Your-Own-Key / Bring-Your-Own-Model (BYOK/BYOM) Progressive Web App for turning hand-drawn sketches and vocal hums into style-locked, engine-ready 2D game sprites, 4-view turnarounds, normal maps, animations, 2D stick-figure pose-to-sprite run/attack keyframing, auto-tiles, mesh-tracked sockets, VFX flipbooks, parallax backgrounds, bitmap fonts & damage numerals, colliders, UI panels, matched Godot 4 `Theme` `.tres` UI kits, Godot 4 `.gdshader` + `ShaderMaterial` `.tres` shaders, Godot 4 `.tscn` + typed `.gd` prefabs, Godot 4.3+ `TileMapLayer` `.tscn` rooms, single-prompt Vertical Slice Autopilot `main.tscn` generation, in-browser Entity Mini-Playtest Stage & live `res://` sync, surgical pixel micro-editing & region-masked AI inpainting, Vision-LLM Art Director QA reviews, reusable Global Asset Vault libraries, `.nibgrid.zip` snapshots, zero-server `#share=` URL/Pack Feeds, WebRTC P2P direct transfers, and audio.
 
 **Live App (GitHub Pages):** https://franekjemiolo.github.io/nibgrid/
 
@@ -48,6 +48,7 @@ Local-first, zero-server Bring-Your-Own-Key / Bring-Your-Own-Model (BYOK/BYOM) P
   - [2.29 Keyframe 2D OpenPose Cycles with Onion-Skinning & 2-Bone IK (Screen 4O)](#229-keyframe-2d-openpose-cycles-with-onion-skinning--2-bone-ik-screen-4o)
   - [2.30 Prototype Godot 4 `TileMapLayer` Rooms & Encounters (Screen 4P)](#230-prototype-godot-4-tilemaplayer-rooms--encounters-screen-4p)
   - [2.31 Feel-Test Entities in the In-Browser Mini-Playtest Stage (Entity Hub)](#231-feel-test-entities-in-the-in-browser-mini-playtest-stage-entity-hub)
+  - [2.32 Generate a Playable Godot 4 Vertical Slice from One Prompt (Autopilot)](#232-generate-a-playable-godot-4-vertical-slice-from-one-prompt-autopilot)
 - [Part 3 — Engine Drop-In Integration Examples](#part-3--engine-drop-in-integration-examples)
 - [Architecture Summary](#architecture-summary)
 - [Development & Verification](#development--verification)
@@ -91,6 +92,7 @@ Local-first, zero-server Bring-Your-Own-Key / Bring-Your-Own-Model (BYOK/BYOM) P
 | 2D OpenPose Keyframer (Run/Attack/Jump Cycles)    | `Pose Rig` (Screen 4O) (`character` primary)  | `$0.00` Mock / ComfyUI or `~$0.04`/strip    | 15-joint IK rig, red/cyan onion-skinning, ground-aligned `1×N` strip, OpenPose PNG & M25 Entity clip |
 | Godot 4 `TileMapLayer` Room & Encounter Builder   | `Room Builder` (Screen 4P) (`tile` primary)   | `$0.00` Offline Mock or `~$0.001` Gemini    | `TileMapLayer` `tile_map_data`, M20 auto-tile coords, M23 Parallax, `PlayerSpawn`, Entities `.tscn`  |
 | In-Browser Entity Mini-Playtest Stage             | `Entities` → `▶ Playtest`                     | `$0.00 Local` (60 Hz Fixed-Timestep)        | Live WASD/Space combat feel, M16/M21 debug overlay, M27 hit-flash & synced `.gd` `@export` stats     |
+| Single-Prompt Vertical Slice Autopilot            | Header **`+ Vertical Slice`** / `Cmd/Ctrl+K`  | `$0.00` Draft or Hybrid/Full BYOK           | Complete Godot 4 slice: `main.tscn`, `levels/`, `entities/`, `tiles/`, `parallax/`, `ui/`, `#share=` |
 
 ---
 
@@ -717,6 +719,19 @@ flowchart LR
 
 ---
 
+### 2.32 Generate a Playable Godot 4 Vertical Slice from One Prompt (Autopilot)
+
+**When to use it:** You want a cohesive, playable Godot 4 vertical slice (Art Bible palette lock, Hero & enemy cast, M20 Auto-Tiles, M23 Parallax stack, M24 BMFont + M33 UI `Theme`, M35 `TileMapLayer` arena, `main.tscn` entry scene, and M32 Visual QA) orchestrated from one natural-language prompt without switching tabs manually.
+
+**Click-by-Click:**
+
+1. Click **`+ Vertical Slice`** in the top header (or invoke `Vertical Slice Autopilot (1-Prompt Game Slice)` via **`Cmd/Ctrl+K`**).
+2. Enter your slice description (or click a starter chip), choose a **Genre** (`Side-Platformer`, `Top-Down RPG`, or `Twin-Stick Arena`) and **Execution Tier** (`Instant Draft ($0.00)` offline, `Hybrid Production`, or `Full GenAI Production`) while reviewing the live cost estimator badge, then click **`Draft Blueprint & Lock Style`**.
+3. Inspect the generated Hero anchor (`1×` / `2×`) and locked Art Bible palette at the **Golden Reference Visual Approval Gate** (`Re-Roll Anchor` or **`Approve Style & Fan Out`**).
+4. Monitor the Dexie-persisted resumable DAG board (abort/resume safely or click any `done` stage card to jump directly into its Foundry workshop), then click **`Playtest Hero (M36)`**, **`Sync Full Slice to Godot (res://)`** (writing `main.tscn` + all folders directly to disk or `.zip`), or **`Share #share=`** to share the entire vertical slice recipe via URL fragment.
+
+---
+
 ## Part 3 — Engine Drop-In Integration Examples
 
 ### Godot 4 (`4.2+`)
@@ -755,8 +770,9 @@ Nibgrid exports Godot-native `.tres` resources (`AtlasTexture` / `SpriteFrames`,
 9. **Complete `Theme` `.tres` UI Kits (`<slug>_theme.tres` + 7 State PNGs + M24 `.fnt`):**
    - Assign `<slug>_theme.tres` to your root `Control` / `CanvasLayer` → **`Theme`** (`res://assets/nibgrid/<slug>/`); Godot 4 automatically styles every child `Button` (`normal` / `hover` / `pressed` / `disabled`), `Panel` / `PanelContainer`, `ProgressBar`, and `Label` with `default_font` linked to your packed M24 `.fnt`.
 10. **Playable `TileMapLayer` Levels (`levels/<slug>.tscn`):**
-
-- Open synced `levels/<slug>.tscn` in Godot `4.3+` to get an editable `TileMapLayer` populated via little-endian `tile_map_data` (mapped to your M20 `Blob-47`/`Wang-16` `TileSet`), an instanced M23 `Parallax2D` `Background`, `PlayerSpawn` `Marker2D`, pixel-bounded `Camera2D`, and instanced M25 Entity prefabs under `Entities`.
+    - Open synced `levels/<slug>.tscn` in Godot `4.3+` to get an editable `TileMapLayer` populated via little-endian `tile_map_data` (mapped to your M20 `Blob-47`/`Wang-16` `TileSet`), an instanced M23 `Parallax2D` `Background`, `PlayerSpawn` `Marker2D`, pixel-bounded `Camera2D`, and instanced M25 Entity prefabs under `Entities`.
+11. **Complete Single-Prompt Vertical Slice (`main.tscn`):**
+    - After running **Vertical Slice Autopilot** and clicking **`Sync Full Slice to Godot (res://)`**, press **`F5`** in Godot `4.3+` to boot `res://main.tscn` directly—mounting your M35 `Level`, M33 `HudLayer`/`HudRoot` `Theme` (`HpBar`), instanced M25 entities with typed `.gd` controllers and M27 `hit_flash` shaders, M20 terrain, and M23 parallax.
 
 ### Phaser 3 (`3.60+`) + Matter.js
 
@@ -885,6 +901,7 @@ const pop = new BitmapText({
 - **2D Stick-Figure Pose Keyframer & OpenPose Cycle Generator (Screen 4O):** Pose a 15-joint humanoid skeleton with analytic law-of-cosines 2-bone IK (`solveTwoBoneIk`), built-in `run_6f` / `melee_slash_5f` / `jump_4f` / `idle_4f` cycles, and color-coded `#000000` OpenPose strip rasterization in pure TS (`poseRigCore.ts`, `posePresets.ts`); condition Gemini Image, Antigravity Bridge, ComfyUI ControlNet OpenPose, or `$0.00` Offline Mock mannequins (`poseAnimationAdapter.ts`) with transferable Worker chroma stripping & shared ground-pivot alignment (`SLICE_AND_ALIGN_POSE_STRIP`); edit frames with 35% red/cyan onion-skinning (`PoseKeyframerWorkshop.tsx`); and commit directly into M25 `EntityAnimationClip`.
 - **Godot 4 `TileMapLayer` Room & Encounter Prototyper (Screen 4P):** Validate room grids (`12–64 × 8–32`), relocate invalid solid-overlapping spawns/entities (`sanitizeRoomPlacements()`), map solid/platform cells onto M20 Blob-47 / Wang-16 atlas coords (`resolveRoomAutoTileCells()`), and encode/decode Godot `4.3+` little-endian `2 + 12×N` `tile_map_data` binary arrays (`roomLayoutCore.ts`) backed by Dexie v6 `rooms`; plan rooms via Gemini Flash JSON `responseSchema` or deterministic `$0.00` Offline Mock synthesis (`roomPrototyperAdapter.ts`); export complete `format=3` `.tscn` scenes (`godotRoomExporter.ts`) with M23 `Parallax2D`, `PlayerSpawn`, clamped `Camera2D`, and instanced M25 Entities; and paint, bundle (`levels/<slug>.tscn` + `recipe.json`), and live-sync directly to `res://` inside `RoomPrototyperWorkshop.tsx`.
 - **In-Browser Mini-Playtest Stage (Entity Hub):** Run a deterministic zero-DOM 60 Hz fixed-timestep simulation (`playtestEngineCore.ts`) supporting side-platformer gravity/jumping and normalized 8-way top-down movement, single-hit active-frame M16 Hitbox vs. Dummy Hurtbox overlap, hitstop freeze frames, knockback impulse, trauma shake, and M25 `frameAudioTriggers`; synchronize tuned stats directly into M26 `@export` GDScript declarations (`playtestStatSync.ts`) via a spiral-safe `100 ms`-capped accumulator; and audition live combat feel with toggleable `H` Debug Overlays, M27 hit-flash feedback, M24 `5×7` floating damage numerals, and M14/M15 `AudioPlaybackEngine` triggers inside `EntityPlaytestStage.tsx`.
+- **Single-Prompt Vertical Slice Autopilot & Resumable DAG (`+ Vertical Slice`):** Plan clamped hero/cast/world/HUD/room manifests (`verticalSliceSchema.ts`) via Gemini Flash JSON `responseSchema` or `$0.00` offline templates (`verticalSliceDirector.ts`); pause fan-out at an interactive `1×`/`2×` Golden Reference visual approval checkpoint and execute parallel stages up to concurrency `2` over Dexie v7 `sliceJobs` (`sliceDagRunner.ts`) with `AbortSignal` pause/resume and `findOrphanBlobIds(db) === []`; generate complete Godot 4 `main.tscn` + `res://` trees (`godotMainSceneExporter.ts`); and stream/share full slices via FSAA/ZIP or compressed `#share=v1.` URLs (`VerticalSliceWizard.tsx`, `recipeUrlCodec.ts`).
 
 ---
 

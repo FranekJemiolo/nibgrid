@@ -13,6 +13,7 @@ import type {
 } from '../domain/schemas';
 import type { VaultItem } from '../domain/vaultSchema';
 import type { StoredRoomRecord } from '../processing/roomLayoutCore';
+import type { SliceJobRecord } from '../processing/sliceDagRunner';
 import type { PixelTool } from '../processing/pixelEditorCore';
 import type { ShareableRecipe } from '../share/recipeUrlCodec';
 
@@ -184,10 +185,12 @@ interface AppState {
   audioAssets: AudioAsset[];
   entities: EntityDefinition[];
   rooms: StoredRoomRecord[];
+  sliceJobs: SliceJobRecord[];
   syncTarget: GodotSyncTargetRecord | null;
   vaultItems: VaultItem[];
   outgoingShareRecipe: ShareableRecipe | null;
   p2pOpen: boolean;
+  autopilotOpen: boolean;
   providers: ProviderConfig[];
   selectedProviderId: string;
   studioAdherence: AdherenceLevel;
@@ -200,6 +203,7 @@ interface AppState {
   navigate: (route: ScreenRoute) => Promise<void>;
   setVaultOpen: (open: boolean) => void;
   setP2pOpen: (open: boolean) => void;
+  setAutopilotOpen: (open: boolean) => void;
   openShareModal: (recipe: ShareableRecipe) => void;
   closeShareModal: () => void;
   clearError: () => void;
@@ -232,6 +236,9 @@ interface AppState {
   refreshRooms: (projectId: string) => Promise<void>;
   saveRoomRecord: (room: StoredRoomRecord) => Promise<StoredRoomRecord>;
   deleteRoomRecord: (roomId: string, projectId: string) => Promise<void>;
+  refreshSliceJobs: (projectId: string) => Promise<void>;
+  saveSliceJobRecord: (job: SliceJobRecord) => Promise<SliceJobRecord>;
+  deleteSliceJobRecord: (jobId: string, projectId: string) => Promise<void>;
   refreshSyncTarget: (projectId: string) => Promise<void>;
 
   refreshVaultItems: () => Promise<void>;
@@ -270,10 +277,12 @@ export const useAppStore = create<AppState>((set, get) => ({
   audioAssets: [],
   entities: [],
   rooms: [],
+  sliceJobs: [],
   syncTarget: null,
   vaultItems: [],
   outgoingShareRecipe: null,
   p2pOpen: false,
+  autopilotOpen: false,
   providers: [],
   selectedProviderId: OFFLINE_MOCK_PROVIDER_ID,
   studioAdherence: 'balanced',
@@ -300,13 +309,15 @@ export const useAppStore = create<AppState>((set, get) => ({
           ? await repository.getProject(initialRoute.projectId)
           : undefined;
         if (project) {
-          const [spriteNodes, audioAssets, entities, rooms, syncTarget] = await Promise.all([
-            repository.listSpriteNodes(project.id),
-            repository.listAudioAssets(project.id),
-            repository.listEntities(project.id),
-            repository.listRooms(project.id),
-            repository.getSyncTarget(project.id),
-          ]);
+          const [spriteNodes, audioAssets, entities, rooms, sliceJobs, syncTarget] =
+            await Promise.all([
+              repository.listSpriteNodes(project.id),
+              repository.listAudioAssets(project.id),
+              repository.listEntities(project.id),
+              repository.listRooms(project.id),
+              repository.listSliceJobs(project.id),
+              repository.getSyncTarget(project.id),
+            ]);
           set({
             route: initialRoute,
             projects,
@@ -317,6 +328,7 @@ export const useAppStore = create<AppState>((set, get) => ({
             audioAssets,
             entities,
             rooms,
+            sliceJobs,
             syncTarget: syncTarget ?? null,
             isLoading: false,
           });
@@ -332,6 +344,7 @@ export const useAppStore = create<AppState>((set, get) => ({
           audioAssets: [],
           entities: [],
           rooms: [],
+          sliceJobs: [],
           syncTarget: null,
           isLoading: false,
         });
@@ -341,13 +354,15 @@ export const useAppStore = create<AppState>((set, get) => ({
       if (initialRoute.screen !== 'hub') {
         const project = await repository.getProject(initialRoute.projectId);
         if (project) {
-          const [spriteNodes, audioAssets, entities, rooms, syncTarget] = await Promise.all([
-            repository.listSpriteNodes(project.id),
-            repository.listAudioAssets(project.id),
-            repository.listEntities(project.id),
-            repository.listRooms(project.id),
-            repository.getSyncTarget(project.id),
-          ]);
+          const [spriteNodes, audioAssets, entities, rooms, sliceJobs, syncTarget] =
+            await Promise.all([
+              repository.listSpriteNodes(project.id),
+              repository.listAudioAssets(project.id),
+              repository.listEntities(project.id),
+              repository.listRooms(project.id),
+              repository.listSliceJobs(project.id),
+              repository.getSyncTarget(project.id),
+            ]);
           set({
             route: initialRoute,
             projects,
@@ -358,6 +373,7 @@ export const useAppStore = create<AppState>((set, get) => ({
             audioAssets,
             entities,
             rooms,
+            sliceJobs,
             syncTarget: syncTarget ?? null,
             isLoading: false,
           });
@@ -378,6 +394,7 @@ export const useAppStore = create<AppState>((set, get) => ({
         audioAssets: [],
         entities: [],
         rooms: [],
+        sliceJobs: [],
         syncTarget: null,
         isLoading: false,
       });
@@ -405,13 +422,15 @@ export const useAppStore = create<AppState>((set, get) => ({
       const targetProjectId = route.projectId ?? get().activeProject?.id;
       const project = targetProjectId ? await repository.getProject(targetProjectId) : undefined;
       if (project) {
-        const [spriteNodes, audioAssets, entities, rooms, syncTarget] = await Promise.all([
-          repository.listSpriteNodes(project.id),
-          repository.listAudioAssets(project.id),
-          repository.listEntities(project.id),
-          repository.listRooms(project.id),
-          repository.getSyncTarget(project.id),
-        ]);
+        const [spriteNodes, audioAssets, entities, rooms, sliceJobs, syncTarget] =
+          await Promise.all([
+            repository.listSpriteNodes(project.id),
+            repository.listAudioAssets(project.id),
+            repository.listEntities(project.id),
+            repository.listRooms(project.id),
+            repository.listSliceJobs(project.id),
+            repository.getSyncTarget(project.id),
+          ]);
         set({
           route: { screen: 'vault', projectId: project.id },
           projects,
@@ -421,6 +440,7 @@ export const useAppStore = create<AppState>((set, get) => ({
           audioAssets,
           entities,
           rooms,
+          sliceJobs,
           syncTarget: syncTarget ?? null,
           errorMessage: null,
         });
@@ -434,6 +454,7 @@ export const useAppStore = create<AppState>((set, get) => ({
           audioAssets: [],
           entities: [],
           rooms: [],
+          sliceJobs: [],
           syncTarget: null,
           errorMessage: null,
         });
@@ -451,6 +472,7 @@ export const useAppStore = create<AppState>((set, get) => ({
         audioAssets: [],
         entities: [],
         rooms: [],
+        sliceJobs: [],
         syncTarget: null,
         errorMessage: null,
       });
@@ -471,6 +493,7 @@ export const useAppStore = create<AppState>((set, get) => ({
         audioAssets: [],
         entities: [],
         rooms: [],
+        sliceJobs: [],
         syncTarget: null,
         errorMessage: `Project "${route.projectId}" was not found.`,
       });
@@ -479,11 +502,12 @@ export const useAppStore = create<AppState>((set, get) => ({
 
     const prevProjectId = get().activeProject?.id;
     const isSwitchingProject = prevProjectId !== project.id;
-    const [spriteNodes, audioAssets, entities, rooms, syncTarget] = await Promise.all([
+    const [spriteNodes, audioAssets, entities, rooms, sliceJobs, syncTarget] = await Promise.all([
       repository.listSpriteNodes(project.id),
       repository.listAudioAssets(project.id),
       repository.listEntities(project.id),
       repository.listRooms(project.id),
+      repository.listSliceJobs(project.id),
       repository.getSyncTarget(project.id),
     ]);
     set({
@@ -493,6 +517,7 @@ export const useAppStore = create<AppState>((set, get) => ({
       audioAssets,
       entities,
       rooms,
+      sliceJobs,
       syncTarget: syncTarget ?? null,
       errorMessage: null,
       ...(isSwitchingProject ? { studioAdherence: 'balanced', studioVariantCount: 2 } : {}),
@@ -501,6 +526,7 @@ export const useAppStore = create<AppState>((set, get) => ({
 
   setVaultOpen: (open) => set({ vaultOpen: open }),
   setP2pOpen: (open) => set({ p2pOpen: open }),
+  setAutopilotOpen: (open) => set({ autopilotOpen: open }),
   openShareModal: (recipe) => set({ outgoingShareRecipe: recipe }),
   closeShareModal: () => set({ outgoingShareRecipe: null }),
   clearError: () => set({ errorMessage: null }),
@@ -533,6 +559,7 @@ export const useAppStore = create<AppState>((set, get) => ({
         audioAssets: [],
         entities: [],
         rooms: [],
+        sliceJobs: [],
         syncTarget: null,
         projects,
       });
@@ -726,6 +753,24 @@ export const useAppStore = create<AppState>((set, get) => ({
     await repository.deleteRoom(roomId);
     const rooms = await repository.listRooms(projectId);
     set({ rooms });
+  },
+
+  refreshSliceJobs: async (projectId) => {
+    const sliceJobs = await repository.listSliceJobs(projectId);
+    set({ sliceJobs });
+  },
+
+  saveSliceJobRecord: async (job) => {
+    const saved = await repository.saveSliceJob(job);
+    const sliceJobs = await repository.listSliceJobs(saved.projectId);
+    set({ sliceJobs });
+    return saved;
+  },
+
+  deleteSliceJobRecord: async (jobId, projectId) => {
+    await repository.deleteSliceJob(jobId);
+    const sliceJobs = await repository.listSliceJobs(projectId);
+    set({ sliceJobs });
   },
 
   refreshSyncTarget: async (projectId) => {

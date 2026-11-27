@@ -45,6 +45,7 @@ import {
   type StoredQaReportRecord,
 } from '../processing/artDirectorQaSchema';
 import { StoredRoomRecordSchema, type StoredRoomRecord } from '../processing/roomLayoutCore';
+import { SliceJobRecordSchema, type SliceJobRecord } from '../processing/sliceDagRunner';
 
 export const OFFLINE_MOCK_PROVIDER_ID = 'offline-mock';
 export const ANTIGRAVITY_AGENT_PROVIDER_ID = 'antigravity-agent';
@@ -65,6 +66,7 @@ export class NibgridDatabase extends Dexie {
   vaultItems!: Table<VaultItem, string>;
   qaReports!: Table<StoredQaReportRecord, string>;
   rooms!: Table<StoredRoomRecord, string>;
+  sliceJobs!: Table<SliceJobRecord, string>;
 
   constructor(dbName = 'nibgrid-db') {
     super(dbName);
@@ -122,6 +124,19 @@ export class NibgridDatabase extends Dexie {
       vaultItems: '&id, kind, name, createdAt',
       qaReports: '&projectId, sheetHash',
       rooms: '&id, projectId, slug',
+    });
+    this.version(7).stores({
+      projects: 'id, updatedAt, name',
+      blobs: 'id, sha256, createdAt',
+      spriteNodes: 'id, projectId, parentId, [projectId+createdAt]',
+      providerConfigs: 'id, kind, updatedAt',
+      audioAssets: 'id, projectId, presetId, createdAt',
+      entities: '&id, projectId, slug',
+      syncTargets: '&projectId',
+      vaultItems: '&id, kind, name, createdAt',
+      qaReports: '&projectId, sheetHash',
+      rooms: '&id, projectId, slug',
+      sliceJobs: '&id, projectId, status, updatedAt',
     });
   }
 }
@@ -641,6 +656,38 @@ export class NibgridRepository {
     await this.database.rooms.delete(roomId);
   }
 
+  async listSliceJobs(projectId: string): Promise<SliceJobRecord[]> {
+    const rows = await this.database.sliceJobs.where('projectId').equals(projectId).toArray();
+    return rows
+      .map((row) => SliceJobRecordSchema.parse(row))
+      .sort((a, b) => b.updatedAt - a.updatedAt);
+  }
+
+  async getSliceJob(jobId: string): Promise<SliceJobRecord | undefined> {
+    const found = await this.database.sliceJobs.get(jobId);
+    return found ? SliceJobRecordSchema.parse(found) : undefined;
+  }
+
+  async saveSliceJob(job: SliceJobRecord): Promise<SliceJobRecord> {
+    const validated = SliceJobRecordSchema.parse(job);
+    await this.database.transaction(
+      'rw',
+      [this.database.sliceJobs, this.database.projects],
+      async () => {
+        await this.database.sliceJobs.put(validated);
+        await this.database.projects
+          .where('id')
+          .equals(validated.projectId)
+          .modify({ updatedAt: nowIso() });
+      },
+    );
+    return validated;
+  }
+
+  async deleteSliceJob(jobId: string): Promise<void> {
+    await this.database.sliceJobs.delete(jobId);
+  }
+
   async getSyncTarget(projectId: string): Promise<GodotSyncTargetRecord | undefined> {
     const found = await this.database.syncTargets.get(projectId);
     if (!found) return undefined;
@@ -898,6 +945,7 @@ export class NibgridRepository {
         this.database.audioAssets,
         this.database.entities,
         this.database.rooms,
+        this.database.sliceJobs,
         this.database.syncTargets,
         this.database.blobs,
         this.database.vaultItems,
@@ -908,6 +956,7 @@ export class NibgridRepository {
         await this.database.audioAssets.where('projectId').equals(projectId).delete();
         await this.database.entities.where('projectId').equals(projectId).delete();
         await this.database.rooms.where('projectId').equals(projectId).delete();
+        await this.database.sliceJobs.where('projectId').equals(projectId).delete();
         await this.database.syncTargets.delete(projectId);
         await this.database.qaReports.delete(projectId);
         await this.database.projects.delete(projectId);

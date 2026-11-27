@@ -24,6 +24,7 @@ export function CommandPalette({ open, onOpenChange }: CommandPaletteProps) {
     navigate,
     setVaultOpen,
     setP2pOpen,
+    setAutopilotOpen,
   } = useAppStore();
 
   const [query, setQuery] = useState('');
@@ -389,6 +390,15 @@ export function CommandPalette({ open, onOpenChange }: CommandPaletteProps) {
 
     list.push(
       {
+        id: 'act-vertical-slice',
+        title: 'Vertical Slice Autopilot (1-Prompt Game Slice)',
+        subtitle:
+          'Prompt -> Style Gate -> Hero, Enemies, Tiles, Parallax, HUD Theme, Level & main.tscn',
+        category: 'action',
+        keywords: ['autopilot', 'vertical', 'slice', 'godot', 'main.tscn', 'prompt', 'wizard'],
+        execute: () => setAutopilotOpen(true),
+      },
+      {
         id: 'nav-hub',
         title: 'Projects Hub',
         subtitle: 'Switch or create a local Nibgrid project',
@@ -482,6 +492,7 @@ export function CommandPalette({ open, onOpenChange }: CommandPaletteProps) {
     navigate,
     setVaultOpen,
     setP2pOpen,
+    setAutopilotOpen,
   ]);
 
   const ranked = useMemo(() => rankCommands(query, commands), [query, commands]);

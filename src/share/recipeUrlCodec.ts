@@ -7,6 +7,10 @@ import {
   ShaderConfigSchema,
   VfxFlipbookConfigSchema,
 } from '../domain/schemas';
+import {
+  SliceExecutionTierSchema,
+  VerticalSliceBlueprintSchema,
+} from '../processing/verticalSliceSchema';
 
 export const SHARE_HASH_PREFIX = '#share=v1.' as const;
 export const MAX_SHARE_HASH_CHARS = 8192;
@@ -42,12 +46,20 @@ export const ShareableArtBibleRecipeSchema = z.object({
   artBible: ArtBibleSchema,
 });
 
+export const ShareableVerticalSliceRecipeSchema = z.object({
+  kind: z.literal('vertical-slice'),
+  name: z.string().trim().min(1).max(120),
+  tier: SliceExecutionTierSchema.default('instant-draft'),
+  blueprint: VerticalSliceBlueprintSchema,
+});
+
 export const ShareableRecipeSchema = z.discriminatedUnion('kind', [
   ShareableShaderRecipeSchema,
   ShareableVfxRecipeSchema,
   ShareableBmfontRecipeSchema,
   ShareableProceduralSfxRecipeSchema,
   ShareableArtBibleRecipeSchema,
+  ShareableVerticalSliceRecipeSchema,
 ]);
 export type ShareableRecipe = z.infer<typeof ShareableRecipeSchema>;
 

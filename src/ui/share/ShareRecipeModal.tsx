@@ -7,7 +7,9 @@ import {
   buildShaderVaultItem,
   buildVfxVaultItem,
 } from '../../domain/vaultSchema';
+import { createDefaultArtBible } from '../../domain/schemas';
 import { transpileGdShaderToWebGL2 } from '../../processing/gdshaderTranspiler';
+import { createSliceJobRecord } from '../../processing/sliceDagRunner';
 import {
   decodeRecipeFromHash,
   encodeRecipeToHash,
@@ -30,6 +32,8 @@ export function ShareRecipeModal({ outgoingRecipe, onCloseOutgoing }: ShareRecip
     navigate,
     refreshSpriteNodes,
     refreshVaultItems,
+    saveSliceJobRecord,
+    setAutopilotOpen,
   } = useAppStore();
 
   const [incomingHash, setIncomingHash] = useState<string | null>(() =>
@@ -150,6 +154,23 @@ export function ShareRecipeModal({ outgoingRecipe, onCloseOutgoing }: ShareRecip
             sourceProjectName: '#share URL',
           }),
         );
+      } else if (r.kind === 'vertical-slice') {
+        const baseBible = createDefaultArtBible();
+        await repository.saveVaultItem(
+          buildArtBibleVaultItem({
+            id,
+            name: r.name,
+            artBible: {
+              ...baseBible,
+              projection: r.blueprint.genre === 'top-down' ? 'top-down' : 'side-scroller',
+              artMode: r.blueprint.artMode === 'hd-handdrawn' ? 'hd-2d' : 'pixel-art',
+              palette: r.blueprint.paletteHex ?? baseBible.palette,
+              stylePrompt: r.blueprint.artBiblePrompt,
+            },
+            tags: ['vertical-slice', r.blueprint.genre],
+            sourceProjectName: '#share URL',
+          }),
+        );
       }
       await refreshVaultItems();
       setStatusNotice(`Saved "${r.name}" to Global Asset Vault.`);
@@ -172,6 +193,15 @@ export function ShareRecipeModal({ outgoingRecipe, onCloseOutgoing }: ShareRecip
         await repository.updateProjectArtBible(targetProj.id, r.artBible);
         dismissIncoming();
         await navigate({ screen: 'bible', projectId: targetProj.id });
+        return;
+      }
+
+      if (r.kind === 'vertical-slice') {
+        const job = createSliceJobRecord(targetProj.id, r.blueprint, r.tier);
+        await saveSliceJobRecord(job);
+        dismissIncoming();
+        await navigate({ screen: 'bible', projectId: targetProj.id });
+        setAutopilotOpen(true);
         return;
       }
 
@@ -366,6 +396,25 @@ export function ShareRecipeModal({ outgoingRecipe, onCloseOutgoing }: ShareRecip
                     <pre className="max-h-40 overflow-auto rounded bg-[#1A1A1D] p-2 font-mono text-[10px] text-zinc-300">
                       {decodedIncoming.recipe.shaderConfig.gdshaderSource}
                     </pre>
+                  )}
+                  {decodedIncoming.recipe.kind === 'vertical-slice' && (
+                    <div className="space-y-1 text-[11px] text-zinc-300">
+                      <p>
+                        Genre:{' '}
+                        <span className="font-mono text-amber-300">
+                          {decodedIncoming.recipe.blueprint.genre}
+                        </span>{' '}
+                        · Grid:{' '}
+                        <span className="font-mono text-zinc-200">
+                          {decodedIncoming.recipe.blueprint.roomCols}×
+                          {decodedIncoming.recipe.blueprint.roomRows}
+                        </span>{' '}
+                        ({decodedIncoming.recipe.blueprint.tileSizePx}px)
+                      </p>
+                      <p className="text-zinc-400">
+                        Cast: {decodedIncoming.recipe.blueprint.cast.map((c) => c.slug).join(', ')}
+                      </p>
+                    </div>
                   )}
                 </div>
 

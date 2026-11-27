@@ -12,11 +12,13 @@ import {
   Music,
   Paintbrush,
   ShieldCheck,
+  Sparkles,
 } from 'lucide-react';
 import { parseHashRoute, useAppStore } from './store/useAppStore';
 import { AtlasWorkshop } from './ui/atlas/AtlasWorkshop';
 import { AudioFoundry } from './ui/audio/AudioFoundry';
 import { AuditMatrixView } from './ui/audit/AuditMatrixView';
+import { VerticalSliceWizard } from './ui/autopilot/VerticalSliceWizard';
 import { ArtBibleEditor } from './ui/bible/ArtBibleEditor';
 import { CommandPalette } from './ui/command/CommandPalette';
 import { UniversalDropOverlay } from './ui/command/UniversalDropOverlay';
@@ -43,6 +45,7 @@ export function App() {
     navigate,
     setVaultOpen,
     setP2pOpen,
+    setAutopilotOpen,
     closeShareModal,
     clearError,
   } = useAppStore();
@@ -167,6 +170,16 @@ export function App() {
 
           <button
             type="button"
+            data-testid="nav-vertical-slice-btn"
+            onClick={() => setAutopilotOpen(true)}
+            className="inline-flex shrink-0 items-center gap-1 rounded-md border border-amber-500/40 bg-amber-500/10 px-2.5 py-1 text-xs font-semibold text-amber-300 hover:bg-amber-500/20"
+            title="Vertical Slice Autopilot (Single-Prompt Game Builder)"
+          >
+            <Sparkles className="h-3.5 w-3.5" />+ Vertical Slice
+          </button>
+
+          <button
+            type="button"
             data-testid="nav-asset-vault"
             onClick={() =>
               void navigate({
@@ -252,6 +265,7 @@ export function App() {
 
       <ProviderVaultModal />
       <P2pTransferModal open={p2pOpen} onClose={() => setP2pOpen(false)} />
+      <VerticalSliceWizard />
       <ShareRecipeModal outgoingRecipe={outgoingShareRecipe} onCloseOutgoing={closeShareModal} />
       <CommandPalette open={paletteOpen} onOpenChange={setPaletteOpen} />
       <UniversalDropOverlay />
