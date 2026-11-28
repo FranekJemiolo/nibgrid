@@ -35,6 +35,7 @@ export type InspectorTab =
   | 'world-map'
   | 'data-foundry'
   | 'dialogue-l10n'
+  | 'ship-godot'
   | 'bmfont'
   | 'uikit'
   | 'palette-lut'
@@ -61,6 +62,7 @@ export type ScreenRoute =
   | { screen: 'world'; projectId: string }
   | { screen: 'data'; projectId: string }
   | { screen: 'dialogue'; projectId: string }
+  | { screen: 'ship'; projectId: string }
   | { screen: 'vault'; projectId?: string };
 
 const VALID_PIXEL_TOOLS = new Set<PixelTool>([
@@ -86,6 +88,7 @@ const VALID_INSPECTOR_TABS = new Set<InspectorTab>([
   'world-map',
   'data-foundry',
   'dialogue-l10n',
+  'ship-godot',
   'bmfont',
   'uikit',
   'palette-lut',
@@ -160,6 +163,10 @@ export function parseHashRoute(hash: string): ScreenRoute {
   if (dialogueMatch?.[1]) {
     return { screen: 'dialogue', projectId: dialogueMatch[1] };
   }
+  const shipMatch = /^\/project\/([^/]+)\/ship$/.exec(path);
+  if (shipMatch?.[1]) {
+    return { screen: 'ship', projectId: shipMatch[1] };
+  }
   if (path === '/vault') {
     return { screen: 'vault' };
   }
@@ -204,6 +211,9 @@ export function formatHashRoute(route: ScreenRoute): string {
   }
   if (route.screen === 'dialogue') {
     return `#/project/${route.projectId}/dialogue`;
+  }
+  if (route.screen === 'ship') {
+    return `#/project/${route.projectId}/ship`;
   }
   if (route.screen === 'vault') {
     return route.projectId ? `#/project/${route.projectId}/vault` : '#/vault';

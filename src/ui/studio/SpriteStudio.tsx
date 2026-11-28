@@ -43,10 +43,13 @@ import { CanvasHistory } from '../../processing/history';
 import { sha256Bytes } from '../../processing/hash';
 import {
   base64ToUint8,
+  decodePngBytesToRgba,
   encodeRgbaToPngBytes,
   rgbaToPngBlob,
   uint8ToBase64,
 } from '../../processing/png';
+import { runAutoPixelPolishPipeline } from '../../processing/pixelPolish';
+import { selectStyleLockAnchors } from '../../ai/styleLockGate';
 import {
   AntigravityBridgeProvider,
   selectStatefulInteractionChain,
@@ -252,6 +255,8 @@ export function SpriteStudio() {
   const [animationStudioOpen, setAnimationStudioOpen] = useState(false);
   const [bridgeCritique, setBridgeCritique] = useState<BridgeCritiqueResponse | null>(null);
   const [chainNotice, setChainNotice] = useState<string | null>(null);
+  const [autoPolishEnabled, setAutoPolishEnabled] = useState(false);
+  const [polishSummary, setPolishSummary] = useState<string | null>(null);
   const [statusMessage, setStatusMessage] = useState<string | null>(null);
   const [providerError, setProviderError] = useState<{
     message: string;
@@ -823,8 +828,13 @@ export function SpriteStudio() {
 
   const loadGoldenReferencePayloads = useCallback(async (): Promise<GoldenReferencePayload[]> => {
     if (!activeProject) return [];
+    const anchorIds = selectStyleLockAnchors(
+      activeProject.artBible.goldenReferenceBlobIds,
+      spriteNodes,
+      2,
+    );
     const results: GoldenReferencePayload[] = [];
-    for (const blobId of activeProject.artBible.goldenReferenceBlobIds.slice(0, 3)) {
+    for (const blobId of anchorIds) {
       const record = await repository.getBlob(blobId);
       if (record) {
         const bytes = new Uint8Array(await record.bytes.arrayBuffer());
@@ -832,7 +842,43 @@ export function SpriteStudio() {
       }
     }
     return results;
-  }, [activeProject]);
+  }, [activeProject, spriteNodes]);
+
+  const handleToggleAutoPolish = async (enabled: boolean) => {
+    setAutoPolishEnabled(enabled);
+    if (!enabled) {
+      setPolishSummary(null);
+      return;
+    }
+    if (!activeProject) return;
+
+    const polished = runAutoPixelPolishPipeline(
+      sketchBufferRef.current,
+      targetWidth,
+      targetHeight,
+      activeProject.artBible.palette,
+    );
+    sketchBufferRef.current = polished.data;
+    historyRef.current.push(polished.data);
+    syncHistoryFlags();
+    renderSketchCanvas();
+
+    const targetNode = activeViewportNode;
+    if (targetNode) {
+      const pngBytes = encodeRgbaToPngBytes(polished.data, targetWidth, targetHeight);
+      const blobRecord = await repository.storeBlobDeduplicated(pngBytes, 'image/png');
+      await repository.saveSpriteNode({
+        ...targetNode,
+        processedBlobId: blobRecord.id,
+      });
+      await repository.cleanupOrphanedBlobs();
+      await refreshSpriteNodes(activeProject.id);
+    }
+
+    const summary = `Palette-Locked · ${polished.detectedScale}x grid · ${polished.strippedPixels} orphan px cleaned`;
+    setPolishSummary(summary);
+    setStatusMessage(`Auto-Polish applied (${summary}).`);
+  };
 
   const handleGenerate = async () => {
     if (!activeProject || isGenerating) return;
@@ -949,13 +995,34 @@ export function SpriteStudio() {
           await repository.cleanupOrphanedBlobs();
           return;
         }
-        const blobRecord = await repository.storeBlob(output.blob, 'image/png');
+        let storedBlob = output.blob;
+        let processedBlobId: string | undefined;
+        if (autoPolishEnabled) {
+          const decoded = await decodePngBytesToRgba(
+            new Uint8Array(await output.blob.arrayBuffer()),
+          );
+          const polished = runAutoPixelPolishPipeline(
+            decoded.rgba,
+            decoded.width,
+            decoded.height,
+            activeProject.artBible.palette,
+          );
+          const pngBytes = encodeRgbaToPngBytes(polished.data, polished.width, polished.height);
+          const polishedRec = await repository.storeBlobDeduplicated(pngBytes, 'image/png');
+          storedBlob = polishedRec.bytes;
+          processedBlobId = polishedRec.id;
+          setPolishSummary(
+            `Palette-Locked · ${polished.detectedScale}x grid · ${polished.strippedPixels} orphan px cleaned`,
+          );
+        }
+        const blobRecord = await repository.storeBlob(storedBlob, 'image/png');
         const childNode: SpriteNode = {
           id: globalThis.crypto.randomUUID(),
           projectId: startedProjectId,
           parentId: parentNode.id,
           kind: 'generation',
           imageBlobId: blobRecord.id,
+          ...(processedBlobId ? { processedBlobId } : {}),
           sketchSha256: rootSketchSha,
           ...(sheetMode !== 'single'
             ? {
@@ -1965,6 +2032,9 @@ export function SpriteStudio() {
           bridgeCritique={bridgeCritique}
           chainNotice={chainNotice}
           onApplySuggestedDelta={(delta) => setPromptDelta(delta)}
+          autoPolishEnabled={autoPolishEnabled}
+          onToggleAutoPolish={(enabled) => void handleToggleAutoPolish(enabled)}
+          polishSummary={polishSummary}
         />
       </div>
 

@@ -93,6 +93,12 @@ export const INSPECTOR_TAB_META: Record<InspectorTab, InspectorTabMeta> = {
     shortLabel: 'Dialogue & L10n',
     testId: 'inspector-tab-dialogue-l10n',
   },
+  'ship-godot': {
+    id: 'ship-godot',
+    label: 'Ship to Godot (GameKit)',
+    shortLabel: 'Ship to Godot',
+    testId: 'inspector-tab-ship-godot',
+  },
   bmfont: {
     id: 'bmfont',
     label: 'Bitmap Font',
@@ -145,6 +151,7 @@ export const ALL_INSPECTOR_TABS: readonly InspectorTab[] = [
   'world-map',
   'data-foundry',
   'dialogue-l10n',
+  'ship-godot',
   'bmfont',
   'uikit',
   'palette-lut',
@@ -187,6 +194,7 @@ export function resolveInspectorTabs(
         'sandbox',
         'data-foundry',
         'dialogue-l10n',
+        'ship-godot',
       ];
       break;
     case 'tile':

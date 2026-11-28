@@ -21,6 +21,8 @@ import { assembleGodotUiKitFiles, bakeBitmapFontFromConfig } from '../export/god
 import { assembleGodotWorldFiles, exportRoomPortalNodes } from '../export/godotWorldExporter';
 import { assembleGodotGameDataFiles } from '../export/godotDataExporter';
 import { assembleGodotDialogueFiles } from '../export/godotDialogueExporter';
+import type { GameKitTemplateId } from '../export/godotGameKitExporter';
+import { assembleGodotGameKitFiles } from '../export/godotPluginExporter';
 import { toAssetSlug, triggerBlobDownload } from '../export/zipPackager';
 import { bakeNormalMapCpu } from '../processing/distanceField';
 import { decodePngBytesToRgba, encodeRgbaToPngBytes } from '../processing/png';
@@ -407,6 +409,7 @@ export async function collectProjectGodotSyncFiles(
   spriteNodes: readonly SpriteNode[],
   audioAssets: readonly AudioAsset[],
   rooms?: readonly StoredRoomRecord[],
+  options?: { readonly gameKitTemplate?: GameKitTemplateId },
 ): Promise<readonly VirtualSyncFile[]> {
   const deduped = new Map<string, VirtualSyncFile>();
   const entityResPaths: Record<string, string> = {};
@@ -572,6 +575,32 @@ export async function collectProjectGodotSyncFiles(
       narrativeBundle.graph,
       narrativeBundle.localization,
     )) {
+      deduped.set(file.relativePath, file);
+    }
+  }
+
+  if (options?.gameKitTemplate) {
+    const firstRoomSlug = effectiveRooms[0]
+      ? sanitizeRoomSlug(effectiveRooms[0].slug || effectiveRooms[0].blueprint.slug)
+      : undefined;
+    const firstThemeFile = Array.from(deduped.keys()).find((p) => p.endsWith('_theme.tres'));
+    const hasMinimap = deduped.has('world/minimap.png');
+    const gameKitFiles = assembleGodotGameKitFiles({
+      projectName: project.name,
+      templateId: options.gameKitTemplate,
+      viewportWidth: Math.max(320, project.artBible.targetWidth * 4),
+      viewportHeight: Math.max(180, project.artBible.targetHeight * 3),
+      isPixelArt,
+      entities,
+      ...(firstRoomSlug ? { levelResPath: `res://levels/${firstRoomSlug}.tscn` } : {}),
+      ...(firstThemeFile ? { themeResPath: `res://${firstThemeFile}` } : {}),
+      ...(hasMinimap ? { minimapResPath: 'res://world/minimap.png' } : {}),
+      hasWorldGraph: Boolean(
+        worldGraph && (worldGraph.rooms.length > 0 || worldGraph.edges.length > 0),
+      ),
+      hasDialogue: Boolean(narrativeBundle),
+    });
+    for (const file of gameKitFiles) {
       deduped.set(file.relativePath, file);
     }
   }

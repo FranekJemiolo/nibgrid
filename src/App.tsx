@@ -17,9 +17,12 @@ import {
   Layers,
   Music,
   Paintbrush,
+  Rocket,
   ShieldCheck,
   Sparkles,
 } from 'lucide-react';
+import { useUxModeStore } from './state/uxModeStore';
+import { WORKSPACE_SHELL_ITEMS, resolveWorkspaceForScreen } from './ui/layout/workspaceShell';
 import { getActiveHostAdapter } from './platform/browserHostAdapter';
 import { parseHashRoute, useAppStore } from './store/useAppStore';
 import { AtlasWorkshop } from './ui/atlas/AtlasWorkshop';
@@ -45,6 +48,7 @@ import { VaultAndBrowserView } from './ui/vault/VaultAndBrowserView';
 import { WorldMapPanel } from './ui/world/WorldMapPanel';
 import { DataFoundryPanel } from './ui/data/DataFoundryPanel';
 import { DialogueLocalizationPanel } from './ui/narrative/DialogueLocalizationPanel';
+import { ShipToGodotPanel } from './ui/export/ShipToGodotPanel';
 
 export function App() {
   const {
@@ -71,6 +75,8 @@ export function App() {
     clearError,
   } = useAppStore();
   const [paletteOpen, setPaletteOpen] = useState(false);
+  const { mode: uxMode, setMode: setUxMode } = useUxModeStore();
+  const activeWorkspace = resolveWorkspaceForScreen(route.screen);
 
   useEffect(() => {
     void initialize();
@@ -250,6 +256,15 @@ export function App() {
                 <Languages className="h-3.5 w-3.5" />
                 Dialogue &amp; L10n
               </button>
+              <button
+                type="button"
+                data-testid="nav-ship-godot"
+                onClick={() => void navigate({ screen: 'ship', projectId: activeProject.id })}
+                className={navButtonClass(route.screen === 'ship')}
+              >
+                <Rocket className="h-3.5 w-3.5" />
+                Ship to Godot
+              </button>
             </>
           )}
 
@@ -336,6 +351,33 @@ export function App() {
         </nav>
 
         <div className="flex shrink-0 items-center gap-2">
+          <div
+            data-testid="ux-mode-toggle"
+            className="inline-flex items-center rounded-md border border-[var(--border-hairline)] bg-[var(--bg-elevated)] p-0.5 text-[11px]"
+          >
+            <button
+              type="button"
+              data-testid="ux-mode-creator"
+              onClick={() => setUxMode('creator')}
+              className={`rounded px-2 py-0.5 font-semibold transition-colors ${
+                uxMode === 'creator'
+                  ? 'bg-indigo-600 text-white'
+                  : 'text-slate-400 hover:text-white'
+              }`}
+            >
+              Creator
+            </button>
+            <button
+              type="button"
+              data-testid="ux-mode-pro"
+              onClick={() => setUxMode('pro')}
+              className={`rounded px-2 py-0.5 font-semibold transition-colors ${
+                uxMode === 'pro' ? 'bg-amber-500 text-slate-950' : 'text-slate-400 hover:text-white'
+              }`}
+            >
+              Pro
+            </button>
+          </div>
           {activeProject && <GodotSyncPill />}
           <div className="hidden shrink-0 items-center gap-1.5 rounded-full border border-emerald-500/30 bg-emerald-500/10 px-2.5 py-1 text-[11px] font-medium text-emerald-300 2xl:inline-flex">
             <ShieldCheck className="h-3.5 w-3.5" />
@@ -343,6 +385,42 @@ export function App() {
           </div>
         </div>
       </header>
+
+      {activeProject && (
+        <div
+          data-testid="workspace-shell-bar"
+          className="flex flex-wrap items-center justify-between gap-2 border-b border-[var(--border-hairline)] bg-[var(--bg-surface)] px-3 py-1.5 sm:px-4"
+        >
+          <div className="flex flex-wrap items-center gap-1.5">
+            {WORKSPACE_SHELL_ITEMS.map((ws) => {
+              const selected = activeWorkspace === ws.id;
+              return (
+                <button
+                  key={ws.id}
+                  type="button"
+                  data-testid={`workspace-tab-${ws.id}`}
+                  onClick={() =>
+                    void navigate({ screen: ws.defaultScreen, projectId: activeProject.id })
+                  }
+                  title={ws.description}
+                  className={`rounded-md px-2.5 py-1 text-xs font-semibold transition-colors ${
+                    selected
+                      ? 'bg-indigo-600/25 text-indigo-200 ring-1 ring-indigo-400/50'
+                      : 'text-slate-400 hover:bg-slate-800 hover:text-slate-200'
+                  }`}
+                >
+                  {ws.label}
+                </button>
+              );
+            })}
+          </div>
+          <span className="text-[11px] text-slate-400">
+            {uxMode === 'creator'
+              ? 'Creator Mode · Curated Presets Active'
+              : 'Pro Mode · Full M0–M50 Controls Visible'}
+          </span>
+        </div>
+      )}
 
       {errorMessage && (
         <div className="mx-auto mt-4 flex w-full max-w-6xl items-center justify-between rounded-lg border border-rose-500/30 bg-rose-500/10 px-4 py-2 text-xs text-rose-200">
@@ -382,6 +460,8 @@ export function App() {
           <DataFoundryPanel />
         ) : route.screen === 'dialogue' ? (
           <DialogueLocalizationPanel />
+        ) : route.screen === 'ship' ? (
+          <ShipToGodotPanel />
         ) : route.screen === 'vault' ? (
           <VaultAndBrowserView />
         ) : (

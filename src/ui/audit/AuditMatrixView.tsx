@@ -36,6 +36,8 @@ import { useAppStore, type InspectorTab } from '../../store/useAppStore';
 import { BlobImage } from '../components/BlobImage';
 import { ArtDirectorQaPanel } from './ArtDirectorQaPanel';
 import { BatchRunnerDrawer } from './BatchRunnerDrawer';
+import { FixItCardList } from './FixItCardList';
+import { buildFixItCards } from './fixItEngine';
 
 type AuditFilterMode = 'all' | 'fail' | 'warn' | 'stale' | 'sprites' | 'audio';
 
@@ -83,6 +85,8 @@ export function AuditMatrixView() {
     spriteNodes,
     audioAssets,
     providers,
+    worldGraph,
+    narrativeBundle,
     refreshSpriteNodes,
     refreshAudioAssets,
     navigate,
@@ -298,6 +302,29 @@ export function AuditMatrixView() {
   }, [qaReport]);
 
   const biomeTile = useMemo(() => generateBiomeTile(biomeId, 64), [biomeId]);
+
+  const fixItCards = useMemo(() => {
+    if (!activeProject) return [];
+    const spriteInputs = auditableSprites.flatMap((node) => {
+      const buf = decodedSprites[node.processedBlobId ?? node.imageBlobId];
+      if (!buf) return [];
+      return [
+        {
+          id: node.id,
+          name: node.generationMeta.promptDelta || `${node.kind} #${node.generationMeta.seed}`,
+          width: buf.width,
+          height: buf.height,
+          data: buf.data,
+        },
+      ];
+    });
+    return buildFixItCards({
+      narrativeBundle,
+      worldGraph,
+      paletteHex: activeProject.artBible.palette,
+      sprites: spriteInputs,
+    });
+  }, [activeProject, auditableSprites, decodedSprites, narrativeBundle, worldGraph]);
 
   const auditReport = useMemo(() => {
     if (!activeProject) {
@@ -617,6 +644,12 @@ export function AuditMatrixView() {
             </button>
           </div>
         </div>
+
+        {fixItCards.length > 0 && (
+          <div className="border-b border-slate-800 bg-slate-900/50 px-4 py-2.5">
+            <FixItCardList cards={fixItCards} />
+          </div>
+        )}
 
         {/* Filter & Multi-Select Bar */}
         <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-800 bg-slate-900/40 px-4 py-2 text-[11px]">

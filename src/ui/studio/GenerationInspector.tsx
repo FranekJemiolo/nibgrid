@@ -43,6 +43,9 @@ interface GenerationInspectorProps {
   bridgeCritique?: BridgeCritiqueResponse | null;
   onApplySuggestedDelta?: (delta: string) => void;
   chainNotice?: string | null;
+  autoPolishEnabled?: boolean;
+  onToggleAutoPolish?: (enabled: boolean) => void;
+  polishSummary?: string | null;
 }
 
 export function GenerationInspector({
@@ -73,6 +76,9 @@ export function GenerationInspector({
   bridgeCritique,
   onApplySuggestedDelta,
   chainNotice,
+  autoPolishEnabled = false,
+  onToggleAutoPolish,
+  polishSummary,
 }: GenerationInspectorProps) {
   const activeConfig = providers.find((p) => p.id === selectedProviderId) ?? providers[0];
   const adapter = activeConfig ? resolveProviderAdapter(activeConfig) : null;
@@ -193,6 +199,29 @@ export function GenerationInspector({
               </button>
             ))}
           </div>
+        </div>
+      )}
+
+      {onToggleAutoPolish && (
+        <div className="rounded-lg border border-slate-800 bg-slate-950/70 p-2.5 text-xs">
+          <label className="flex cursor-pointer items-center justify-between gap-2">
+            <span className="font-medium text-slate-200">Auto-Polish (OKLab + Orphan Strip)</span>
+            <input
+              type="checkbox"
+              data-testid="studio-auto-polish-toggle"
+              checked={autoPolishEnabled}
+              onChange={(e) => onToggleAutoPolish(e.target.checked)}
+              className="h-4 w-4 rounded border-slate-600 bg-slate-900 accent-indigo-500"
+            />
+          </label>
+          {polishSummary && (
+            <div
+              data-testid="studio-polish-badge"
+              className="mt-1.5 inline-block rounded border border-emerald-500/40 bg-emerald-500/15 px-2 py-0.5 font-mono text-[10px] text-emerald-300"
+            >
+              {polishSummary}
+            </div>
+          )}
         </div>
       )}
 

@@ -209,6 +209,14 @@ export function CommandPalette({ open, onOpenChange }: CommandPaletteProps) {
           execute: () => navigate({ screen: 'dialogue', projectId: projId }),
         },
         {
+          id: 'act-ship-godot',
+          title: 'Open Ship to Godot (GameKit & Fix-It Cards)',
+          subtitle: 'Review Fix-It Cards, Creator/Pro presets & export turnkey Godot 4 project',
+          category: 'action',
+          keywords: ['ship', 'godot', 'gamekit', 'fixit', 'creator', 'pro', 'm49', 'm50'],
+          execute: () => navigate({ screen: 'ship', projectId: projId }),
+        },
+        {
           id: 'act-bmfont',
           title: 'Open Bitmap Font & Damage Numeral Exporter',
           subtitle: 'Art Bible pixel numerals, OKLab Sel-Out, AngelCode .fnt/.xml & crit preview',

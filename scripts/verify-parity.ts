@@ -45,6 +45,7 @@ export const EXPECTED_REQUIRED_INSPECTOR_TABS: readonly string[] = [
   'world-map',
   'data-foundry',
   'dialogue-l10n',
+  'ship-godot',
   'bmfont',
   'uikit',
   'palette-lut',

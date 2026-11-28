@@ -131,6 +131,7 @@ import { VfxBaker } from './VfxBaker';
 import { WorldMapPanel } from '../world/WorldMapPanel';
 import { DataFoundryPanel } from '../data/DataFoundryPanel';
 import { DialogueLocalizationPanel } from '../narrative/DialogueLocalizationPanel';
+import { ShipToGodotPanel } from '../export/ShipToGodotPanel';
 import {
   ASSET_CLASS_OPTIONS,
   INSPECTOR_TAB_META,
@@ -2248,6 +2249,8 @@ export function PostProcessInspector({
           <DataFoundryPanel />
         ) : inspectorTab === 'dialogue-l10n' ? (
           <DialogueLocalizationPanel />
+        ) : inspectorTab === 'ship-godot' ? (
+          <ShipToGodotPanel />
         ) : inspectorTab === 'bmfont' && activeSpriteBuffer ? (
           <BitmapFontWorkshop
             sprite={activeSpriteBuffer}
