@@ -370,8 +370,24 @@ export function VerticalSliceWizard() {
       await navigate({ screen: 'entities', projectId: projId });
       return;
     }
-    if (node.kind === 'visual-qa') {
+    if (node.kind === 'visual-qa' || node.kind === 'self-heal-qa') {
       await navigate({ screen: 'audit', projectId: projId });
+      return;
+    }
+    if (node.kind === 'world-graph') {
+      await navigate({ screen: 'world', projectId: projId });
+      return;
+    }
+    if (node.kind === 'game-data') {
+      await navigate({ screen: 'data', projectId: projId });
+      return;
+    }
+    if (node.kind === 'narrative-l10n') {
+      await navigate({ screen: 'dialogue', projectId: projId });
+      return;
+    }
+    if (node.kind === 'gamekit-bundle') {
+      await navigate({ screen: 'ship', projectId: projId });
       return;
     }
     const targetNodeId =

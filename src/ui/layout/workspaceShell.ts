@@ -16,9 +16,9 @@ export const WORKSPACE_SHELL_ITEMS: readonly WorkspaceShellMeta[] = [
     id: 'style-vision',
     label: '1. Style & Vision',
     shortLabel: 'Style & Vision',
-    description: 'ArtBible, Golden References, Bitmap Font & UI Theme.',
+    description: 'Director Studio, ArtBible, Golden References, Bitmap Font & UI Theme.',
     defaultScreen: 'bible',
-    memberScreens: ['bible'],
+    memberScreens: ['bible', 'director'],
   },
   {
     id: 'cast-world',

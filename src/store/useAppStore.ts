@@ -63,6 +63,7 @@ export type ScreenRoute =
   | { screen: 'data'; projectId: string }
   | { screen: 'dialogue'; projectId: string }
   | { screen: 'ship'; projectId: string }
+  | { screen: 'director'; projectId: string }
   | { screen: 'vault'; projectId?: string };
 
 const VALID_PIXEL_TOOLS = new Set<PixelTool>([
@@ -167,6 +168,10 @@ export function parseHashRoute(hash: string): ScreenRoute {
   if (shipMatch?.[1]) {
     return { screen: 'ship', projectId: shipMatch[1] };
   }
+  const directorMatch = /^\/project\/([^/]+)\/director$/.exec(path);
+  if (directorMatch?.[1]) {
+    return { screen: 'director', projectId: directorMatch[1] };
+  }
   if (path === '/vault') {
     return { screen: 'vault' };
   }
@@ -214,6 +219,9 @@ export function formatHashRoute(route: ScreenRoute): string {
   }
   if (route.screen === 'ship') {
     return `#/project/${route.projectId}/ship`;
+  }
+  if (route.screen === 'director') {
+    return `#/project/${route.projectId}/director`;
   }
   if (route.screen === 'vault') {
     return route.projectId ? `#/project/${route.projectId}/vault` : '#/vault';

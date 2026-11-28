@@ -6,6 +6,9 @@ export type SliceExecutionTier = z.infer<typeof SliceExecutionTierSchema>;
 export const SliceGenreSchema = z.enum(['side-platformer', 'top-down', 'twin-stick']);
 export type SliceGenre = z.infer<typeof SliceGenreSchema>;
 
+export const SliceScopeSchema = z.enum(['single-arena', 'multi-room-dungeon', 'town-and-boss']);
+export type SliceScope = z.infer<typeof SliceScopeSchema>;
+
 export const SlicePosePresetSchema = z.enum(['run_6f', 'melee_slash_5f', 'idle_4f']);
 export type SlicePosePreset = z.infer<typeof SlicePosePresetSchema>;
 
@@ -39,6 +42,8 @@ export const VerticalSliceBlueprintSchema = z.object({
   roomPrompt: z.string().min(1),
   roomCols: z.number().int().min(16).max(48),
   roomRows: z.number().int().min(10).max(24),
+  scope: SliceScopeSchema.optional(),
+  includeFullGameKit: z.boolean().optional(),
 });
 export type VerticalSliceBlueprint = z.infer<typeof VerticalSliceBlueprintSchema>;
 
@@ -249,6 +254,14 @@ export function parseAndClampVerticalSliceBlueprint(
         : 'Boss encounter arena with two stone pillars and raised platforms',
     roomCols: clampInt(obj.roomCols, 16, 48, 24),
     roomRows: clampInt(obj.roomRows, 10, 24, 14),
+    ...(obj.scope === 'single-arena' ||
+    obj.scope === 'multi-room-dungeon' ||
+    obj.scope === 'town-and-boss'
+      ? { scope: obj.scope }
+      : {}),
+    ...(typeof obj.includeFullGameKit === 'boolean'
+      ? { includeFullGameKit: obj.includeFullGameKit }
+      : {}),
   });
 }
 

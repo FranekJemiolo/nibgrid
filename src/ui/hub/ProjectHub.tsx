@@ -6,6 +6,7 @@ import {
   Layers,
   Paintbrush,
   Radio,
+  Sparkles,
   Trash2,
   Upload,
 } from 'lucide-react';
@@ -86,6 +87,21 @@ export function ProjectHub() {
     }
   };
 
+  const handleCreateDirectorProject = async () => {
+    const trimmed = newName.trim() || 'Untitled Director Game';
+    setFormError(null);
+    setIsCreating(true);
+    try {
+      const created = await createProject(trimmed);
+      setNewName('');
+      await navigate({ screen: 'director', projectId: created.id });
+    } catch (error) {
+      setFormError(error instanceof Error ? error.message : 'Failed to create project.');
+    } finally {
+      setIsCreating(false);
+    }
+  };
+
   return (
     <div data-testid="project-hub" className="mx-auto flex w-full max-w-6xl flex-col gap-6 p-6">
       <section className="rounded-xl border border-slate-800 bg-slate-900/70 p-6">
@@ -117,6 +133,16 @@ export function ProjectHub() {
             >
               <FolderPlus className="h-4 w-4" />
               New Project
+            </button>
+            <button
+              type="button"
+              data-testid="hub-director-studio-btn"
+              disabled={isCreating}
+              onClick={() => void handleCreateDirectorProject()}
+              className="inline-flex items-center gap-1.5 rounded-md bg-amber-500 px-3.5 py-2 text-sm font-semibold text-zinc-950 hover:bg-amber-400 disabled:opacity-50"
+            >
+              <Sparkles className="h-4 w-4" />
+              Director Studio (1-Prompt Game)
             </button>
             <input
               ref={importSnapshotRef}

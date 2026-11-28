@@ -47,6 +47,7 @@ import { SpriteStudio } from './ui/studio/SpriteStudio';
 import { VaultAndBrowserView } from './ui/vault/VaultAndBrowserView';
 import { WorldMapPanel } from './ui/world/WorldMapPanel';
 import { DataFoundryPanel } from './ui/data/DataFoundryPanel';
+import { DirectorStudioView } from './ui/director/DirectorStudioView';
 import { DialogueLocalizationPanel } from './ui/narrative/DialogueLocalizationPanel';
 import { ShipToGodotPanel } from './ui/export/ShipToGodotPanel';
 
@@ -462,6 +463,8 @@ export function App() {
           <DialogueLocalizationPanel />
         ) : route.screen === 'ship' ? (
           <ShipToGodotPanel />
+        ) : route.screen === 'director' ? (
+          <DirectorStudioView />
         ) : route.screen === 'vault' ? (
           <VaultAndBrowserView />
         ) : (

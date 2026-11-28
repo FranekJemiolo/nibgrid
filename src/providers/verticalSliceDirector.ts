@@ -39,7 +39,9 @@ import { synthesizeProceduralSprite } from '../processing/proceduralSprite';
 import { computeArtBibleHash } from '../processing/projectAudit';
 import { createPoseClipFromPreset } from '../processing/posePresets';
 import type { SliceDagNode, SliceJobRecord, SliceNodeExecutor } from '../processing/sliceDagRunner';
-import { generateRoomBlueprint } from './roomPrototyperAdapter';
+import { generateMockRoomBlueprint, generateRoomBlueprint } from './roomPrototyperAdapter';
+import { createDefaultGameDataRegistry, GameDataRegistrySchema } from '../data/gameDataSchemas';
+import { createDefaultProjectNarrative } from '../narrative/dialogueSchemas';
 import { bakeProceduralUiKit } from '../processing/uiKitCore';
 import {
   VERTICAL_SLICE_GEMINI_RESPONSE_SCHEMA,
@@ -49,7 +51,19 @@ import {
   type SliceGenre,
   type VerticalSliceBlueprint,
 } from '../processing/verticalSliceSchema';
-import { collectEntitySyncFiles } from '../sync/fsaaSyncEngine';
+import {
+  collectAndValidateProjectGodotSyncFiles,
+  collectEntitySyncFiles,
+  collectProjectGodotSyncFiles,
+} from '../sync/fsaaSyncEngine';
+import { runAndCommitSelfHealingPreFlight } from '../sync/selfHealingCommit';
+import { applyMissingGlyphFix } from '../ui/audit/fixItEngine';
+import {
+  bakeWorldMinimapRgba,
+  deriveMinimapPaletteFromArtBible,
+  type RoomCellGrid,
+} from '../world/minimapBaker';
+import { WorldGraphSchema } from '../world/worldGraphCore';
 import { runArtDirectorQaPass } from './artDirectorQa';
 import { executeEntityDirectorPlan } from './entityDirector';
 import { ProviderError, classifyProviderError } from './errors';
@@ -815,6 +829,199 @@ export function createSliceNodeExecutor(params: {
           );
           return { artifactId: qa.report.sheetHash };
         }
+
+        case 'world-graph': {
+          const existingRooms = await repo.listRooms(projectId);
+          const tileSetNodeId =
+            job.nodes.find((n) => n.id === 'terrain_tileset')?.artifactId ?? null;
+          const parallaxNodeId =
+            job.nodes.find((n) => n.id === 'parallax_stack')?.artifactId ?? null;
+          const baseRooms = [...existingRooms];
+          const extraDefs: readonly {
+            readonly slug: string;
+            readonly label: string;
+            readonly prompt: string;
+          }[] =
+            bp.scope === 'town-and-boss'
+              ? [
+                  {
+                    slug: sanitizeSliceSlug(`${bp.projectSlug}_town`),
+                    label: 'Town Hub',
+                    prompt: `Peaceful town courtyard for ${bp.artBiblePrompt}`,
+                  },
+                  {
+                    slug: sanitizeSliceSlug(`${bp.projectSlug}_sanctum`),
+                    label: 'Boss Sanctum',
+                    prompt: `Boss sanctum chamber for ${bp.roomPrompt}`,
+                  },
+                ]
+              : [
+                  {
+                    slug: sanitizeSliceSlug(`${bp.projectSlug}_entry`),
+                    label: 'Dungeon Entry',
+                    prompt: `Entry corridor leading into ${bp.roomPrompt}`,
+                  },
+                  {
+                    slug: sanitizeSliceSlug(`${bp.projectSlug}_boss_hall`),
+                    label: 'Boss Hall',
+                    prompt: `Boss vault arena for ${bp.roomPrompt}`,
+                  },
+                ];
+
+          for (const extra of extraDefs) {
+            if (baseRooms.some((r) => r.slug === extra.slug)) continue;
+            const bpRoom = generateMockRoomBlueprint({
+              prompt: extra.prompt,
+              cols: bp.roomCols,
+              rows: bp.roomRows,
+              tileSizePx: bp.tileSizePx,
+              availableEntitySlugs: bp.cast.map((c) => c.slug),
+            });
+            const savedExtra = await repo.saveRoom({
+              id: globalThis.crypto.randomUUID(),
+              projectId,
+              slug: extra.slug,
+              tileSetNodeId,
+              tileSetMode: 'blob47',
+              parallaxNodeId,
+              blueprint: {
+                ...bpRoom,
+                slug: extra.slug,
+                displayName: extra.label,
+              },
+              updatedAt: Date.now(),
+            });
+            baseRooms.push(savedExtra);
+          }
+
+          const roomNodes = baseRooms.map((r, idx) => ({
+            roomId: r.id,
+            label: r.blueprint.displayName || r.slug,
+            worldGridPos: { x: idx, y: 0 },
+            ...(idx === 0 ? { isStart: true } : {}),
+            ...(idx === baseRooms.length - 1 && baseRooms.length > 1 ? { isGoal: true } : {}),
+            grantsFlags: [],
+          }));
+          const edges = [];
+          for (let idx = 0; idx < baseRooms.length - 1; idx++) {
+            const fromR = baseRooms[idx]!;
+            const toR = baseRooms[idx + 1]!;
+            edges.push({
+              id: `edge_${idx}_${fromR.slug}_${toR.slug}`,
+              fromRoomId: fromR.id,
+              fromDoorId: `door_east_${idx}`,
+              toRoomId: toR.id,
+              toSpawnId: `spawn_west_${idx + 1}`,
+              bidirectional: true,
+              requiredFlags: [],
+            });
+          }
+
+          const worldGraph = WorldGraphSchema.parse({
+            id: `world-${projectId}`,
+            projectId,
+            name: `${bp.projectSlug} World Map`,
+            rooms: roomNodes,
+            edges,
+            updatedAt: Date.now(),
+          });
+          const grids = new Map<string, RoomCellGrid>(baseRooms.map((r) => [r.id, r.blueprint]));
+          const minimapPalette = deriveMinimapPaletteFromArtBible(project.artBible.palette);
+          const baked = bakeWorldMinimapRgba(worldGraph, grids, {
+            pxPerTile: 2,
+            palette: minimapPalette,
+          });
+          const minimapPng = encodeRgbaToPngBytes(baked.rgba, baked.width, baked.height);
+          const copy = new Uint8Array(minimapPng.byteLength);
+          copy.set(minimapPng);
+          const savedWorld = await repo.commitWorldGraphWithMinimap(
+            worldGraph,
+            new Blob([copy.buffer], { type: 'image/png' }),
+            JSON.stringify(baked.atlas),
+          );
+          return { artifactId: savedWorld.id };
+        }
+
+        case 'game-data': {
+          const base = createDefaultGameDataRegistry(projectId);
+          const enemyCast = bp.cast.filter((c) => c.role === 'enemy');
+          const enemies =
+            enemyCast.length > 0
+              ? enemyCast.map((member, idx) => ({
+                  id: member.slug,
+                  displayName: member.slug
+                    .split('_')
+                    .map((p) => (p ? p.charAt(0).toUpperCase() + p.slice(1) : ''))
+                    .join(' '),
+                  maxHp: 55 + idx * 25,
+                  armor: 2 + idx,
+                  attackDamage: 8 + idx * 3,
+                  attacksPerSecond: 1.0,
+                  xpReward: 20 + idx * 15,
+                  lootTableId: base.lootTables[0]?.id,
+                }))
+              : base.enemies;
+          const registry = GameDataRegistrySchema.parse({
+            ...base,
+            enemies,
+            updatedAt: Date.now(),
+          });
+          await repo.saveGameDataRegistry(registry);
+          return { artifactId: `gamedata_${registry.enemies.length}` };
+        }
+
+        case 'narrative-l10n': {
+          const base = createDefaultProjectNarrative(projectId);
+          const heroSlug = bp.cast[0]?.slug ?? 'hero';
+          const updated = applyMissingGlyphFix({
+            ...base,
+            localization: {
+              ...base.localization,
+              strings: {
+                ...base.localization.strings,
+                DLG_SLICE_INTRO: {
+                  en: `Advance, ${heroSlug}!`,
+                  pl: `Naprzód, ${heroSlug}!`,
+                  de: `Vorwärts, ${heroSlug}!`,
+                },
+              },
+            },
+          });
+          await repo.saveNarrativeBundle(updated);
+          return { artifactId: `narrative_${Object.keys(updated.localization.strings).length}` };
+        }
+
+        case 'self-heal-qa': {
+          const healed = await runAndCommitSelfHealingPreFlight(database, project);
+          return { artifactId: `healed_${healed.report.appliedFixes.length}` };
+        }
+
+        case 'gamekit-bundle': {
+          const [entities, spriteNodes, audioAssets, rooms] = await Promise.all([
+            repo.listEntities(projectId),
+            repo.listSpriteNodes(projectId),
+            repo.listAudioAssets(projectId),
+            repo.listRooms(projectId),
+          ]);
+          const templateId = bp.genre === 'top-down' ? 'top-down-action' : 'side-platformer';
+          const validated = await collectAndValidateProjectGodotSyncFiles(
+            database,
+            project,
+            entities,
+            spriteNodes,
+            audioAssets,
+            rooms,
+            { gameKitTemplate: templateId },
+          );
+          if (!validated.validation.ok) {
+            throw new Error(
+              `Godot scene graph validation failed (${validated.validation.brokenReferences.length} broken refs).`,
+            );
+          }
+          return {
+            artifactId: `gamekit_${validated.files.length}_files`,
+          };
+        }
       }
     } catch (err) {
       await repo.cleanupOrphanedBlobs().catch(() => undefined);
@@ -841,6 +1048,35 @@ export async function collectVerticalSliceGodotSyncFiles(
     repo.listRooms(project.id),
     repo.getQaReport(project.id),
   ]);
+
+  const isFullGame =
+    Boolean(job.blueprint.includeFullGameKit) ||
+    (job.blueprint.scope !== undefined && job.blueprint.scope !== 'single-arena');
+
+  if (isFullGame) {
+    const templateId = job.blueprint.genre === 'top-down' ? 'top-down-action' : 'side-platformer';
+    const fullFiles = await collectProjectGodotSyncFiles(
+      database,
+      project,
+      entities,
+      spriteNodes,
+      audioAssets,
+      rooms,
+      { gameKitTemplate: templateId },
+    );
+    if (!qaReport) {
+      return fullFiles;
+    }
+    return [
+      ...fullFiles,
+      {
+        relativePath: 'qa_report.json',
+        content: `${JSON.stringify(qaReport, null, 2)}\n`,
+      },
+    ].sort((a, b) =>
+      a.relativePath < b.relativePath ? -1 : a.relativePath > b.relativePath ? 1 : 0,
+    );
+  }
 
   const isPixelArt = project.artBible.artMode === 'pixel-art';
   const nodeById = new Map(spriteNodes.map((n) => [n.id, n]));

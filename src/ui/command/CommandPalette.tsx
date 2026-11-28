@@ -381,6 +381,14 @@ export function CommandPalette({ open, onOpenChange }: CommandPaletteProps) {
       const projId = activeProject.id;
       list.push(
         {
+          id: 'nav-director-studio',
+          title: 'Director Studio (1-Prompt Full Game)',
+          subtitle: 'Minimal-input reactive DAG for multi-room Godot 4 games',
+          category: 'navigation',
+          keywords: ['director', 'autopilot', 'game', 'slice', 'godot'],
+          execute: () => navigate({ screen: 'director', projectId: projId }),
+        },
+        {
           id: 'nav-audit',
           title: 'Project Asset Audit Matrix',
           subtitle: 'Check palette drift, mixel density, contrast, and batch fix',

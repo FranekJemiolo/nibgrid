@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { sha256HexSync } from './projectAudit';
 import {
   SliceExecutionTierSchema,
   VerticalSliceBlueprintSchema,
@@ -27,6 +28,11 @@ export const SliceNodeKindSchema = z.enum([
   'room',
   'main-scene',
   'visual-qa',
+  'world-graph',
+  'game-data',
+  'narrative-l10n',
+  'self-heal-qa',
+  'gamekit-bundle',
 ]);
 export type SliceNodeKind = z.infer<typeof SliceNodeKindSchema>;
 
@@ -39,6 +45,7 @@ export const SliceDagNodeSchema = z.object({
   metaSlug: z.string().optional(),
   artifactId: z.string().optional(),
   errorMessage: z.string().optional(),
+  inputHash: z.string().optional(),
 });
 export type SliceDagNode = z.infer<typeof SliceDagNodeSchema>;
 
@@ -160,7 +167,180 @@ export function buildSliceDagNodes(blueprint: VerticalSliceBlueprint): SliceDagN
     },
   );
 
-  return nodes;
+  const enableFullGame =
+    (blueprint.scope !== undefined && blueprint.scope !== 'single-arena') ||
+    blueprint.includeFullGameKit === true;
+
+  if (enableFullGame) {
+    nodes.push(
+      {
+        id: 'world_graph',
+        kind: 'world-graph',
+        label: 'M45 Multi-Room World Map & Portals',
+        dependsOn: ['room_level'],
+        status: 'pending',
+      },
+      {
+        id: 'game_data',
+        kind: 'game-data',
+        label: 'M46 GameData & TTK Balance',
+        dependsOn: [...entityNodeIds],
+        status: 'pending',
+      },
+      {
+        id: 'narrative_l10n',
+        kind: 'narrative-l10n',
+        label: 'M47 Dialogue & Font Glyphs',
+        dependsOn: ['bmfont', ...entityNodeIds],
+        status: 'pending',
+      },
+      {
+        id: 'self_heal_qa',
+        kind: 'self-heal-qa',
+        label: 'M52 Self-Healing Pre-Flight QA',
+        dependsOn: ['world_graph', 'game_data', 'narrative_l10n', 'visual_qa'],
+        status: 'pending',
+      },
+      {
+        id: 'gamekit_bundle',
+        kind: 'gamekit-bundle',
+        label: 'M50/M51 Turnkey Godot 4 GameKit',
+        dependsOn: ['main_scene', 'self_heal_qa', 'ui_theme'],
+        status: 'pending',
+      },
+    );
+  }
+
+  return nodes.map((node) => ({
+    ...node,
+    inputHash: computeDagNodeInputHash(node, blueprint),
+  }));
+}
+
+/**
+ * Computes a deterministic input fingerprint for a DAG node so editing part of a blueprint
+ * invalidates only affected downstream branches.
+ */
+export function computeDagNodeInputHash(
+  node: Pick<SliceDagNode, 'id' | 'kind' | 'metaSlug'>,
+  blueprint: VerticalSliceBlueprint,
+): string {
+  let payload: unknown;
+  switch (node.kind) {
+    case 'art-bible':
+      payload = {
+        artBiblePrompt: blueprint.artBiblePrompt,
+        artMode: blueprint.artMode,
+        paletteHex: blueprint.paletteHex,
+        tileSizePx: blueprint.tileSizePx,
+      };
+      break;
+    case 'golden-ref':
+      payload = {
+        artBiblePrompt: blueprint.artBiblePrompt,
+        paletteHex: blueprint.paletteHex,
+        hero: blueprint.cast[0],
+      };
+      break;
+    case 'entity':
+      payload = {
+        artBiblePrompt: blueprint.artBiblePrompt,
+        paletteHex: blueprint.paletteHex,
+        member: blueprint.cast.find((c) => c.slug === node.metaSlug) ?? node.metaSlug,
+      };
+      break;
+    case 'tileset':
+      payload = {
+        terrainPrompt: blueprint.terrainPrompt,
+        tileSizePx: blueprint.tileSizePx,
+        paletteHex: blueprint.paletteHex,
+      };
+      break;
+    case 'parallax':
+      payload = {
+        parallaxPrompt: blueprint.parallaxPrompt,
+        paletteHex: blueprint.paletteHex,
+      };
+      break;
+    case 'bmfont':
+    case 'ui-theme':
+      payload = {
+        uiThemePrompt: blueprint.uiThemePrompt,
+        paletteHex: blueprint.paletteHex,
+      };
+      break;
+    case 'room':
+    case 'world-graph':
+      payload = {
+        roomPrompt: blueprint.roomPrompt,
+        roomCols: blueprint.roomCols,
+        roomRows: blueprint.roomRows,
+        scope: blueprint.scope ?? 'single-arena',
+        castSlugs: blueprint.cast.map((c) => c.slug),
+      };
+      break;
+    default:
+      payload = {
+        projectSlug: blueprint.projectSlug,
+        genre: blueprint.genre,
+        scope: blueprint.scope ?? 'single-arena',
+        castSlugs: blueprint.cast.map((c) => c.slug),
+      };
+      break;
+  }
+  return sha256HexSync(JSON.stringify(payload));
+}
+
+/**
+ * Re-computes input hashes against `nextBlueprint` and marks any modified node AND its
+ * transitive dependents as `'pending'` while preserving unaffected `'done'` branches.
+ */
+export function invalidateStaleDagNodes(
+  job: SliceJobRecord,
+  nextBlueprint: VerticalSliceBlueprint,
+): SliceJobRecord {
+  const staleIds = new Set<string>();
+  const expectedNodes = buildSliceDagNodes(nextBlueprint);
+  const existingById = new Map(job.nodes.map((n) => [n.id, n]));
+
+  for (const exp of expectedNodes) {
+    const prev = existingById.get(exp.id);
+    if (!prev || (prev.inputHash && prev.inputHash !== exp.inputHash)) {
+      staleIds.add(exp.id);
+    }
+  }
+
+  let changed = true;
+  while (changed) {
+    changed = false;
+    for (const exp of expectedNodes) {
+      if (staleIds.has(exp.id)) continue;
+      if (exp.dependsOn.some((dep) => staleIds.has(dep))) {
+        staleIds.add(exp.id);
+        changed = true;
+      }
+    }
+  }
+
+  const nextNodes: SliceDagNode[] = expectedNodes.map((exp) => {
+    const prev = existingById.get(exp.id);
+    if (!prev || staleIds.has(exp.id)) {
+      return { ...exp, status: 'pending', errorMessage: undefined };
+    }
+    return {
+      ...prev,
+      dependsOn: [...exp.dependsOn],
+      inputHash: exp.inputHash,
+    };
+  });
+
+  return {
+    ...job,
+    blueprint: nextBlueprint,
+    nodes: nextNodes,
+    status: computeSliceJobStatus(nextNodes),
+    updatedAt: Date.now(),
+  };
 }
 
 export function createSliceJobRecord(
