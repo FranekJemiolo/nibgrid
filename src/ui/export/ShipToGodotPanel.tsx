@@ -7,11 +7,13 @@ import {
   Plug,
   Rocket,
   ShieldAlert,
+  Sparkles,
 } from 'lucide-react';
 import { db } from '../../db/database';
 import { GAMEKIT_TEMPLATES, type GameKitTemplateId } from '../../export/godotGameKitExporter';
 import type { GodotGraphValidationReport } from '../../export/godotProjectCompiler';
 import { createDefaultProjectNarrative } from '../../narrative/dialogueSchemas';
+import type { SelfHealingReport } from '../../processing/selfHealingQa';
 import { useAppStore } from '../../store/useAppStore';
 import {
   bindGodotDirectory,
@@ -20,6 +22,7 @@ import {
   isFsaaSupported,
   syncFilesToGodotDirectory,
 } from '../../sync/fsaaSyncEngine';
+import { runAndCommitSelfHealingPreFlight } from '../../sync/selfHealingCommit';
 import { FixItCardList } from '../audit/FixItCardList';
 import { buildFixItCards } from '../audit/fixItEngine';
 import { ContextualInspector } from '../layout/ContextualInspector';
@@ -51,12 +54,18 @@ export function ShipToGodotPanel() {
     narrativeBundle,
     syncTarget,
     refreshSyncTarget,
+    refreshSpriteNodes,
+    refreshWorldGraph,
+    refreshGameDataRegistry,
+    refreshNarrativeBundle,
   } = useAppStore();
 
   const [selectedTemplate, setSelectedTemplate] = useState<GameKitTemplateId>('side-platformer');
   const [statusNotice, setStatusNotice] = useState<string | null>(null);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [isSyncing, setIsSyncing] = useState(false);
+  const [isHealing, setIsHealing] = useState(false);
+  const [healReport, setHealReport] = useState<SelfHealingReport | null>(null);
   const [autoSyncEnabled, setAutoSyncEnabled] = useState<boolean>(readStoredAutoSync);
   const [graphReport, setGraphReport] = useState<GodotGraphValidationReport | null>(null);
 
@@ -290,11 +299,50 @@ export function ShipToGodotPanel() {
             </div>
           </div>
 
-          {/* Fix-It Cards */}
+          {/* Fix-It Cards + Self-Healing Pre-Flight */}
           <div className="rounded-lg border border-[var(--border-hairline)] bg-[var(--bg-surface)] p-3">
-            <h3 className="mb-2 text-xs font-semibold tracking-wider text-slate-300 uppercase">
-              Pre-Flight Fix-It Cards ({fixItCards.length})
-            </h3>
+            <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
+              <h3 className="text-xs font-semibold tracking-wider text-slate-300 uppercase">
+                Pre-Flight Fix-It Cards ({fixItCards.length})
+              </h3>
+              <button
+                type="button"
+                data-testid="ship-autoheal-btn"
+                disabled={isHealing}
+                onClick={() => {
+                  if (!activeProject || isHealing) return;
+                  setIsHealing(true);
+                  setErrorMsg(null);
+                  void runAndCommitSelfHealingPreFlight(db, activeProject)
+                    .then(async (res) => {
+                      setHealReport(res.report);
+                      await Promise.all([
+                        refreshSpriteNodes(activeProject.id),
+                        refreshWorldGraph(activeProject.id),
+                        refreshGameDataRegistry(activeProject.id),
+                        refreshNarrativeBundle(activeProject.id),
+                      ]);
+                    })
+                    .catch((err) => {
+                      setErrorMsg(err instanceof Error ? err.message : 'Auto-heal failed.');
+                    })
+                    .finally(() => setIsHealing(false));
+                }}
+                className="inline-flex items-center gap-1.5 rounded border border-indigo-500/45 bg-indigo-500/15 px-2.5 py-1 text-[11px] font-semibold text-indigo-200 hover:bg-indigo-500/25 disabled:opacity-50"
+              >
+                <Sparkles className="h-3 w-3" />
+                {isHealing ? 'Healing...' : 'Auto-Heal Pre-Flight'}
+              </button>
+            </div>
+            {healReport && (
+              <div
+                data-testid="ship-autoheal-report"
+                className="mb-2 rounded border border-emerald-500/35 bg-emerald-500/10 px-2.5 py-1.5 text-[11px] text-emerald-200"
+              >
+                Self-Healed {healReport.appliedFixes.length} issue(s) (before:{' '}
+                {healReport.beforeIssueCount} → after: {healReport.afterIssueCount} unresolved).
+              </div>
+            )}
             <FixItCardList cards={fixItCards} />
           </div>
         </div>

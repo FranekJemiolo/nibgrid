@@ -25,7 +25,8 @@ import {
   ZoomIn,
   ZoomOut,
 } from 'lucide-react';
-import { OFFLINE_MOCK_PROVIDER_ID, repository } from '../../db/database';
+import { OFFLINE_MOCK_PROVIDER_ID, db, repository } from '../../db/database';
+import { commitZeroTouchAssetToDb } from '../../sync/autoPipelineCommit';
 import {
   appendChildNode,
   deleteLeafNode,
@@ -225,6 +226,8 @@ export function SpriteStudio() {
     studioVariantCount: variantCount,
     setStudioVariantCount: setVariantCount,
     refreshSpriteNodes,
+    refreshEntities,
+    refreshAudioAssets,
     navigate,
   } = useAppStore();
 
@@ -249,6 +252,7 @@ export function SpriteStudio() {
   const [sheetMode, setSheetMode] = useState<PromptSheetLayout>('single');
   const [seed, setSeed] = useState(1024);
   const [isGenerating, setIsGenerating] = useState(false);
+  const [autoAssembling, setAutoAssembling] = useState(false);
   const [compareNodes, setCompareNodes] = useState<{ leftId: string; rightId: string } | null>(
     null,
   );
@@ -1560,6 +1564,29 @@ export function SpriteStudio() {
         ? 'bg-slate-950'
         : 'bg-slate-100';
 
+  const handleAutoAssembleActiveSprite = async () => {
+    if (!activeProject || !activeViewportNode || autoAssembling) return;
+    setAutoAssembling(true);
+    setProviderError(null);
+    try {
+      const res = await commitZeroTouchAssetToDb(db, activeProject, activeViewportNode);
+      await Promise.all([
+        refreshSpriteNodes(activeProject.id),
+        refreshEntities(activeProject.id),
+        refreshAudioAssets(activeProject.id),
+      ]);
+      setStatusMessage(
+        `Auto-Assembled "${res.entity.slug}" (${res.pipelineResult.summarySteps.join(' · ')})`,
+      );
+    } catch (err) {
+      setProviderError({
+        message: err instanceof Error ? err.message : 'Auto-assemble entity failed.',
+      });
+    } finally {
+      setAutoAssembling(false);
+    }
+  };
+
   return (
     <div data-testid="sprite-studio" className="flex flex-1 flex-col overflow-hidden">
       <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-800 bg-slate-900/70 px-4 py-2.5">
@@ -1580,20 +1607,33 @@ export function SpriteStudio() {
             </span>
           )}
           {activeViewportNode && (
-            <button
-              type="button"
-              data-testid="open-postprocess-btn"
-              onClick={() =>
-                void navigate({
-                  screen: 'inspector',
-                  projectId: activeProject.id,
-                  nodeId: activeViewportNode.id,
-                })
-              }
-              className="rounded-md bg-indigo-600 px-3 py-1 text-xs font-medium text-white hover:bg-indigo-500"
-            >
-              Post-Process & Export
-            </button>
+            <>
+              <button
+                type="button"
+                data-testid="auto-assemble-entity-btn"
+                disabled={autoAssembling}
+                onClick={() => void handleAutoAssembleActiveSprite()}
+                className="inline-flex items-center gap-1.5 rounded-md border border-emerald-500/45 bg-emerald-500/15 px-3 py-1 text-xs font-semibold text-emerald-200 hover:bg-emerald-500/25 disabled:opacity-50"
+                title="Run zero-touch pipeline: Cutout, Palette, Normal/Emission, Collider, Sockets, Shader, SFX & Entity .tscn"
+              >
+                <Sparkles className="h-3.5 w-3.5" />
+                {autoAssembling ? 'Assembling...' : 'Auto-Assemble Entity'}
+              </button>
+              <button
+                type="button"
+                data-testid="open-postprocess-btn"
+                onClick={() =>
+                  void navigate({
+                    screen: 'inspector',
+                    projectId: activeProject.id,
+                    nodeId: activeViewportNode.id,
+                  })
+                }
+                className="rounded-md bg-indigo-600 px-3 py-1 text-xs font-medium text-white hover:bg-indigo-500"
+              >
+                Post-Process & Export
+              </button>
+            </>
           )}
           <button
             type="button"

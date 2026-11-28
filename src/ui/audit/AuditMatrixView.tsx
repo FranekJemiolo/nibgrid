@@ -3,6 +3,7 @@ import { CheckSquare, ClipboardCheck, Sparkles, Volume2 } from 'lucide-react';
 import { decodeWav16 } from '../../audio/pcmPostProcess';
 import type { PcmBuffer } from '../../audio/types';
 import { db, repository } from '../../db/database';
+import { runAndCommitSelfHealingPreFlight } from '../../sync/selfHealingCommit';
 import {
   buildBatchDryRunSummary,
   cleanupSupersededBatchBlobs,
@@ -89,6 +90,9 @@ export function AuditMatrixView() {
     narrativeBundle,
     refreshSpriteNodes,
     refreshAudioAssets,
+    refreshWorldGraph,
+    refreshGameDataRegistry,
+    refreshNarrativeBundle,
     navigate,
   } = useAppStore();
 
@@ -113,6 +117,8 @@ export function AuditMatrixView() {
   const [isDecoding, setIsDecoding] = useState<boolean>(false);
 
   const [isRunningBatch, setIsRunningBatch] = useState<boolean>(false);
+  const [isAutoHealing, setIsAutoHealing] = useState<boolean>(false);
+  const [autoHealNotice, setAutoHealNotice] = useState<string | null>(null);
   const [batchProgress, setBatchProgress] = useState<BatchProgressEvent | null>(null);
   const [pendingBeforeScore, setPendingBeforeScore] = useState<{
     beforeScore: number;
@@ -635,6 +641,33 @@ export function AuditMatrixView() {
 
             <button
               type="button"
+              data-testid="ship-autoheal-btn"
+              disabled={isAutoHealing || !activeProject}
+              onClick={() => {
+                if (!activeProject || isAutoHealing) return;
+                setIsAutoHealing(true);
+                void runAndCommitSelfHealingPreFlight(db, activeProject)
+                  .then(async (res) => {
+                    await Promise.all([
+                      refreshSpriteNodes(activeProject.id),
+                      refreshWorldGraph(activeProject.id),
+                      refreshGameDataRegistry(activeProject.id),
+                      refreshNarrativeBundle(activeProject.id),
+                    ]);
+                    setAutoHealNotice(
+                      `Auto-Healed ${res.report.appliedFixes.length} issue(s) (${res.report.beforeIssueCount} → ${res.report.afterIssueCount} remaining).`,
+                    );
+                  })
+                  .finally(() => setIsAutoHealing(false));
+              }}
+              className="inline-flex items-center gap-1.5 rounded-md border border-emerald-500/45 bg-emerald-500/15 px-3 py-1.5 font-semibold text-emerald-200 hover:bg-emerald-500/25 disabled:opacity-50"
+            >
+              <Sparkles className="h-3.5 w-3.5" />
+              {isAutoHealing ? 'Healing...' : 'Auto-Heal Pre-Flight'}
+            </button>
+
+            <button
+              type="button"
               data-testid="audit-fix-all-btn"
               onClick={handleSelectFailingOrStale}
               className="inline-flex items-center gap-1.5 rounded-md bg-indigo-600 px-3 py-1.5 font-semibold text-white hover:bg-indigo-500"
@@ -644,6 +677,15 @@ export function AuditMatrixView() {
             </button>
           </div>
         </div>
+
+        {autoHealNotice && (
+          <div
+            data-testid="ship-autoheal-report"
+            className="border-b border-emerald-500/35 bg-emerald-500/10 px-4 py-2 text-xs text-emerald-200"
+          >
+            {autoHealNotice}
+          </div>
+        )}
 
         {fixItCards.length > 0 && (
           <div className="border-b border-slate-800 bg-slate-900/50 px-4 py-2.5">

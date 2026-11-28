@@ -15,6 +15,7 @@ import {
   X,
 } from 'lucide-react';
 import { db, repository } from '../../db/database';
+import { commitZeroTouchAssetToDb } from '../../sync/autoPipelineCommit';
 import {
   EntityDefinitionSchema,
   GodotBodyTypeSchema,
@@ -84,6 +85,8 @@ export function EntityHubView() {
     deleteEntityRecord,
     refreshSyncTarget,
     refreshSpriteNodes,
+    refreshAudioAssets,
+    refreshEntities,
   } = useAppStore();
 
   const [drawerOpen, setDrawerOpen] = useState(false);
@@ -100,6 +103,7 @@ export function EntityHubView() {
   const [draft, setDraft] = useState<EntityDefinition | null>(null);
   const [slugLocked, setSlugLocked] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [autoAssembling, setAutoAssembling] = useState(false);
   const [errorBanner, setErrorBanner] = useState<string | null>(null);
   const [statusBanner, setStatusBanner] = useState<string | null>(null);
   const [previewFiles, setPreviewFiles] = useState<readonly VirtualSyncFile[]>([]);
@@ -264,6 +268,31 @@ export function EntityHubView() {
     setDraft({ ...draft, audioAssetIds: next });
   };
 
+  const handleAutoAssembleLatest = async () => {
+    const latest =
+      [...spriteNodes].reverse().find((n) => n.kind !== 'sketch') ??
+      spriteNodes[spriteNodes.length - 1];
+    if (!latest || autoAssembling) return;
+    setAutoAssembling(true);
+    setErrorBanner(null);
+    setStatusBanner(null);
+    try {
+      const res = await commitZeroTouchAssetToDb(db, activeProject, latest);
+      await Promise.all([
+        refreshSpriteNodes(activeProject.id),
+        refreshEntities(activeProject.id),
+        refreshAudioAssets(activeProject.id),
+      ]);
+      setStatusBanner(
+        `Auto-Assembled "${res.entity.slug}" (${res.pipelineResult.summarySteps.join(' · ')}) — ready for Godot res:// sync.`,
+      );
+    } catch (err) {
+      setErrorBanner(err instanceof Error ? err.message : 'Auto-assemble failed.');
+    } finally {
+      setAutoAssembling(false);
+    }
+  };
+
   return (
     <div
       data-testid="entity-hub-view"
@@ -286,6 +315,17 @@ export function EntityHubView() {
           <span className="rounded border border-[var(--border-hairline)] bg-[var(--bg-well)] px-2.5 py-1 font-mono text-xs text-slate-300 tabular-nums">
             {entities.length} entit{entities.length === 1 ? 'y' : 'ies'}
           </span>
+          <button
+            type="button"
+            data-testid="auto-assemble-entity-btn"
+            disabled={spriteNodes.length === 0 || autoAssembling}
+            onClick={() => void handleAutoAssembleLatest()}
+            className="inline-flex items-center gap-1.5 rounded-md border border-emerald-500/45 bg-emerald-500/15 px-3 py-1.5 text-xs font-semibold text-emerald-200 hover:bg-emerald-500/25 disabled:opacity-50"
+            title="Zero-touch pipeline: Cutout, Palette, Normal, Collider, Sockets, Shader, SFX & Entity .tscn"
+          >
+            <Wand2 className="h-3.5 w-3.5" />
+            {autoAssembling ? 'Assembling...' : 'Auto-Assemble Entity'}
+          </button>
           <button
             type="button"
             data-testid="entity-director-open-btn"
