@@ -1,6 +1,8 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState, type ChangeEvent } from 'react';
 import {
+  ArrowDownToLine,
   CheckCircle2,
+  Copy,
   FileArchive,
   FolderSync,
   Gamepad2,
@@ -8,6 +10,7 @@ import {
   Rocket,
   ShieldAlert,
   Sparkles,
+  Terminal,
 } from 'lucide-react';
 import { db } from '../../db/database';
 import { GAMEKIT_TEMPLATES, type GameKitTemplateId } from '../../export/godotGameKitExporter';
@@ -19,22 +22,29 @@ import {
   bindGodotDirectory,
   collectAndValidateProjectGodotSyncFiles,
   downloadGodotSyncZip,
+  getBoundDirectoryHandle,
   isFsaaSupported,
+  pullGodotEditorDeltaFromDirectory,
   syncFilesToGodotDirectory,
 } from '../../sync/fsaaSyncEngine';
 import { runAndCommitSelfHealingPreFlight } from '../../sync/selfHealingCommit';
 import { FixItCardList } from '../audit/FixItCardList';
 import { buildFixItCards } from '../audit/fixItEngine';
 import { ContextualInspector } from '../layout/ContextualInspector';
+import { GamePipelineRibbon } from '../layout/GamePipelineRibbon';
 
 const AUTOSYNC_STORAGE_KEY = 'nibgrid.autoSync';
+const PRESERVE_SCAFFOLDS_STORAGE_KEY = 'nibgrid.preserveUserScaffolds';
+const HEADLESS_CHECK_CMD = 'godot4 --headless --path . --quit --check-only';
 
-function readStoredAutoSync(): boolean {
-  if (typeof window === 'undefined') return false;
+function readStoredFlag(key: string, fallback: boolean): boolean {
+  if (typeof window === 'undefined') return fallback;
   try {
-    return window.localStorage.getItem(AUTOSYNC_STORAGE_KEY) === 'true';
+    const raw = window.localStorage.getItem(key);
+    if (raw === null) return fallback;
+    return raw === 'true';
   } catch {
-    return false;
+    return fallback;
   }
 }
 
@@ -55,6 +65,8 @@ export function ShipToGodotPanel() {
     syncTarget,
     refreshSyncTarget,
     refreshSpriteNodes,
+    refreshEntities,
+    refreshRooms,
     refreshWorldGraph,
     refreshGameDataRegistry,
     refreshNarrativeBundle,
@@ -62,12 +74,21 @@ export function ShipToGodotPanel() {
 
   const [selectedTemplate, setSelectedTemplate] = useState<GameKitTemplateId>('side-platformer');
   const [statusNotice, setStatusNotice] = useState<string | null>(null);
+  const [deltaNotice, setDeltaNotice] = useState<string | null>(null);
+  const [copiedCli, setCopiedCli] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [isSyncing, setIsSyncing] = useState(false);
+  const [isPullingDelta, setIsPullingDelta] = useState(false);
   const [isHealing, setIsHealing] = useState(false);
   const [healReport, setHealReport] = useState<SelfHealingReport | null>(null);
-  const [autoSyncEnabled, setAutoSyncEnabled] = useState<boolean>(readStoredAutoSync);
+  const [autoSyncEnabled, setAutoSyncEnabled] = useState<boolean>(() =>
+    readStoredFlag(AUTOSYNC_STORAGE_KEY, false),
+  );
+  const [preserveUserScaffolds, setPreserveUserScaffolds] = useState<boolean>(() =>
+    readStoredFlag(PRESERVE_SCAFFOLDS_STORAGE_KEY, true),
+  );
   const [graphReport, setGraphReport] = useState<GodotGraphValidationReport | null>(null);
+  const deltaFileInputRef = useRef<HTMLInputElement | null>(null);
 
   useEffect(() => {
     if (!activeProject) {
@@ -126,6 +147,58 @@ export function ShipToGodotPanel() {
     }
   };
 
+  const handleTogglePreserveScaffolds = () => {
+    const next = !preserveUserScaffolds;
+    setPreserveUserScaffolds(next);
+    if (typeof window !== 'undefined') {
+      try {
+        window.localStorage.setItem(PRESERVE_SCAFFOLDS_STORAGE_KEY, next ? 'true' : 'false');
+      } catch {
+        // Ignore storage failure
+      }
+    }
+  };
+
+  const handlePullDelta = async (rawJsonOverride?: string) => {
+    if (!activeProject) return;
+    setIsPullingDelta(true);
+    setErrorMsg(null);
+    try {
+      const res = await pullGodotEditorDeltaFromDirectory(
+        db,
+        activeProject.id,
+        entities,
+        rooms,
+        rawJsonOverride,
+      );
+      await Promise.all([refreshEntities(activeProject.id), refreshRooms(activeProject.id)]);
+      const unmatchedSuffix =
+        res.unmatchedSlugs.length > 0 ? ` (${res.unmatchedSlugs.length} unmatched)` : '';
+      setDeltaNotice(
+        `Pulled Godot tweaks: ${res.updatedEntityCount} entity(s), ${res.updatedRoomCount} room(s) updated${unmatchedSuffix}.`,
+      );
+    } catch (err) {
+      setErrorMsg(err instanceof Error ? err.message : 'Failed to pull .nibgrid_sync_delta.json.');
+    } finally {
+      setIsPullingDelta(false);
+    }
+  };
+
+  const handleDeltaFileUpload = (e: ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    e.target.value = '';
+    if (!file) return;
+    void file.text().then((text) => handlePullDelta(text));
+  };
+
+  const handleCopyCli = () => {
+    if (typeof navigator !== 'undefined' && navigator.clipboard) {
+      void navigator.clipboard.writeText(HEADLESS_CHECK_CMD);
+    }
+    setCopiedCli(true);
+    window.setTimeout(() => setCopiedCli(false), 1800);
+  };
+
   const handleSync = async (withGameKit: boolean, forceZip = false) => {
     if (!activeProject) return;
     setIsSyncing(true);
@@ -155,13 +228,17 @@ export function ShipToGodotPanel() {
       if (!syncTarget?.directoryHandle) {
         await bindGodotDirectory(db, activeProject.id);
       }
-      const summary = await syncFilesToGodotDirectory(db, activeProject.id, files);
+      const summary = await syncFilesToGodotDirectory(db, activeProject.id, files, {
+        preserveUserScaffolds,
+      });
       await refreshSyncTarget(activeProject.id);
       const removedSuffix = summary.removedCount > 0 ? `, ${summary.removedCount} pruned` : '';
+      const preservedSuffix =
+        summary.preservedCount > 0 ? `, ${summary.preservedCount} scaffold(s) preserved` : '';
       setStatusNotice(
         withGameKit
-          ? `Synced Turnkey GameKit (${selectedTemplate}) + addons/nibgrid_sync to Godot res:// (${summary.writtenCount} written, ${summary.plan.unchangedPaths.length} unchanged${removedSuffix}).`
-          : `Synced project assets to Godot res:// (${summary.writtenCount} written, ${summary.plan.unchangedPaths.length} unchanged${removedSuffix}).`,
+          ? `Synced Turnkey GameKit (${selectedTemplate}) + addons/nibgrid_sync to Godot res:// (${summary.writtenCount} written, ${summary.plan.unchangedPaths.length} unchanged${removedSuffix}${preservedSuffix}).`
+          : `Synced project assets to Godot res:// (${summary.writtenCount} written, ${summary.plan.unchangedPaths.length} unchanged${removedSuffix}${preservedSuffix}).`,
       );
     } catch (err) {
       setErrorMsg(err instanceof Error ? err.message : 'Failed to sync project to Godot.');
@@ -214,6 +291,16 @@ export function ShipToGodotPanel() {
           <label className="inline-flex cursor-pointer items-center gap-1.5 rounded border border-slate-800 bg-slate-900/70 px-2.5 py-1 text-[11px] text-slate-300">
             <input
               type="checkbox"
+              data-testid="ship-preserve-scaffolds-toggle"
+              checked={preserveUserScaffolds}
+              onChange={handleTogglePreserveScaffolds}
+              className="accent-emerald-500"
+            />
+            Preserve User Scaffolds
+          </label>
+          <label className="inline-flex cursor-pointer items-center gap-1.5 rounded border border-slate-800 bg-slate-900/70 px-2.5 py-1 text-[11px] text-slate-300">
+            <input
+              type="checkbox"
               data-testid="ship-autosync-toggle"
               checked={autoSyncEnabled}
               onChange={handleToggleAutoSync}
@@ -221,6 +308,34 @@ export function ShipToGodotPanel() {
             />
             Auto-Sync on Commit
           </label>
+          <input
+            ref={deltaFileInputRef}
+            type="file"
+            accept=".json"
+            data-testid="ship-delta-file-input"
+            onChange={handleDeltaFileUpload}
+            className="hidden"
+          />
+          <button
+            type="button"
+            data-testid="ship-pull-delta-btn"
+            disabled={isPullingDelta}
+            onClick={() => {
+              if (!activeProject) return;
+              void getBoundDirectoryHandle(db, activeProject.id).then((boundHandle) => {
+                if (boundHandle) {
+                  void handlePullDelta();
+                } else {
+                  deltaFileInputRef.current?.click();
+                }
+              });
+            }}
+            className="inline-flex items-center gap-1.5 rounded border border-amber-500/40 bg-amber-500/10 px-2.5 py-1.5 text-xs font-medium text-amber-200 hover:bg-amber-500/20 disabled:opacity-50"
+            title="Reconcile .nibgrid_sync_delta.json edits back from Godot Inspector"
+          >
+            <ArrowDownToLine className="h-3.5 w-3.5" />
+            {isPullingDelta ? 'Pulling...' : 'Pull Godot Tweaks'}
+          </button>
           <button
             type="button"
             data-testid="ship-download-zip-btn"
@@ -254,12 +369,22 @@ export function ShipToGodotPanel() {
         </div>
       </div>
 
+      <GamePipelineRibbon currentStageId="ship" />
+
       {statusNotice && (
         <div
           data-testid="ship-status-notice"
           className="rounded border border-emerald-500/30 bg-emerald-500/10 px-3 py-2 text-xs text-emerald-200"
         >
           {statusNotice}
+        </div>
+      )}
+      {deltaNotice && (
+        <div
+          data-testid="ship-delta-status"
+          className="rounded border border-amber-500/35 bg-amber-500/10 px-3 py-2 text-xs text-amber-200"
+        >
+          {deltaNotice}
         </div>
       )}
       {errorMsg && (
@@ -347,8 +472,36 @@ export function ShipToGodotPanel() {
           </div>
         </div>
 
-        <div className="lg:col-span-5">
+        <div className="flex flex-col gap-4 lg:col-span-5">
           <ContextualInspector />
+
+          <div
+            data-testid="ship-headless-check-box"
+            className="flex flex-col gap-2 rounded-lg border border-[var(--border-hairline)] bg-[var(--bg-surface)] p-3 text-xs text-slate-200"
+          >
+            <div className="flex items-center justify-between gap-2">
+              <div className="flex items-center gap-1.5 font-semibold text-white">
+                <Terminal className="h-3.5 w-3.5 text-emerald-400" />
+                <span>Headless Godot 4 Verification</span>
+              </div>
+              <button
+                type="button"
+                data-testid="ship-copy-headless-cli-btn"
+                onClick={handleCopyCli}
+                className="inline-flex items-center gap-1 rounded border border-slate-700 bg-slate-900 px-2 py-0.5 text-[10px] font-medium text-slate-300 hover:border-slate-500 hover:text-white"
+              >
+                <Copy className="h-3 w-3" />
+                {copiedCli ? 'Copied' : 'Copy CLI'}
+              </button>
+            </div>
+            <p className="text-[11px] text-slate-400">
+              Run in your bound Godot folder after syncing to compile-check all `.gd` and `.tscn`
+              scenes headlessly (auto-run inside the VS Code Extension):
+            </p>
+            <code className="overflow-x-auto rounded border border-slate-800 bg-slate-950 px-2.5 py-1.5 font-mono text-[10px] text-emerald-300">
+              {HEADLESS_CHECK_CMD}
+            </code>
+          </div>
         </div>
       </div>
     </div>

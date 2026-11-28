@@ -11,6 +11,10 @@ export interface ComposableEntityInput {
   readonly isPixelArt?: boolean;
   readonly activeAttackFrames?: readonly number[];
   readonly colliderHalfSizePx?: { readonly x: number; readonly y: number };
+  readonly controllerScriptResPath?: string;
+  readonly topDownMovement?: boolean;
+  readonly jumpVelocityPx?: number;
+  readonly attackDamage?: number;
 }
 
 function escapeGodotString(value: string): string {
@@ -144,6 +148,14 @@ export function exportComposableEntityTscn(input: ComposableEntityInput): string
     );
   }
 
+  let ctrlExtId: string | null = null;
+  if (input.controllerScriptResPath?.trim()) {
+    ctrlExtId = `${nextExt++}_ctrl`;
+    extResources.push(
+      `[ext_resource type="Script" path="${escapeGodotString(input.controllerScriptResPath.trim())}" id="${ctrlExtId}"]`,
+    );
+  }
+
   const subResources: string[] = [
     [
       '[sub_resource type="RectangleShape2D" id="BodyShape_1"]',
@@ -212,6 +224,19 @@ export function exportComposableEntityTscn(input: ComposableEntityInput): string
     '',
     ...subResources.map((s) => `${s}\n`),
     `[node name="${rootName}" type="CharacterBody2D"]`,
+    ...(ctrlExtId ? [`script = ExtResource("${ctrlExtId}")`] : []),
+    ...(ctrlExtId && input.moveSpeedPx !== undefined
+      ? [`move_speed = ${finiteFloat(input.moveSpeedPx, 140)}`]
+      : []),
+    ...(ctrlExtId && role === 'player' && input.jumpVelocityPx !== undefined
+      ? [`jump_velocity = ${finiteFloat(input.jumpVelocityPx, -310)}`]
+      : []),
+    ...(ctrlExtId && input.attackDamage !== undefined && role !== 'npc'
+      ? [`attack_damage = ${finiteFloat(input.attackDamage, 20)}`]
+      : []),
+    ...(ctrlExtId && input.topDownMovement !== undefined && role !== 'npc'
+      ? [`top_down_movement = ${input.topDownMovement ? 'true' : 'false'}`]
+      : []),
     `collision_layer = ${collisionLayer}`,
     `collision_mask = ${collisionMask}`,
     `metadata/nibgrid_entity_slug = "${escapeGodotString(slug)}"`,

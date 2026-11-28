@@ -60,6 +60,7 @@ export interface FileSystemWritableLike {
 export interface FileSystemFileHandleLike {
   readonly name?: string;
   createWritable: () => Promise<FileSystemWritableLike>;
+  getFile?: () => Promise<{ readonly size: number; text: () => Promise<string> }>;
 }
 
 export interface FileSystemDirectoryHandleLike {

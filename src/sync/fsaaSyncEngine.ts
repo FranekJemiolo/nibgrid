@@ -44,6 +44,12 @@ import {
   type RoomCellGrid,
 } from '../world/minimapBaker';
 import { computeSyncDiff, virtualFileToBytes, type SyncDiffPlan } from './syncDiff';
+import {
+  applyGodotBackSyncDelta,
+  parseGodotBackSyncDelta,
+  type GodotBackSyncDelta,
+} from './bidirectionalSync';
+import { classifySyncFileOwnership, filterSyncPlanForOwnership } from './syncOwnership';
 
 type WindowWithDirectoryPicker = Window & {
   showDirectoryPicker?: (options?: {
@@ -190,10 +196,78 @@ export async function removeFilesFromDirectoryHandle(
   return removedCount;
 }
 
+/**
+ * Reads a UTF-8 text file from a bound `FileSystemDirectoryHandle` if supported and present.
+ */
+export async function readTextFileFromDirectoryHandle(
+  rootHandle: FileSystemDirectoryHandleLike,
+  relativePath: string,
+): Promise<string | null> {
+  const segments = relativePath
+    .replace(/\\/g, '/')
+    .split('/')
+    .filter((s) => s.length > 0 && s !== '.');
+  if (segments.length === 0 || segments.some((s) => s === '..')) {
+    return null;
+  }
+  const fileName = segments.pop()!;
+  try {
+    let currentDir = rootHandle;
+    for (const dirSeg of segments) {
+      currentDir = await currentDir.getDirectoryHandle(dirSeg, { create: false });
+    }
+    const fileHandle = await currentDir.getFileHandle(fileName, { create: false });
+    if (typeof fileHandle.getFile !== 'function') {
+      return null;
+    }
+    const f = await fileHandle.getFile();
+    return await f.text();
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Checks whether a `scaffold-once` file already exists in `previousHashes` or on disk with content.
+ */
+export async function scaffoldExistsInDirectoryHandle(
+  rootHandle: FileSystemDirectoryHandleLike,
+  relativePath: string,
+  previousHashes: Readonly<Record<string, string>>,
+): Promise<boolean> {
+  if (relativePath in previousHashes) {
+    return true;
+  }
+  const segments = relativePath
+    .replace(/\\/g, '/')
+    .split('/')
+    .filter((s) => s.length > 0 && s !== '.');
+  if (segments.length === 0 || segments.some((s) => s === '..')) {
+    return false;
+  }
+  const fileName = segments.pop()!;
+  try {
+    let currentDir = rootHandle;
+    for (const dirSeg of segments) {
+      currentDir = await currentDir.getDirectoryHandle(dirSeg, { create: false });
+    }
+    const fileHandle = await currentDir.getFileHandle(fileName, { create: false });
+    if (typeof fileHandle.getFile !== 'function') {
+      return false;
+    }
+    const f = await fileHandle.getFile();
+    return f.size > 0;
+  } catch {
+    return false;
+  }
+}
+
 export interface GodotSyncExecutionResult {
   readonly plan: SyncDiffPlan;
   readonly writtenCount: number;
   readonly removedCount: number;
+  readonly preservedCount: number;
+  readonly preservedPaths: readonly string[];
   readonly folderName: string;
   readonly syncedAt: number;
   readonly record: GodotSyncTargetRecord;
@@ -201,12 +275,14 @@ export interface GodotSyncExecutionResult {
 
 /**
  * Executes a SHA-256 diffed incremental sync to a bound Godot `res://` directory handle,
- * writing ONLY `added` and `modified` files and pruning `removedPaths` so stale exports do not linger.
+ * writing ONLY `added` and `modified` files, pruning orphaned Nibgrid-managed files,
+ * and preserving `scaffold-once` user-editable scripts/project entrypoints by default.
  */
 export async function syncFilesToGodotDirectory(
   database: NibgridDatabase,
   projectId: string,
   files: readonly VirtualSyncFile[],
+  options?: { readonly preserveUserScaffolds?: boolean },
 ): Promise<GodotSyncExecutionResult> {
   const repo = new NibgridRepository(database);
   const existing = await repo.getSyncTarget(projectId);
@@ -228,15 +304,38 @@ export async function syncFilesToGodotDirectory(
     }
   }
 
+  const preserveUserScaffolds = options?.preserveUserScaffolds ?? true;
   const previousHashes = existing?.lastSyncedHashes ?? {};
   const { plan, nextHashes } = await computeSyncDiff(files, previousHashes);
-  const toWrite = [...plan.added, ...plan.modified];
+
+  const existingScaffoldPaths = new Set<string>();
+  const candidates = [...plan.added, ...plan.modified];
+  for (const file of candidates) {
+    if (classifySyncFileOwnership(file.relativePath) === 'scaffold-once') {
+      if (await scaffoldExistsInDirectoryHandle(rootHandle, file.relativePath, previousHashes)) {
+        existingScaffoldPaths.add(file.relativePath);
+      }
+    }
+  }
+
+  const filtered = filterSyncPlanForOwnership(plan, existingScaffoldPaths, preserveUserScaffolds);
+
+  for (const relPath of filtered.preservedPaths) {
+    nextHashes[relPath] = previousHashes[relPath] ?? 'scaffold-preserved';
+  }
+  for (const relPath of plan.removedPaths) {
+    if (classifySyncFileOwnership(relPath) === 'scaffold-once' && previousHashes[relPath]) {
+      nextHashes[relPath] = previousHashes[relPath]!;
+    }
+  }
 
   const writtenCount =
-    toWrite.length > 0 ? await writeFilesToDirectoryHandle(rootHandle, toWrite) : 0;
+    filtered.toWrite.length > 0
+      ? await writeFilesToDirectoryHandle(rootHandle, filtered.toWrite)
+      : 0;
   const removedCount =
-    plan.removedPaths.length > 0
-      ? await removeFilesFromDirectoryHandle(rootHandle, plan.removedPaths)
+    filtered.toRemove.length > 0
+      ? await removeFilesFromDirectoryHandle(rootHandle, filtered.toRemove)
       : 0;
 
   const syncedAt = Date.now();
@@ -245,7 +344,7 @@ export async function syncFilesToGodotDirectory(
     folderName: existing?.folderName || rootHandle.name || 'godot_res',
     lastSyncedHashes: nextHashes,
     lastSyncedAt:
-      toWrite.length > 0 || removedCount > 0 || !existing || existing.lastSyncedAt === null
+      filtered.toWrite.length > 0 || removedCount > 0 || !existing || existing.lastSyncedAt === null
         ? syncedAt
         : existing.lastSyncedAt,
     directoryHandle: rootHandle,
@@ -255,9 +354,85 @@ export async function syncFilesToGodotDirectory(
     plan,
     writtenCount,
     removedCount,
+    preservedCount: filtered.preservedPaths.length,
+    preservedPaths: filtered.preservedPaths,
     folderName: updatedRecord.folderName,
     syncedAt,
     record: updatedRecord,
+  };
+}
+
+export interface PullGodotDeltaResult {
+  readonly delta: GodotBackSyncDelta;
+  readonly updatedEntityCount: number;
+  readonly updatedRoomCount: number;
+  readonly unmatchedSlugs: readonly string[];
+}
+
+/**
+ * Reads `res://.nibgrid_sync_delta.json` from the bound Godot folder (or an explicit JSON payload),
+ * reconciles inspector/room tweaks back into Nibgrid Dexie entities & rooms cleanly.
+ */
+export async function pullGodotEditorDeltaFromDirectory(
+  database: NibgridDatabase,
+  projectId: string,
+  entities: readonly EntityDefinition[],
+  rooms: readonly StoredRoomRecord[],
+  rawJsonOverride?: string,
+): Promise<PullGodotDeltaResult> {
+  const repo = new NibgridRepository(database);
+  let rawJson = rawJsonOverride ?? null;
+
+  if (rawJson === null) {
+    const existing = await repo.getSyncTarget(projectId);
+    const rootHandle = existing?.directoryHandle ?? inMemoryHandles.get(projectId) ?? null;
+    if (!rootHandle) {
+      throw new Error(
+        'No bound Godot res:// directory handle found. Bind a folder or upload .nibgrid_sync_delta.json.',
+      );
+    }
+    rawJson = await readTextFileFromDirectoryHandle(rootHandle, '.nibgrid_sync_delta.json');
+    if (!rawJson) {
+      throw new Error(
+        'No .nibgrid_sync_delta.json found in the bound Godot folder yet. Click "Push Tweaks to Nibgrid" in Godot Inspector first.',
+      );
+    }
+  }
+
+  const delta = parseGodotBackSyncDelta(rawJson);
+  const reconciled = applyGodotBackSyncDelta({ entities, rooms, delta });
+
+  const oldEntityById = new Map(entities.map((e) => [e.id, e]));
+  for (const nextEnt of reconciled.entities) {
+    if (oldEntityById.get(nextEnt.id) !== nextEnt) {
+      await repo.saveEntity(nextEnt);
+    }
+  }
+
+  const oldRoomById = new Map(rooms.map((r) => [r.id, r]));
+  for (const nextRoom of reconciled.rooms) {
+    if (oldRoomById.get(nextRoom.id) !== nextRoom) {
+      await repo.saveRoom(nextRoom);
+    }
+  }
+
+  const knownEntitySlugs = new Set(entities.map((e) => sanitizeEntitySlug(e.slug)));
+  const knownRoomSlugs = new Set(rooms.map((r) => sanitizeRoomSlug(r.slug)));
+  const unmatchedSlugs: string[] = [];
+  for (const ov of delta.entityStatOverrides) {
+    const clean = sanitizeEntitySlug(ov.slug);
+    if (!knownEntitySlugs.has(clean)) unmatchedSlugs.push(clean);
+  }
+  for (const ov of delta.roomSpawnOverrides) {
+    const clean = sanitizeRoomSlug(ov.roomSlug);
+    if (!knownRoomSlugs.has(clean)) unmatchedSlugs.push(clean);
+  }
+
+  return {
+    delta,
+    updatedEntityCount: reconciled.updatedEntityCount,
+    updatedRoomCount: reconciled.updatedRoomCount,
+    unmatchedSlugs,
   };
 }
 

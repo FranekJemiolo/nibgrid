@@ -1,11 +1,13 @@
 import { sanitizeEntitySlug, type EntityDefinition } from '../domain/entitySchema';
 import {
+  GAMEKIT_TEMPLATES,
   exportDefaultAudioBusLayoutTres,
   exportGameShellGd,
   exportPlayableMainTscn,
   exportProjectGodot,
   type GameKitTemplateId,
 } from './godotGameKitExporter';
+import { exportGameKitRuntimeScripts } from './godotRuntimeScripts';
 import {
   exportComposableEntityTscn,
   exportEntityComponentScripts,
@@ -157,6 +159,7 @@ export function assembleGodotGameKitFiles(input: AssembleGameKitInput): VirtualS
       ...(input.isPixelArt !== undefined ? { isPixelArt: input.isPixelArt } : {}),
       includeWorldAutoload: input.hasWorldGraph,
       includeDialogueAutoload: input.hasDialogue,
+      includeSaveAutoload: true,
     }),
   });
 
@@ -169,6 +172,10 @@ export function assembleGodotGameKitFiles(input: AssembleGameKitInput): VirtualS
     relativePath: 'scripts/GameShell.gd',
     content: exportGameShellGd(input.templateId, input.projectName),
   });
+
+  for (const rtScript of exportGameKitRuntimeScripts(input.templateId)) {
+    files.push(rtScript);
+  }
 
   files.push({
     relativePath: 'main.tscn',
@@ -184,6 +191,9 @@ export function assembleGodotGameKitFiles(input: AssembleGameKitInput): VirtualS
   for (const comp of exportEntityComponentScripts()) {
     files.push(comp);
   }
+
+  const activeTemplate =
+    GAMEKIT_TEMPLATES.find((t) => t.id === input.templateId) ?? GAMEKIT_TEMPLATES[0]!;
 
   const targetEntities =
     input.entities.length > 0
@@ -217,13 +227,27 @@ export function assembleGodotGameKitFiles(input: AssembleGameKitInput): VirtualS
             : 'enemy';
     const moveSpeedPx =
       'playtestConfig' in ent && ent.playtestConfig ? ent.playtestConfig.moveSpeedPx : undefined;
+    const jumpVelocityPx =
+      'playtestConfig' in ent && ent.playtestConfig ? ent.playtestConfig.jumpVelocityPx : undefined;
+    const attackDamage =
+      'playtestConfig' in ent && ent.playtestConfig ? ent.playtestConfig.attackDamage : undefined;
+    const controllerScriptResPath =
+      inferredRole === 'player'
+        ? 'res://scripts/runtime/PlayerController.gd'
+        : inferredRole === 'npc'
+          ? 'res://scripts/runtime/NpcController.gd'
+          : 'res://scripts/runtime/EnemyAiController.gd';
     const resolvedAssets = input.resolvedEntityAssets?.[slug];
     const prefabInput: ComposableEntityInput = {
       slug,
       displayName: ent.displayName,
       role: inferredRole,
       maxHp,
+      controllerScriptResPath,
+      topDownMovement: activeTemplate.topDownMovement,
       ...(moveSpeedPx !== undefined ? { moveSpeedPx } : {}),
+      ...(jumpVelocityPx !== undefined ? { jumpVelocityPx } : {}),
+      ...(attackDamage !== undefined ? { attackDamage } : {}),
       ...(resolvedAssets?.spriteResPath ? { spriteResPath: resolvedAssets.spriteResPath } : {}),
       ...(resolvedAssets?.canvasTextureResPath
         ? { canvasTextureResPath: resolvedAssets.canvasTextureResPath }

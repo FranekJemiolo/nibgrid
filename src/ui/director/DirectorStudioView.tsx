@@ -43,6 +43,7 @@ import {
   isFsaaSupported,
   syncFilesToGodotDirectory,
 } from '../../sync/fsaaSyncEngine';
+import { GamePipelineRibbon } from '../layout/GamePipelineRibbon';
 import { BlobImage } from '../components/BlobImage';
 
 const DIRECTOR_PITCH_PRESETS: readonly {
@@ -443,6 +444,8 @@ export function DirectorStudioView() {
           </span>
         </div>
       </div>
+
+      <GamePipelineRibbon currentStageId="vision" />
 
       {/* 1. Creative Brief & Scope */}
       <section className="space-y-3 rounded-xl border border-[var(--border-hairline)] bg-[var(--bg-panel)] p-4">

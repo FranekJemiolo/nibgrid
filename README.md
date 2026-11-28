@@ -137,6 +137,7 @@ _Regenerate PWA screenshots against GitHub Pages (`SHOT_URL=https://franekjemiol
 | Zero-Touch Entity Assembly & Self-Healing QA      | **`Sprite Studio`**, **`Entities`**, **`Ship`**| `$0.00 Local` (Pure-TS Pipeline)             | 1-click Cutout, Palette, Normal, Hull, Sockets, Shader, SFX, `.tscn` + auto-healed glyphs/traps/palette |
 | Full-Game Director Studio Autopilot               | **`Director`** Header / `#/project/:id/director`| `$0.00` Instant Draft or Hybrid/Full BYOK    | 17-node reactive DAG, multi-room `WorldGraph`, `GameDataRegistry`, `NarrativeBundle` & F5 GameKit ZIP  |
 | Director Verbs in Composer (`Cmd+L`) & MCP        | **`Composer`** / VS Code `lm` & MCP Server     | `$0.00` Mock / BYOK / Antigravity MCP        | 13 Studio Tools (`create_entity_from_prompt`, `create_or_connect_room`, `tune_game_balance`, etc.)     |
+| Playable F5 Runtime, Scaffold Ownership & Delta   | **`1. Style & Vision`** → **`4. Ship to Godot`**| `$0.00 Local` (GDScript 4 + FSAA Ownership) | `PlayerController.gd`, `EnemyAiController.gd`, `NpcController.gd`, `SaveManager.gd`, scaffold-once lock & Pull Godot Tweaks |
 
 ---
 

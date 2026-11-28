@@ -633,3 +633,19 @@ All image-manipulation stages operate on raw `Uint8ClampedArray` buffers in `src
 ## 123. Streamlined 4-Stage UX, Wired Creator/Pro Controls & Decluttered Tabs (Milestone 55)
 
 - **Wired Creator/Pro State (`src/state/uxModeStore.ts`, `src/ui/layout/ContextualInspector.tsx`, `src/sync/autoPipelineCommit.ts`):** Binds `useUxModeStore` `proDefaults` (`sobelBevelStrength`, `rdpEpsilonPx`) to controlled **Pro Technical Parameters** sliders and `autoPipelineCommit`, wires curated Creator presets (`crisp-16bit`, `cozy-handdrawn`, `dynamic-torchlight`) to live `ArtBible.artMode` persistence, adds Creator-mode tucking helpers in `ShaderStudio.tsx` and `EntityHubView.tsx`, and declutters `prop`/`tile` primary inspector tabs while preserving all 21 parity-checked tabs and adding `nav-director-studio`.
+
+## 124. Playable F5 Godot 4 Runtime Scripts & `GameShell.gd` Glue (Milestone 56)
+
+- **Turnkey Runtime GDScript Controllers (`src/export/godotRuntimeScripts.ts`, `src/export/godotPrefabBuilder.ts`, `src/export/godotGameKitExporter.ts`, `src/export/godotPluginExporter.ts`):** Emits 4 typed Godot 4.3+ runtime scripts (`scripts/runtime/PlayerController.gd`, `EnemyAiController.gd`, `NpcController.gd`, `SaveManager.gd`), registers `SaveManager` autoload in `project.godot`, wires `controllerScriptResPath` + `@export` stats onto composable `.tscn` entity prefabs without altering legacy `load_steps=11` calls, adds `SaveButton` and `GameOverPanel` (`RestartButton`) to `main.tscn`, and connects `HealthComponent`, `Portals` room transitions, and `DialogueRunner` signals inside `GameShell.gd`.
+
+## 125. Non-Destructive Scaffold-Once File Ownership (Milestone 57)
+
+- **Ownership Classification & Selective Sync (`src/sync/syncOwnership.ts`, `src/sync/fsaaSyncEngine.ts`, `src/domain/entitySchema.ts`):** Splits virtual `res://` files into `'scaffold-once'` (`project.godot`, `default_bus_layout.tres`, `main.tscn`, `scripts/GameShell.gd`, `scripts/runtime/*`) and `'nibgrid-managed'` assets, extending `syncFilesToGodotDirectory()` (`preserveUserScaffolds` defaulting to `true`) so re-syncing Nibgrid assets never overwrites user-customized Godot entrypoints or gameplay scripts and never prunes user scaffolds.
+
+## 126. In-App Bidirectional Delta Pull & Headless Check Callout (Milestone 58)
+
+- **Pull Godot Tweaks UI (`src/sync/fsaaSyncEngine.ts`, `src/ui/export/ShipToGodotPanel.tsx`):** Adds `pullGodotEditorDeltaFromDirectory()` reading `.nibgrid_sync_delta.json` from the bound FSAA handle (with non-Chromium JSON file upload fallback), reconciling entity stats and room spawn positions directly into Dexie via `reconcileGodotEditorDelta` (`applyGodotBackSyncDelta`), paired with `ship-preserve-scaffolds-toggle`, `ship-pull-delta-btn`, and a copyable `godot4 --headless --path . --quit --check-only` verification card.
+
+## 127. Director-First Workspace Routing & Guided Progress Ribbon (Milestone 59)
+
+- **Guided Path UI (`src/ui/layout/workspaceShell.ts`, `src/ui/layout/GamePipelineRibbon.tsx`, `src/ui/director/DirectorStudioView.tsx`, `src/ui/export/ShipToGodotPanel.tsx`):** Routes `style-vision` workspace (`1. Style & Vision`) directly into **Director Studio** (`director`) and mounts `<GamePipelineRibbon />` tracking live completion state across Vision → Cast & World → Balance & L10n → Pre-Flight QA → Ship & Play F5.
