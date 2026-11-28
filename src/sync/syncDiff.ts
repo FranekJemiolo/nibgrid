@@ -5,6 +5,7 @@ export interface SyncDiffPlan {
   readonly added: readonly VirtualSyncFile[];
   readonly modified: readonly VirtualSyncFile[];
   readonly unchangedPaths: readonly string[];
+  readonly removedPaths: readonly string[];
   readonly totalBytesToWrite: number;
 }
 
@@ -30,10 +31,12 @@ export async function computeSyncDiff(
   const added: VirtualSyncFile[] = [];
   const modified: VirtualSyncFile[] = [];
   const unchangedPaths: string[] = [];
-  const nextHashes: Record<string, string> = { ...previousHashes };
+  const currentPaths = new Set<string>();
+  const nextHashes: Record<string, string> = {};
   let totalBytesToWrite = 0;
 
   for (const file of files) {
+    currentPaths.add(file.relativePath);
     const bytes = virtualFileToBytes(file);
     const hashHex = await sha256Bytes(bytes);
     const prevHash = previousHashes[file.relativePath];
@@ -51,11 +54,16 @@ export async function computeSyncDiff(
     nextHashes[file.relativePath] = hashHex;
   }
 
+  const removedPaths = Object.keys(previousHashes)
+    .filter((p) => !currentPaths.has(p))
+    .sort();
+
   return {
     plan: {
       added,
       modified,
       unchangedPaths,
+      removedPaths,
       totalBytesToWrite,
     },
     nextHashes,

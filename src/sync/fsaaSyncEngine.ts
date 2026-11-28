@@ -10,12 +10,14 @@ import {
 import type { AudioAsset, Project, SpriteNode } from '../domain/schemas';
 import {
   assembleGodotEntityFiles,
+  generateGodotPngImport,
   type EntityAssemblyAudioFile,
   type EntityAssemblyColliderPolygon,
   type EntityAssemblySocket,
   type EntityAssemblySpriteFile,
   type VirtualSyncFile,
 } from '../export/godotPrefabAssembler';
+import { exportGodotTileSetTres } from '../export/autoTileExporters';
 import { assembleGodotRoomFiles } from '../export/godotRoomExporter';
 import { assembleGodotUiKitFiles, bakeBitmapFontFromConfig } from '../export/godotThemeExporter';
 import { assembleGodotWorldFiles, exportRoomPortalNodes } from '../export/godotWorldExporter';
@@ -23,7 +25,14 @@ import { assembleGodotGameDataFiles } from '../export/godotDataExporter';
 import { assembleGodotDialogueFiles } from '../export/godotDialogueExporter';
 import type { GameKitTemplateId } from '../export/godotGameKitExporter';
 import { assembleGodotGameKitFiles } from '../export/godotPluginExporter';
+import {
+  resolveEntityGameKitAssets,
+  validateGodotSceneGraph,
+  type GodotGraphValidationReport,
+} from '../export/godotProjectCompiler';
+import { exportGodotParallaxTscn, safeParallaxLayerSlug } from '../export/parallaxExporters';
 import { toAssetSlug, triggerBlobDownload } from '../export/zipPackager';
+import { composeAutoTileSheet } from '../processing/autoTile';
 import { bakeNormalMapCpu } from '../processing/distanceField';
 import { decodePngBytesToRgba, encodeRgbaToPngBytes } from '../processing/png';
 import { sanitizeRoomSlug, type StoredRoomRecord } from '../processing/roomLayoutCore';
@@ -144,9 +153,47 @@ export async function writeFilesToDirectoryHandle(
   return writtenCount;
 }
 
+/**
+ * Deletes orphaned files tracked by Nibgrid from the bound Godot `res://` directory.
+ * Gracefully skips paths if `removeEntry` is unsupported or the file is already absent.
+ */
+export async function removeFilesFromDirectoryHandle(
+  rootHandle: FileSystemDirectoryHandleLike,
+  removedPaths: readonly string[],
+): Promise<number> {
+  let removedCount = 0;
+
+  for (const relPath of removedPaths) {
+    const segments = relPath
+      .replace(/\\/g, '/')
+      .split('/')
+      .filter((s) => s.length > 0 && s !== '.');
+    if (segments.length === 0 || segments.some((s) => s === '..')) {
+      continue;
+    }
+
+    const fileName = segments.pop()!;
+    try {
+      let currentDir = rootHandle;
+      for (const dirSeg of segments) {
+        currentDir = await currentDir.getDirectoryHandle(dirSeg, { create: false });
+      }
+      if (currentDir.removeEntry) {
+        await currentDir.removeEntry(fileName);
+        removedCount++;
+      }
+    } catch {
+      // Directory/file already absent or handle lacks removeEntry
+    }
+  }
+
+  return removedCount;
+}
+
 export interface GodotSyncExecutionResult {
   readonly plan: SyncDiffPlan;
   readonly writtenCount: number;
+  readonly removedCount: number;
   readonly folderName: string;
   readonly syncedAt: number;
   readonly record: GodotSyncTargetRecord;
@@ -154,7 +201,7 @@ export interface GodotSyncExecutionResult {
 
 /**
  * Executes a SHA-256 diffed incremental sync to a bound Godot `res://` directory handle,
- * writing ONLY `added` and `modified` files so untouched textures do not trigger re-imports.
+ * writing ONLY `added` and `modified` files and pruning `removedPaths` so stale exports do not linger.
  */
 export async function syncFilesToGodotDirectory(
   database: NibgridDatabase,
@@ -187,6 +234,10 @@ export async function syncFilesToGodotDirectory(
 
   const writtenCount =
     toWrite.length > 0 ? await writeFilesToDirectoryHandle(rootHandle, toWrite) : 0;
+  const removedCount =
+    plan.removedPaths.length > 0
+      ? await removeFilesFromDirectoryHandle(rootHandle, plan.removedPaths)
+      : 0;
 
   const syncedAt = Date.now();
   const updatedRecord = await repo.saveSyncTarget({
@@ -194,7 +245,7 @@ export async function syncFilesToGodotDirectory(
     folderName: existing?.folderName || rootHandle.name || 'godot_res',
     lastSyncedHashes: nextHashes,
     lastSyncedAt:
-      toWrite.length > 0 || !existing || existing.lastSyncedAt === null
+      toWrite.length > 0 || removedCount > 0 || !existing || existing.lastSyncedAt === null
         ? syncedAt
         : existing.lastSyncedAt,
     directoryHandle: rootHandle,
@@ -203,6 +254,7 @@ export async function syncFilesToGodotDirectory(
   return {
     plan,
     writtenCount,
+    removedCount,
     folderName: updatedRecord.folderName,
     syncedAt,
     record: updatedRecord,
@@ -492,15 +544,124 @@ export async function collectProjectGodotSyncFiles(
     roomSlugById.set(room.id, sanitizeRoomSlug(room.slug || room.blueprint.slug));
   }
 
+  const emittedTileSetByNodeId = new Map<string, string>();
+  const emittedParallaxByNodeId = new Map<string, string>();
+
   for (const room of effectiveRooms) {
     const tileNode = room.tileSetNodeId ? nodeById.get(room.tileSetNodeId) : undefined;
+    let tileSetResPath: string | undefined;
+    if (tileNode) {
+      if (emittedTileSetByNodeId.has(tileNode.id)) {
+        tileSetResPath = emittedTileSetByNodeId.get(tileNode.id);
+      } else if (tileNode.autoTile) {
+        const blobRec = await repo.getBlob(tileNode.processedBlobId ?? tileNode.imageBlobId);
+        if (blobRec) {
+          try {
+            const bytes = await readBlobBytes(blobRec.bytes);
+            const decoded = await decodePngBytesToRgba(bytes);
+            const sheetRes = composeAutoTileSheet(
+              { width: decoded.width, height: decoded.height, data: decoded.rgba },
+              null,
+              {
+                mode: tileNode.autoTile.mode,
+                edgeStyle: tileNode.autoTile.edgeStyle,
+                borderWidthPx: tileNode.autoTile.borderWidthPx,
+                cornerRadiusPx: tileNode.autoTile.cornerRadiusPx,
+                jitterPx: tileNode.autoTile.jitterPx,
+                edgeTintHex: tileNode.autoTile.edgeTintHex,
+                seed: tileNode.autoTile.seed,
+              },
+            );
+            const sheetPng = encodeRgbaToPngBytes(
+              sheetRes.sheet.data,
+              sheetRes.sheet.width,
+              sheetRes.sheet.height,
+            );
+            const tileSlug = sanitizeRoomSlug(tileNode.generationMeta.promptDelta || tileNode.id);
+            const texRel = `tiles/${tileSlug}_autotile_${tileNode.autoTile.mode}.png`;
+            const tresRel = `tiles/${tileSlug}_tileset.tres`;
+            deduped.set(texRel, { relativePath: texRel, content: sheetPng });
+            deduped.set(`${texRel}.import`, {
+              relativePath: `${texRel}.import`,
+              content: generateGodotPngImport(`res://${texRel}`, isPixelArt),
+            });
+            deduped.set(tresRel, {
+              relativePath: tresRel,
+              content: exportGodotTileSetTres({
+                assetName: `${tileSlug}_tiles`,
+                textureFilename: texRel,
+                tileSize: sheetRes.tileSize,
+                mode: tileNode.autoTile.mode,
+                cells: sheetRes.cells,
+              }),
+            });
+            tileSetResPath = `res://${tresRel}`;
+            emittedTileSetByNodeId.set(tileNode.id, tileSetResPath);
+          } catch {
+            tileSetResPath = undefined;
+          }
+        }
+      }
+    }
+
     const parallaxNode = room.parallaxNodeId ? nodeById.get(room.parallaxNodeId) : undefined;
-    const tileSetResPath = tileNode
-      ? `res://tilesets/${sanitizeRoomSlug(tileNode.generationMeta.promptDelta || tileNode.id)}_tileset.tres`
-      : undefined;
-    const parallaxResPath = parallaxNode
-      ? `res://parallax/${sanitizeRoomSlug(parallaxNode.generationMeta.promptDelta || parallaxNode.id)}_parallax.tscn`
-      : undefined;
+    let parallaxResPath: string | undefined;
+    if (parallaxNode) {
+      if (emittedParallaxByNodeId.has(parallaxNode.id)) {
+        parallaxResPath = emittedParallaxByNodeId.get(parallaxNode.id);
+      } else if (parallaxNode.parallaxScene) {
+        try {
+          const pSlug = sanitizeRoomSlug(
+            parallaxNode.generationMeta.promptDelta || parallaxNode.id,
+          );
+          const exportLayers = [];
+          for (let i = 0; i < parallaxNode.parallaxScene.layers.length; i++) {
+            const layer = parallaxNode.parallaxScene.layers[i]!;
+            if (!layer.blobId) continue;
+            const bRec = await repo.getBlob(layer.blobId);
+            if (!bRec) continue;
+            const pngBytes = await readBlobBytes(bRec.bytes);
+            const decoded = await decodePngBytesToRgba(pngBytes);
+            const rel = `parallax/${pSlug}_layer_${i}_${safeParallaxLayerSlug(layer.name, i)}.png`;
+            deduped.set(rel, { relativePath: rel, content: pngBytes });
+            deduped.set(`${rel}.import`, {
+              relativePath: `${rel}.import`,
+              content: generateGodotPngImport(`res://${rel}`, isPixelArt),
+            });
+            exportLayers.push({
+              id: layer.id,
+              name: layer.name,
+              role: layer.role,
+              scrollRatioX: layer.scrollRatioX,
+              yOffsetPx: layer.yOffsetPx,
+              seamBlendPx: layer.seamBlendPx,
+              depthHaze: layer.depthHaze,
+              buffer: { width: decoded.width, height: decoded.height, data: decoded.rgba },
+            });
+          }
+          if (exportLayers.length > 0) {
+            const pRel = `parallax/${pSlug}_parallax.tscn`;
+            deduped.set(pRel, {
+              relativePath: pRel,
+              content: exportGodotParallaxTscn(`parallax/${pSlug}`, exportLayers, {
+                viewportWidth: 320,
+                viewportHeight: 180,
+                skyTopHex: parallaxNode.parallaxScene.skyTopHex,
+                horizonHex: parallaxNode.parallaxScene.horizonHex,
+                contrastDampening: parallaxNode.parallaxScene.contrastDampening,
+                cameraSpeedPxPerSec: parallaxNode.parallaxScene.cameraSpeedPxPerSec,
+                artMode: project.artBible.artMode,
+              }),
+            });
+            parallaxResPath = `res://${pRel}`;
+            emittedParallaxByNodeId.set(parallaxNode.id, parallaxResPath);
+          }
+        } catch {
+          parallaxResPath = undefined;
+        }
+      }
+    }
+
     const portalNodesSnippet = worldGraph
       ? exportRoomPortalNodes(room.id, worldGraph.edges, roomSlugById, {
           cols: room.blueprint.cols,
@@ -583,8 +744,16 @@ export async function collectProjectGodotSyncFiles(
     const firstRoomSlug = effectiveRooms[0]
       ? sanitizeRoomSlug(effectiveRooms[0].slug || effectiveRooms[0].blueprint.slug)
       : undefined;
+    const firstRoomPath = firstRoomSlug ? `levels/${firstRoomSlug}.tscn` : undefined;
     const firstThemeFile = Array.from(deduped.keys()).find((p) => p.endsWith('_theme.tres'));
     const hasMinimap = deduped.has('world/minimap.png');
+    const currentFiles = Array.from(deduped.values());
+    const resolvedEntityAssets: Record<string, ReturnType<typeof resolveEntityGameKitAssets>> = {};
+    for (const ent of entities) {
+      const slug = sanitizeEntitySlug(ent.slug || ent.displayName);
+      resolvedEntityAssets[slug] = resolveEntityGameKitAssets(slug, ent.resSubpath, currentFiles);
+    }
+
     const gameKitFiles = assembleGodotGameKitFiles({
       projectName: project.name,
       templateId: options.gameKitTemplate,
@@ -592,7 +761,11 @@ export async function collectProjectGodotSyncFiles(
       viewportHeight: Math.max(180, project.artBible.targetHeight * 3),
       isPixelArt,
       entities,
-      ...(firstRoomSlug ? { levelResPath: `res://levels/${firstRoomSlug}.tscn` } : {}),
+      resolvedEntityAssets,
+      managedFiles: currentFiles.map((f) => f.relativePath),
+      ...(firstRoomPath && deduped.has(firstRoomPath)
+        ? { levelResPath: `res://${firstRoomPath}` }
+        : {}),
       ...(firstThemeFile ? { themeResPath: `res://${firstThemeFile}` } : {}),
       ...(hasMinimap ? { minimapResPath: 'res://world/minimap.png' } : {}),
       hasWorldGraph: Boolean(
@@ -608,4 +781,35 @@ export async function collectProjectGodotSyncFiles(
   return Array.from(deduped.values()).sort((a, b) =>
     a.relativePath < b.relativePath ? -1 : a.relativePath > b.relativePath ? 1 : 0,
   );
+}
+
+/**
+ * Collects the canonical Godot 4 file tree and immediately validates all `res://`
+ * scene/resource references against the emitted virtual filesystem.
+ */
+export async function collectAndValidateProjectGodotSyncFiles(
+  database: NibgridDatabase,
+  project: Project,
+  entities: readonly EntityDefinition[],
+  spriteNodes: readonly SpriteNode[],
+  audioAssets: readonly AudioAsset[],
+  rooms?: readonly StoredRoomRecord[],
+  options?: { readonly gameKitTemplate?: GameKitTemplateId },
+): Promise<{
+  readonly files: readonly VirtualSyncFile[];
+  readonly validation: GodotGraphValidationReport;
+}> {
+  const files = await collectProjectGodotSyncFiles(
+    database,
+    project,
+    entities,
+    spriteNodes,
+    audioAssets,
+    rooms,
+    options,
+  );
+  return {
+    files,
+    validation: validateGodotSceneGraph(files),
+  };
 }

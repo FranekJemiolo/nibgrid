@@ -6,8 +6,13 @@ import {
   exportProjectGodot,
   type GameKitTemplateId,
 } from './godotGameKitExporter';
-import { exportComposableEntityTscn, exportEntityComponentScripts } from './godotPrefabBuilder';
+import {
+  exportComposableEntityTscn,
+  exportEntityComponentScripts,
+  type ComposableEntityInput,
+} from './godotPrefabBuilder';
 import type { VirtualSyncFile } from './godotPrefabAssembler';
+import type { ResolvedEntityGameKitAssets } from './godotProjectCompiler';
 
 export interface NibgridSyncPluginFiles {
   readonly pluginCfg: string;
@@ -117,6 +122,8 @@ export interface AssembleGameKitInput {
   readonly minimapResPath?: string;
   readonly hasWorldGraph?: boolean;
   readonly hasDialogue?: boolean;
+  readonly resolvedEntityAssets?: Readonly<Record<string, ResolvedEntityGameKitAssets>>;
+  readonly managedFiles?: readonly string[];
 }
 
 /**
@@ -197,16 +204,26 @@ export function assembleGodotGameKitFiles(input: AssembleGameKitInput): VirtualS
             : 'enemy';
     const moveSpeedPx =
       'playtestConfig' in ent && ent.playtestConfig ? ent.playtestConfig.moveSpeedPx : undefined;
+    const resolvedAssets = input.resolvedEntityAssets?.[slug];
+    const prefabInput: ComposableEntityInput = {
+      slug,
+      displayName: ent.displayName,
+      role: inferredRole,
+      maxHp,
+      ...(moveSpeedPx !== undefined ? { moveSpeedPx } : {}),
+      ...(resolvedAssets?.spriteResPath ? { spriteResPath: resolvedAssets.spriteResPath } : {}),
+      ...(resolvedAssets?.canvasTextureResPath
+        ? { canvasTextureResPath: resolvedAssets.canvasTextureResPath }
+        : {}),
+      ...(resolvedAssets?.shaderMatResPath
+        ? { shaderMatResPath: resolvedAssets.shaderMatResPath }
+        : {}),
+      ...(resolvedAssets?.audioResPath ? { audioResPath: resolvedAssets.audioResPath } : {}),
+      isPixelArt: input.isPixelArt,
+    };
     files.push({
       relativePath: `${subpath}/${slug}/${slug}_prefab.tscn`,
-      content: exportComposableEntityTscn({
-        slug,
-        displayName: ent.displayName,
-        role: inferredRole,
-        maxHp,
-        ...(moveSpeedPx !== undefined ? { moveSpeedPx } : {}),
-        isPixelArt: input.isPixelArt,
-      }),
+      content: exportComposableEntityTscn(prefabInput),
     });
   }
 
@@ -220,14 +237,23 @@ export function assembleGodotGameKitFiles(input: AssembleGameKitInput): VirtualS
     content: plugin.pluginGd,
   });
 
+  const manifestPaths = Array.from(
+    new Set([
+      ...(input.managedFiles ?? []),
+      ...files.map((f) => f.relativePath),
+      '.nibgrid_sync_manifest.json',
+    ]),
+  ).sort();
+
   files.push({
     relativePath: '.nibgrid_sync_manifest.json',
     content: `${JSON.stringify(
       {
-        generator: 'nibgrid-m50',
+        generator: 'nibgrid-m51',
         templateId: input.templateId,
         projectName: input.projectName,
         entityCount: targetEntities.length,
+        managedFiles: manifestPaths,
       },
       null,
       2,

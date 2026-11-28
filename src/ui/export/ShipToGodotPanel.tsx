@@ -1,22 +1,44 @@
-import { useMemo, useState } from 'react';
-import { FolderSync, Gamepad2, Plug, Rocket } from 'lucide-react';
+import { useEffect, useMemo, useState } from 'react';
+import {
+  CheckCircle2,
+  FileArchive,
+  FolderSync,
+  Gamepad2,
+  Plug,
+  Rocket,
+  ShieldAlert,
+} from 'lucide-react';
 import { db } from '../../db/database';
 import { GAMEKIT_TEMPLATES, type GameKitTemplateId } from '../../export/godotGameKitExporter';
+import type { GodotGraphValidationReport } from '../../export/godotProjectCompiler';
 import { createDefaultProjectNarrative } from '../../narrative/dialogueSchemas';
 import { useAppStore } from '../../store/useAppStore';
 import {
   bindGodotDirectory,
-  collectProjectGodotSyncFiles,
+  collectAndValidateProjectGodotSyncFiles,
+  downloadGodotSyncZip,
+  isFsaaSupported,
   syncFilesToGodotDirectory,
 } from '../../sync/fsaaSyncEngine';
 import { FixItCardList } from '../audit/FixItCardList';
 import { buildFixItCards } from '../audit/fixItEngine';
 import { ContextualInspector } from '../layout/ContextualInspector';
 
+const AUTOSYNC_STORAGE_KEY = 'nibgrid.autoSync';
+
+function readStoredAutoSync(): boolean {
+  if (typeof window === 'undefined') return false;
+  try {
+    return window.localStorage.getItem(AUTOSYNC_STORAGE_KEY) === 'true';
+  } catch {
+    return false;
+  }
+}
+
 /**
- * Milestones 49–50 Workspace 4: Ship to Godot panel hosting GameKit Template selection
+ * Milestones 49–51 Workspace 4: Ship to Godot panel hosting GameKit Template selection
  * (`side-platformer`, `top-down-action`, `cozy-rpg`), `addons/nibgrid_sync` EditorPlugin export,
- * Pre-Flight Fix-It Cards, and Contextual Creator/Pro Presets.
+ * canonical scene-graph referential integrity badge, Pre-Flight Fix-It Cards, and Contextual Creator/Pro Presets.
  */
 export function ShipToGodotPanel() {
   const {
@@ -35,6 +57,38 @@ export function ShipToGodotPanel() {
   const [statusNotice, setStatusNotice] = useState<string | null>(null);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [isSyncing, setIsSyncing] = useState(false);
+  const [autoSyncEnabled, setAutoSyncEnabled] = useState<boolean>(readStoredAutoSync);
+  const [graphReport, setGraphReport] = useState<GodotGraphValidationReport | null>(null);
+
+  useEffect(() => {
+    if (!activeProject) {
+      setGraphReport(null);
+      return;
+    }
+    let cancelled = false;
+    void collectAndValidateProjectGodotSyncFiles(
+      db,
+      activeProject,
+      entities,
+      spriteNodes,
+      audioAssets,
+      rooms,
+      { gameKitTemplate: selectedTemplate },
+    )
+      .then((res) => {
+        if (!cancelled) {
+          setGraphReport(res.validation);
+        }
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setGraphReport(null);
+        }
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [activeProject, entities, spriteNodes, audioAssets, rooms, selectedTemplate]);
 
   const effectiveBundle = useMemo(
     () =>
@@ -51,15 +105,24 @@ export function ShipToGodotPanel() {
     });
   }, [activeProject, effectiveBundle, worldGraph]);
 
-  const handleSync = async (withGameKit: boolean) => {
+  const handleToggleAutoSync = () => {
+    const next = !autoSyncEnabled;
+    setAutoSyncEnabled(next);
+    if (typeof window !== 'undefined') {
+      try {
+        window.localStorage.setItem(AUTOSYNC_STORAGE_KEY, next ? 'true' : 'false');
+      } catch {
+        // Ignore storage failure
+      }
+    }
+  };
+
+  const handleSync = async (withGameKit: boolean, forceZip = false) => {
     if (!activeProject) return;
     setIsSyncing(true);
     setErrorMsg(null);
     try {
-      if (!syncTarget?.directoryHandle) {
-        await bindGodotDirectory(db, activeProject.id);
-      }
-      const files = await collectProjectGodotSyncFiles(
+      const { files, validation } = await collectAndValidateProjectGodotSyncFiles(
         db,
         activeProject,
         entities,
@@ -68,12 +131,28 @@ export function ShipToGodotPanel() {
         rooms,
         withGameKit ? { gameKitTemplate: selectedTemplate } : undefined,
       );
+      setGraphReport(validation);
+
+      if (forceZip || !isFsaaSupported()) {
+        downloadGodotSyncZip(activeProject.name, files);
+        setStatusNotice(
+          withGameKit
+            ? `Downloaded Turnkey GameKit (${selectedTemplate}) ZIP (${files.length} files · ${validation.brokenReferences.length} broken res:// refs).`
+            : `Downloaded Godot 4 assets ZIP (${files.length} files).`,
+        );
+        return;
+      }
+
+      if (!syncTarget?.directoryHandle) {
+        await bindGodotDirectory(db, activeProject.id);
+      }
       const summary = await syncFilesToGodotDirectory(db, activeProject.id, files);
       await refreshSyncTarget(activeProject.id);
+      const removedSuffix = summary.removedCount > 0 ? `, ${summary.removedCount} pruned` : '';
       setStatusNotice(
         withGameKit
-          ? `Synced Turnkey GameKit (${selectedTemplate}) + addons/nibgrid_sync to Godot res:// (${summary.writtenCount} written, ${summary.plan.unchangedPaths.length} unchanged).`
-          : `Synced project assets to Godot res:// (${summary.writtenCount} written, ${summary.plan.unchangedPaths.length} unchanged).`,
+          ? `Synced Turnkey GameKit (${selectedTemplate}) + addons/nibgrid_sync to Godot res:// (${summary.writtenCount} written, ${summary.plan.unchangedPaths.length} unchanged${removedSuffix}).`
+          : `Synced project assets to Godot res:// (${summary.writtenCount} written, ${summary.plan.unchangedPaths.length} unchanged${removedSuffix}).`,
       );
     } catch (err) {
       setErrorMsg(err instanceof Error ? err.message : 'Failed to sync project to Godot.');
@@ -105,6 +184,44 @@ export function ShipToGodotPanel() {
         </div>
 
         <div className="flex flex-wrap items-center gap-2">
+          {graphReport && (
+            <span
+              data-testid="ship-graph-integrity-badge"
+              className={`inline-flex items-center gap-1 rounded-full border px-2.5 py-1 text-[11px] font-medium ${
+                graphReport.ok
+                  ? 'border-emerald-500/35 bg-emerald-500/10 text-emerald-300'
+                  : 'border-rose-500/40 bg-rose-500/15 text-rose-200'
+              }`}
+            >
+              {graphReport.ok ? (
+                <CheckCircle2 className="h-3.5 w-3.5" />
+              ) : (
+                <ShieldAlert className="h-3.5 w-3.5" />
+              )}
+              {graphReport.brokenReferences.length} broken res:// refs · {graphReport.totalFiles}{' '}
+              files
+            </span>
+          )}
+          <label className="inline-flex cursor-pointer items-center gap-1.5 rounded border border-slate-800 bg-slate-900/70 px-2.5 py-1 text-[11px] text-slate-300">
+            <input
+              type="checkbox"
+              data-testid="ship-autosync-toggle"
+              checked={autoSyncEnabled}
+              onChange={handleToggleAutoSync}
+              className="accent-emerald-500"
+            />
+            Auto-Sync on Commit
+          </label>
+          <button
+            type="button"
+            data-testid="ship-download-zip-btn"
+            disabled={isSyncing}
+            onClick={() => void handleSync(true, true)}
+            className="inline-flex items-center gap-1.5 rounded border border-slate-700 bg-slate-900 px-3 py-1.5 text-xs font-medium text-slate-200 hover:border-slate-500 disabled:opacity-50"
+          >
+            <FileArchive className="h-3.5 w-3.5" />
+            Download ZIP
+          </button>
           <button
             type="button"
             data-testid="ship-sync-res-btn"
