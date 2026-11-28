@@ -310,6 +310,88 @@ export function planOfflineMockAgentTurn(
     );
   }
 
+  // 9. Director Verb: Create entity from prompt
+  if (/\b(create|spawn|add)\s+(?:an?\s+)?(?:entity|enemy|hero|npc|prop)\b/.test(lower)) {
+    const slugMatch =
+      /(?:named|called|enemy|hero|npc|prop)\s+([a-z][a-z0-9_]*)/i.exec(trimmed) ??
+      /\b([a-z]+_[a-z0-9_]+)\b/i.exec(trimmed);
+    const slug = slugMatch?.[1]?.toLowerCase() ?? 'frost_bat';
+    const role = /\bhero|player\b/.test(lower)
+      ? 'hero'
+      : /\bprop|chest|crate\b/.test(lower)
+        ? 'prop'
+        : /\bnpc|merchant|guard\b/.test(lower)
+          ? 'npc'
+          : 'enemy';
+    calls.push(
+      StudioToolCallSchema.parse({
+        toolName: 'create_entity_from_prompt',
+        args: {
+          slug,
+          prompt: trimmed,
+          role,
+        },
+      }),
+    );
+  }
+
+  // 10. Director Verb: Create or connect room in WorldGraph
+  if (/\b(create|add|connect)\s+(?:a\s+)?room\b/.test(lower)) {
+    const roomSlugMatch = /room\s+([a-z][a-z0-9_]*)/i.exec(trimmed);
+    const roomSlug = roomSlugMatch?.[1]?.toLowerCase() ?? 'crypt_annex';
+    calls.push(
+      StudioToolCallSchema.parse({
+        toolName: 'create_or_connect_room',
+        args: {
+          roomSlug,
+          prompt: trimmed,
+        },
+      }),
+    );
+  }
+
+  // 11. Director Verb: Tune game balance
+  if (/\b(balance|ttk|hp|nerf|buff)\b/.test(lower)) {
+    const targetSlug = primaryActor?.slug ?? 'goblin_scout';
+    calls.push(
+      StudioToolCallSchema.parse({
+        toolName: 'tune_game_balance',
+        args: {
+          enemySlug: targetSlug,
+          targetTtkSec: /\bfaster|easier|nerf\b/.test(lower) ? 3.5 : 5.0,
+        },
+      }),
+    );
+  }
+
+  // 12. Director Verb: Author localized dialogue node
+  if (/\b(dialogue|dialog|npc line|say)\b/.test(lower)) {
+    const nodeMatch = /\bnode\s+([a-z][a-z0-9_]*)/i.exec(trimmed);
+    const quotedMatch = /"([^"]+)"/.exec(trimmed);
+    calls.push(
+      StudioToolCallSchema.parse({
+        toolName: 'author_dialogue_node',
+        args: {
+          nodeId: nodeMatch?.[1]?.toLowerCase() ?? 'director_greet',
+          speaker: primaryActor?.slug ?? 'Guard',
+          enText: quotedMatch?.[1] ?? 'Watch your step in the crypt!',
+          plText: 'Uważaj na siebie w krypcie!',
+          deText: 'Pass in der Krypta auf!',
+        },
+      }),
+    );
+  }
+
+  // 13. Director Verb: Pre-flight autofix
+  if (/\b(autofix|self-heal|heal|preflight)\b/.test(lower)) {
+    calls.push(
+      StudioToolCallSchema.parse({
+        toolName: 'run_preflight_autofix',
+        args: { scope: 'all' },
+      }),
+    );
+  }
+
   // Fallback: if no specific keyword matched cleanly, default to deterministic repalette on primary target
   if (calls.length === 0 && primaryActor) {
     calls.push(

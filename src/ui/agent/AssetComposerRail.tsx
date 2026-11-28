@@ -49,6 +49,9 @@ export function AssetComposerRail() {
     refreshEntities,
     refreshAudioAssets,
     refreshRooms,
+    refreshWorldGraph,
+    refreshGameDataRegistry,
+    refreshNarrativeBundle,
     refreshAgentCheckpoints,
   } = useAppStore();
 
@@ -117,6 +120,9 @@ export function AssetComposerRail() {
       refreshEntities(projectId),
       refreshAudioAssets(projectId),
       refreshRooms(projectId),
+      refreshWorldGraph(projectId),
+      refreshGameDataRegistry(projectId),
+      refreshNarrativeBundle(projectId),
       refreshAgentCheckpoints(projectId),
     ]);
   };

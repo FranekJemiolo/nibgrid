@@ -156,6 +156,31 @@
         "name": "nibgrid_run_vertical_slice",
         "displayName": "Run Vertical Slice Autopilot",
         "modelDescription": "Run the single-prompt Nibgrid Vertical Slice Autopilot DAG to assemble res://main.tscn."
+      },
+      {
+        "name": "nibgrid_create_entity_from_prompt",
+        "displayName": "Create Full Entity from Prompt",
+        "modelDescription": "Generate a complete Godot 4 Entity (sprite, normal, collider, sockets, shader, SFX, .gd) from one prompt."
+      },
+      {
+        "name": "nibgrid_create_or_connect_room",
+        "displayName": "Create or Connect Room",
+        "modelDescription": "Create a new TileMapLayer room or connect an existing room into the WorldGraph with portals."
+      },
+      {
+        "name": "nibgrid_tune_game_balance",
+        "displayName": "Tune Game Balance (TTK)",
+        "modelDescription": "Calibrate enemy HP, armor, and damage against GameDataRegistry using seeded combat simulation."
+      },
+      {
+        "name": "nibgrid_author_dialogue_node",
+        "displayName": "Author Localized Dialogue Node",
+        "modelDescription": "Add or update a localized DialogueNode and automatically update M24 font glyph coverage."
+      },
+      {
+        "name": "nibgrid_run_preflight_autofix",
+        "displayName": "Run Self-Healing Pre-Flight QA",
+        "modelDescription": "Autonomously fix off-palette sprites, softlocks, combat TTK imbalance, and missing font glyphs."
       }
     ]
   }

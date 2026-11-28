@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { GameDataRegistrySchema, type GameDataRegistry } from '../data/gameDataSchemas';
 import { db, findOrphanBlobIds, type NibgridDatabase } from '../db/database';
 import { EntityDefinitionSchema, type EntityDefinition } from '../domain/entitySchema';
 import {
@@ -7,7 +8,12 @@ import {
   type AudioAsset,
   type SpriteNode,
 } from '../domain/schemas';
+import {
+  ProjectNarrativeBundleSchema,
+  type ProjectNarrativeBundle,
+} from '../narrative/dialogueSchemas';
 import { StoredRoomRecordSchema, type StoredRoomRecord } from '../processing/roomLayoutCore';
+import { WorldGraphSchema, type WorldGraph } from '../world/worldGraphCore';
 import type { StagedAssetChange } from './studioToolRegistry';
 
 export const AgentCheckpointSnapshotsSchema = z.object({
@@ -15,6 +21,9 @@ export const AgentCheckpointSnapshotsSchema = z.object({
   entities: z.array(EntityDefinitionSchema),
   audioAssets: z.array(AudioAssetSchema),
   rooms: z.array(StoredRoomRecordSchema),
+  worldGraphs: z.array(WorldGraphSchema).optional(),
+  gameDataRegistries: z.array(GameDataRegistrySchema).optional(),
+  narrativeBundles: z.array(ProjectNarrativeBundleSchema).optional(),
 });
 
 export const AgentCheckpointSchema = z.object({
@@ -25,6 +34,12 @@ export const AgentCheckpointSchema = z.object({
   snapshots: AgentCheckpointSnapshotsSchema,
   createdIds: z.object({
     audioAssetIds: z.array(z.string()),
+    spriteNodeIds: z.array(z.string()).optional(),
+    entityIds: z.array(z.string()).optional(),
+    roomIds: z.array(z.string()).optional(),
+    worldGraphIds: z.array(z.string()).optional(),
+    gameDataProjectIds: z.array(z.string()).optional(),
+    narrativeProjectIds: z.array(z.string()).optional(),
   }),
   referencedBlobIds: z.array(z.string()),
 });
@@ -34,6 +49,8 @@ function collectBlobsFromSpriteNode(node: SpriteNode, into: Set<string>): void {
   into.add(node.imageBlobId);
   if (node.maskBlobId) into.add(node.maskBlobId);
   if (node.processedBlobId) into.add(node.processedBlobId);
+  if (node.lightingBake?.normalBlobId) into.add(node.lightingBake.normalBlobId);
+  if (node.lightingBake?.emissionBlobId) into.add(node.lightingBake.emissionBlobId);
   if (node.parallaxScene?.masterKeyframeBlobId) {
     into.add(node.parallaxScene.masterKeyframeBlobId);
   }
@@ -90,54 +107,143 @@ export async function commitStagedTurn(
       database.vaultItems,
       database.blobs,
       database.worldGraphs,
+      database.gameDataRegistries,
+      database.narrativeBundles,
     ],
     async () => {
       const spriteSnaps = new Map<string, SpriteNode>();
       const entitySnaps = new Map<string, EntityDefinition>();
       const audioSnaps = new Map<string, AudioAsset>();
       const roomSnaps = new Map<string, StoredRoomRecord>();
+      const worldSnaps = new Map<string, WorldGraph>();
+      const gameDataSnaps = new Map<string, GameDataRegistry>();
+      const narrativeSnaps = new Map<string, ProjectNarrativeBundle>();
+
       const createdAudioIds = new Set<string>();
+      const createdSpriteIds = new Set<string>();
+      const createdEntityIds = new Set<string>();
+      const createdRoomIds = new Set<string>();
+      const createdWorldIds = new Set<string>();
+      const createdGameDataProjectIds = new Set<string>();
+      const createdNarrativeProjectIds = new Set<string>();
       const referencedBlobIds = new Set<string>();
+
+      const snapshotAndPutSprite = async (sp: SpriteNode) => {
+        const prev = await database.spriteNodes.get(sp.id);
+        if (prev && !spriteSnaps.has(prev.id)) {
+          const parsedPrev = SpriteNodeSchema.parse(prev);
+          spriteSnaps.set(prev.id, parsedPrev);
+          collectBlobsFromSpriteNode(parsedPrev, referencedBlobIds);
+        } else if (!prev) {
+          createdSpriteIds.add(sp.id);
+        }
+        await database.spriteNodes.put(SpriteNodeSchema.parse(sp));
+      };
+
+      const snapshotAndPutEntity = async (ent: EntityDefinition) => {
+        const prev = await database.entities.get(ent.id);
+        if (prev && !entitySnaps.has(prev.id)) {
+          entitySnaps.set(prev.id, EntityDefinitionSchema.parse(prev));
+        } else if (!prev) {
+          createdEntityIds.add(ent.id);
+        }
+        await database.entities.put(EntityDefinitionSchema.parse(ent));
+      };
+
+      const snapshotAndPutAudio = async (aud: AudioAsset) => {
+        const prev = await database.audioAssets.get(aud.id);
+        if (prev && !audioSnaps.has(prev.id)) {
+          const parsedPrev = AudioAssetSchema.parse(prev);
+          audioSnaps.set(prev.id, parsedPrev);
+          collectBlobsFromAudioAsset(parsedPrev, referencedBlobIds);
+        } else if (!prev) {
+          createdAudioIds.add(aud.id);
+        }
+        await database.audioAssets.put(AudioAssetSchema.parse(aud));
+      };
+
+      const snapshotAndPutRoom = async (rm: StoredRoomRecord) => {
+        const prev = await database.rooms.get(rm.id);
+        if (prev && !roomSnaps.has(prev.id)) {
+          roomSnaps.set(prev.id, StoredRoomRecordSchema.parse(prev));
+        } else if (!prev) {
+          createdRoomIds.add(rm.id);
+        }
+        await database.rooms.put(StoredRoomRecordSchema.parse(rm));
+      };
+
+      const snapshotAndPutWorld = async (wg: WorldGraph) => {
+        const prev = await database.worldGraphs.get(wg.id);
+        if (prev && !worldSnaps.has(prev.id)) {
+          const parsed = WorldGraphSchema.parse(prev);
+          worldSnaps.set(prev.id, parsed);
+          if (parsed.minimapBlobId) referencedBlobIds.add(parsed.minimapBlobId);
+        } else if (!prev) {
+          createdWorldIds.add(wg.id);
+        }
+        await database.worldGraphs.put(WorldGraphSchema.parse(wg));
+      };
+
+      const snapshotAndPutGameData = async (reg: GameDataRegistry) => {
+        const prev = await database.gameDataRegistries.get(reg.projectId);
+        if (prev && !gameDataSnaps.has(prev.projectId)) {
+          gameDataSnaps.set(prev.projectId, GameDataRegistrySchema.parse(prev));
+        } else if (!prev) {
+          createdGameDataProjectIds.add(reg.projectId);
+        }
+        await database.gameDataRegistries.put(GameDataRegistrySchema.parse(reg));
+      };
+
+      const snapshotAndPutNarrative = async (bun: ProjectNarrativeBundle) => {
+        const prev = await database.narrativeBundles.get(bun.projectId);
+        if (prev && !narrativeSnaps.has(prev.projectId)) {
+          narrativeSnaps.set(prev.projectId, ProjectNarrativeBundleSchema.parse(prev));
+        } else if (!prev) {
+          createdNarrativeProjectIds.add(bun.projectId);
+        }
+        await database.narrativeBundles.put(ProjectNarrativeBundleSchema.parse(bun));
+      };
 
       for (const ch of accepted) {
         if (ch.patch.patchKind === 'sprite-node') {
-          const prev = await database.spriteNodes.get(ch.patch.spriteNode.id);
-          if (prev && !spriteSnaps.has(prev.id)) {
-            const parsedPrev = SpriteNodeSchema.parse(prev);
-            spriteSnaps.set(prev.id, parsedPrev);
-            collectBlobsFromSpriteNode(parsedPrev, referencedBlobIds);
-          }
-          await database.spriteNodes.put(SpriteNodeSchema.parse(ch.patch.spriteNode));
+          await snapshotAndPutSprite(ch.patch.spriteNode);
         } else if (ch.patch.patchKind === 'entity-def') {
-          const prev = await database.entities.get(ch.patch.entity.id);
-          if (prev && !entitySnaps.has(prev.id)) {
-            entitySnaps.set(prev.id, EntityDefinitionSchema.parse(prev));
-          }
-          await database.entities.put(EntityDefinitionSchema.parse(ch.patch.entity));
+          await snapshotAndPutEntity(ch.patch.entity);
         } else if (ch.patch.patchKind === 'audio-asset') {
-          const prevAudio = await database.audioAssets.get(ch.patch.audioAsset.id);
-          if (prevAudio && !audioSnaps.has(prevAudio.id)) {
-            const parsedPrev = AudioAssetSchema.parse(prevAudio);
-            audioSnaps.set(prevAudio.id, parsedPrev);
-            collectBlobsFromAudioAsset(parsedPrev, referencedBlobIds);
-          } else if (!prevAudio) {
-            createdAudioIds.add(ch.patch.audioAsset.id);
-          }
-          await database.audioAssets.put(AudioAssetSchema.parse(ch.patch.audioAsset));
-
+          await snapshotAndPutAudio(ch.patch.audioAsset);
           if (ch.patch.updatedEntity) {
-            const prevEnt = await database.entities.get(ch.patch.updatedEntity.id);
-            if (prevEnt && !entitySnaps.has(prevEnt.id)) {
-              entitySnaps.set(prevEnt.id, EntityDefinitionSchema.parse(prevEnt));
-            }
-            await database.entities.put(EntityDefinitionSchema.parse(ch.patch.updatedEntity));
+            await snapshotAndPutEntity(ch.patch.updatedEntity);
           }
         } else if (ch.patch.patchKind === 'room-record') {
-          const prevRoom = await database.rooms.get(ch.patch.room.id);
-          if (prevRoom && !roomSnaps.has(prevRoom.id)) {
-            roomSnaps.set(prevRoom.id, StoredRoomRecordSchema.parse(prevRoom));
+          await snapshotAndPutRoom(ch.patch.room);
+        } else if (ch.patch.patchKind === 'entity-bundle') {
+          await snapshotAndPutSprite(ch.patch.spriteNode);
+          await snapshotAndPutEntity(ch.patch.entity);
+          if (ch.patch.audioAsset) {
+            await snapshotAndPutAudio(ch.patch.audioAsset);
           }
-          await database.rooms.put(StoredRoomRecordSchema.parse(ch.patch.room));
+        } else if (ch.patch.patchKind === 'world-graph') {
+          if (ch.patch.room) {
+            await snapshotAndPutRoom(ch.patch.room);
+          }
+          await snapshotAndPutWorld(ch.patch.worldGraph);
+        } else if (ch.patch.patchKind === 'game-data') {
+          await snapshotAndPutGameData(ch.patch.registry);
+        } else if (ch.patch.patchKind === 'narrative-bundle') {
+          await snapshotAndPutNarrative(ch.patch.bundle);
+        } else if (ch.patch.patchKind === 'self-heal-batch') {
+          for (const sp of ch.patch.spriteNodes) {
+            await snapshotAndPutSprite(sp);
+          }
+          if (ch.patch.worldGraph) {
+            await snapshotAndPutWorld(ch.patch.worldGraph);
+          }
+          if (ch.patch.gameData) {
+            await snapshotAndPutGameData(ch.patch.gameData);
+          }
+          if (ch.patch.narrativeBundle) {
+            await snapshotAndPutNarrative(ch.patch.narrativeBundle);
+          }
         }
       }
 
@@ -146,7 +252,16 @@ export async function commitStagedTurn(
         entitySnaps.size > 0 ||
         audioSnaps.size > 0 ||
         roomSnaps.size > 0 ||
-        createdAudioIds.size > 0;
+        worldSnaps.size > 0 ||
+        gameDataSnaps.size > 0 ||
+        narrativeSnaps.size > 0 ||
+        createdAudioIds.size > 0 ||
+        createdSpriteIds.size > 0 ||
+        createdEntityIds.size > 0 ||
+        createdRoomIds.size > 0 ||
+        createdWorldIds.size > 0 ||
+        createdGameDataProjectIds.size > 0 ||
+        createdNarrativeProjectIds.size > 0;
 
       if (mutatesState) {
         savedCheckpoint = AgentCheckpointSchema.parse({
@@ -159,9 +274,18 @@ export async function commitStagedTurn(
             entities: Array.from(entitySnaps.values()),
             audioAssets: Array.from(audioSnaps.values()),
             rooms: Array.from(roomSnaps.values()),
+            worldGraphs: Array.from(worldSnaps.values()),
+            gameDataRegistries: Array.from(gameDataSnaps.values()),
+            narrativeBundles: Array.from(narrativeSnaps.values()),
           },
           createdIds: {
             audioAssetIds: Array.from(createdAudioIds),
+            spriteNodeIds: Array.from(createdSpriteIds),
+            entityIds: Array.from(createdEntityIds),
+            roomIds: Array.from(createdRoomIds),
+            worldGraphIds: Array.from(createdWorldIds),
+            gameDataProjectIds: Array.from(createdGameDataProjectIds),
+            narrativeProjectIds: Array.from(createdNarrativeProjectIds),
           },
           referencedBlobIds: Array.from(referencedBlobIds),
         });
@@ -242,6 +366,8 @@ export async function restoreCheckpoint(
       database.vaultItems,
       database.blobs,
       database.worldGraphs,
+      database.gameDataRegistries,
+      database.narrativeBundles,
     ],
     async () => {
       const raw = await database.agentCheckpoints.get(checkpointId);
@@ -266,10 +392,52 @@ export async function restoreCheckpoint(
         await database.rooms.put(rm);
         restoredRecordCount++;
       }
+      for (const wg of checkpoint.snapshots.worldGraphs ?? []) {
+        await database.worldGraphs.put(wg);
+        restoredRecordCount++;
+      }
+      for (const gd of checkpoint.snapshots.gameDataRegistries ?? []) {
+        await database.gameDataRegistries.put(gd);
+        restoredRecordCount++;
+      }
+      for (const nb of checkpoint.snapshots.narrativeBundles ?? []) {
+        await database.narrativeBundles.put(nb);
+        restoredRecordCount++;
+      }
 
       if (checkpoint.createdIds.audioAssetIds.length > 0) {
         await database.audioAssets.bulkDelete(checkpoint.createdIds.audioAssetIds);
         restoredRecordCount += checkpoint.createdIds.audioAssetIds.length;
+      }
+      if (checkpoint.createdIds.spriteNodeIds && checkpoint.createdIds.spriteNodeIds.length > 0) {
+        await database.spriteNodes.bulkDelete(checkpoint.createdIds.spriteNodeIds);
+        restoredRecordCount += checkpoint.createdIds.spriteNodeIds.length;
+      }
+      if (checkpoint.createdIds.entityIds && checkpoint.createdIds.entityIds.length > 0) {
+        await database.entities.bulkDelete(checkpoint.createdIds.entityIds);
+        restoredRecordCount += checkpoint.createdIds.entityIds.length;
+      }
+      if (checkpoint.createdIds.roomIds && checkpoint.createdIds.roomIds.length > 0) {
+        await database.rooms.bulkDelete(checkpoint.createdIds.roomIds);
+        restoredRecordCount += checkpoint.createdIds.roomIds.length;
+      }
+      if (checkpoint.createdIds.worldGraphIds && checkpoint.createdIds.worldGraphIds.length > 0) {
+        await database.worldGraphs.bulkDelete(checkpoint.createdIds.worldGraphIds);
+        restoredRecordCount += checkpoint.createdIds.worldGraphIds.length;
+      }
+      if (
+        checkpoint.createdIds.gameDataProjectIds &&
+        checkpoint.createdIds.gameDataProjectIds.length > 0
+      ) {
+        await database.gameDataRegistries.bulkDelete(checkpoint.createdIds.gameDataProjectIds);
+        restoredRecordCount += checkpoint.createdIds.gameDataProjectIds.length;
+      }
+      if (
+        checkpoint.createdIds.narrativeProjectIds &&
+        checkpoint.createdIds.narrativeProjectIds.length > 0
+      ) {
+        await database.narrativeBundles.bulkDelete(checkpoint.createdIds.narrativeProjectIds);
+        restoredRecordCount += checkpoint.createdIds.narrativeProjectIds.length;
       }
 
       await database.agentCheckpoints.delete(checkpointId);

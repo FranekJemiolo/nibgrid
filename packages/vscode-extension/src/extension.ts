@@ -187,6 +187,60 @@ export function runGodotWorkspaceScene(opts: {
   };
 }
 
+export interface HeadlessGodotCheckResult {
+  readonly ok: boolean;
+  readonly exitCode: number;
+  readonly stdout: string;
+  readonly stderr: string;
+  readonly diagnostics: readonly string[];
+}
+
+/**
+ * Runs `godot --headless --path <workspacePath> --check-only --quit` safely via `execFile`
+ * (`shell: false`) to surface scene/GDScript parse errors right after `res://` sync.
+ */
+export function validateGodotProjectHeadless(opts: {
+  readonly workspacePath: string;
+  readonly godotBinary?: string;
+  readonly execFileImpl?: ExecFileLike;
+  readonly signal?: AbortSignal;
+}): Promise<HeadlessGodotCheckResult> {
+  const cleanWorkspace = opts.workspacePath.trim();
+  if (!cleanWorkspace || cleanWorkspace.includes('\0')) {
+    return Promise.reject(new Error('Godot workspace path cannot be empty.'));
+  }
+  const binary = (opts.godotBinary ?? 'godot').trim();
+  if (!binary || UNSAFE_BINARY_CHARS.test(binary)) {
+    return Promise.reject(new Error(`Unsafe Godot executable path "${binary}".`));
+  }
+
+  const resolvedWorkspace = resolve(cleanWorkspace);
+  const args = ['--headless', '--path', resolvedWorkspace, '--check-only', '--quit'];
+
+  return new Promise((resolvePromise) => {
+    const runner: ExecFileLike =
+      opts.execFileImpl ??
+      ((file, callArgs, options, cb) =>
+        execFile(file, [...callArgs], options, cb ?? (() => undefined)));
+
+    runner(binary, args, { windowsHide: true, signal: opts.signal }, (error, stdout, stderr) => {
+      const cleanOut = String(stdout ?? '');
+      const cleanErr = String(stderr ?? '');
+      const diagnostics = `${cleanErr}\n${cleanOut}`
+        .split(/\r?\n/)
+        .map((line) => line.trim())
+        .filter((line) => /\b(error|failed|parse error|script error)\b/i.test(line));
+      resolvePromise({
+        ok: !error && diagnostics.length === 0,
+        exitCode: error ? 1 : 0,
+        stdout: cleanOut,
+        stderr: cleanErr,
+        diagnostics,
+      });
+    });
+  });
+}
+
 /**
  * Creates a `HostSecretStore` backed exclusively by VS Code OS Keychain `context.secrets`
  * (never writing credentials to `workspaceState`, `settings.json`, or files).

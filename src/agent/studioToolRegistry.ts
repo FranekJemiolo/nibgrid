@@ -2,6 +2,12 @@ import { z } from 'zod';
 import { encodeWav16 } from '../audio/pcmPostProcess';
 import { synthesizeProceduralSfx } from '../audio/proceduralSynth';
 import type { ProceduralSfxParams } from '../audio/types';
+import { simulateCombatTtk } from '../data/balanceSimulator';
+import {
+  GameDataRegistrySchema,
+  createDefaultGameDataRegistry,
+  type GameDataRegistry,
+} from '../data/gameDataSchemas';
 import { NibgridRepository, type NibgridDatabase } from '../db/database';
 import {
   EntityDefinitionSchema,
@@ -19,6 +25,13 @@ import {
   type ProviderKind,
   type SpriteNode,
 } from '../domain/schemas';
+import { validateAndCompileGdScript } from '../export/gdscriptGenerator';
+import {
+  ProjectNarrativeBundleSchema,
+  createDefaultProjectNarrative,
+  type ProjectNarrativeBundle,
+} from '../narrative/dialogueSchemas';
+import { runZeroTouchAssetPipeline } from '../processing/assetAutoPipeline';
 import { extractCollisionHull } from '../processing/collisionHull';
 import {
   GDSHADER_PRESETS,
@@ -26,17 +39,29 @@ import {
   type GdShaderPresetId,
 } from '../processing/gdshaderPresets';
 import { transpileGdShaderToWebGL2 } from '../processing/gdshaderTranspiler';
+import { sha256Bytes } from '../processing/hash';
 import { quantizeToPaletteOklab } from '../processing/paletteQuantize';
 import { hexToRgbaColor } from '../processing/pixelEditorCore';
 import { decodePngBytesToRgba, encodeRgbaToPngBytes } from '../processing/png';
+import { synthesizeProceduralSprite } from '../processing/proceduralSprite';
+import { computeArtBibleHash } from '../processing/projectAudit';
 import {
   RoomLayoutBlueprintSchema,
   StoredRoomRecordSchema,
   sanitizeRoomPlacements,
+  sanitizeRoomSlug,
 } from '../processing/roomLayoutCore';
+import { runSelfHealingPreFlight, type SelfHealSpriteInput } from '../processing/selfHealingQa';
 import { estimateInpaintCost, runRegionInpaint } from '../providers/inpaintAdapter';
+import { generateMockRoomBlueprint } from '../providers/roomPrototyperAdapter';
 import { collectProjectGodotSyncFiles } from '../sync/fsaaSyncEngine';
 import { computeSyncDiff } from '../sync/syncDiff';
+import { applyMissingGlyphFix } from '../ui/audit/fixItEngine';
+import {
+  WorldGraphSchema,
+  createDefaultWorldGraph,
+  type WorldGraph,
+} from '../world/worldGraphCore';
 import { slugifyAssetLabel } from './contextResolver';
 
 export const STUDIO_TOOL_NAMES = [
@@ -48,6 +73,11 @@ export const STUDIO_TOOL_NAMES = [
   'generate_sfx_cue',
   'patch_room_layout',
   'sync_godot_diff',
+  'create_entity_from_prompt',
+  'create_or_connect_room',
+  'tune_game_balance',
+  'author_dialogue_node',
+  'run_preflight_autofix',
 ] as const;
 
 export type StudioToolName = (typeof STUDIO_TOOL_NAMES)[number];
@@ -134,6 +164,41 @@ export const SyncGodotDiffArgsSchema = z.object({
   scope: z.enum(['all', 'entities', 'rooms']).default('all'),
 });
 
+export const CreateEntityFromPromptArgsSchema = z.object({
+  slug: z.string().min(1),
+  prompt: z.string().min(1),
+  role: z.enum(['hero', 'enemy', 'npc', 'prop']).optional(),
+  bodyType: z.enum(['CharacterBody2D', 'StaticBody2D', 'Area2D', 'RigidBody2D']).optional(),
+});
+
+export const CreateOrConnectRoomArgsSchema = z.object({
+  roomSlug: z.string().min(1),
+  prompt: z.string().min(1).optional(),
+  connectFromRoomSlug: z.string().min(1).optional(),
+  cols: z.number().int().min(12).max(48).optional(),
+  rows: z.number().int().min(8).max(24).optional(),
+});
+
+export const TuneGameBalanceArgsSchema = z.object({
+  enemySlug: z.string().min(1),
+  maxHp: z.number().finite().gt(0).optional(),
+  attackDamage: z.number().finite().min(0).optional(),
+  armor: z.number().finite().min(0).optional(),
+  targetTtkSec: z.number().finite().min(1).max(30).optional(),
+});
+
+export const AuthorDialogueNodeArgsSchema = z.object({
+  nodeId: z.string().min(1),
+  speaker: z.string().min(1),
+  enText: z.string().min(1),
+  plText: z.string().optional(),
+  deText: z.string().optional(),
+});
+
+export const RunPreflightAutofixArgsSchema = z.object({
+  scope: z.enum(['all', 'sprites', 'world', 'data', 'narrative']).default('all'),
+});
+
 export const STUDIO_TOOL_SCHEMAS = {
   inpaint_sprite_region: InpaintSpriteRegionArgsSchema,
   repalette_sprites: RepaletteSpritesArgsSchema,
@@ -143,6 +208,11 @@ export const STUDIO_TOOL_SCHEMAS = {
   generate_sfx_cue: GenerateSfxCueArgsSchema,
   patch_room_layout: PatchRoomLayoutArgsSchema,
   sync_godot_diff: SyncGodotDiffArgsSchema,
+  create_entity_from_prompt: CreateEntityFromPromptArgsSchema,
+  create_or_connect_room: CreateOrConnectRoomArgsSchema,
+  tune_game_balance: TuneGameBalanceArgsSchema,
+  author_dialogue_node: AuthorDialogueNodeArgsSchema,
+  run_preflight_autofix: RunPreflightAutofixArgsSchema,
 } as const;
 
 export const StudioToolCallSchema = z.discriminatedUnion('toolName', [
@@ -157,6 +227,14 @@ export const StudioToolCallSchema = z.discriminatedUnion('toolName', [
   z.object({ toolName: z.literal('generate_sfx_cue'), args: GenerateSfxCueArgsSchema }),
   z.object({ toolName: z.literal('patch_room_layout'), args: PatchRoomLayoutArgsSchema }),
   z.object({ toolName: z.literal('sync_godot_diff'), args: SyncGodotDiffArgsSchema }),
+  z.object({
+    toolName: z.literal('create_entity_from_prompt'),
+    args: CreateEntityFromPromptArgsSchema,
+  }),
+  z.object({ toolName: z.literal('create_or_connect_room'), args: CreateOrConnectRoomArgsSchema }),
+  z.object({ toolName: z.literal('tune_game_balance'), args: TuneGameBalanceArgsSchema }),
+  z.object({ toolName: z.literal('author_dialogue_node'), args: AuthorDialogueNodeArgsSchema }),
+  z.object({ toolName: z.literal('run_preflight_autofix'), args: RunPreflightAutofixArgsSchema }),
 ]);
 export type StudioToolCall = z.infer<typeof StudioToolCallSchema>;
 
@@ -276,6 +354,84 @@ export const STUDIO_GEMINI_TOOL_DECLARATIONS = [
       required: ['scope'],
     },
   },
+  {
+    name: 'create_entity_from_prompt',
+    description:
+      'Synthesize a complete Godot 4 Entity (sprite, normal map, collider, sockets, shader, SFX, and .gd script) from a prompt.',
+    parameters: {
+      type: 'OBJECT',
+      properties: {
+        slug: { type: 'STRING' },
+        prompt: { type: 'STRING' },
+        role: { type: 'STRING', enum: ['hero', 'enemy', 'npc', 'prop'] },
+        bodyType: {
+          type: 'STRING',
+          enum: ['CharacterBody2D', 'StaticBody2D', 'Area2D', 'RigidBody2D'],
+        },
+      },
+      required: ['slug', 'prompt'],
+    },
+  },
+  {
+    name: 'create_or_connect_room',
+    description:
+      'Create a new M35 TileMapLayer room or connect an existing room into the M45 WorldGraph with bidirectional portals.',
+    parameters: {
+      type: 'OBJECT',
+      properties: {
+        roomSlug: { type: 'STRING' },
+        prompt: { type: 'STRING' },
+        connectFromRoomSlug: { type: 'STRING' },
+        cols: { type: 'INTEGER' },
+        rows: { type: 'INTEGER' },
+      },
+      required: ['roomSlug'],
+    },
+  },
+  {
+    name: 'tune_game_balance',
+    description:
+      'Adjust enemy HP/damage/armor or calibrate TTK in GameDataRegistry via seeded combat simulation.',
+    parameters: {
+      type: 'OBJECT',
+      properties: {
+        enemySlug: { type: 'STRING' },
+        maxHp: { type: 'NUMBER' },
+        attackDamage: { type: 'NUMBER' },
+        armor: { type: 'NUMBER' },
+        targetTtkSec: { type: 'NUMBER' },
+      },
+      required: ['enemySlug'],
+    },
+  },
+  {
+    name: 'author_dialogue_node',
+    description:
+      'Add or update a localized DialogueNode and auto-append missing Unicode glyphs to the M24 Bitmap Font charset.',
+    parameters: {
+      type: 'OBJECT',
+      properties: {
+        nodeId: { type: 'STRING' },
+        speaker: { type: 'STRING' },
+        enText: { type: 'STRING' },
+        plText: { type: 'STRING' },
+        deText: { type: 'STRING' },
+      },
+      required: ['nodeId', 'speaker', 'enText'],
+    },
+  },
+  {
+    name: 'run_preflight_autofix',
+    description:
+      'Run the autonomous M52 Self-Healing QA pass across off-palette sprites, softlocks, combat balance, and font glyphs.',
+    parameters: {
+      type: 'OBJECT',
+      properties: {
+        scope: { type: 'STRING', enum: ['all', 'sprites', 'world', 'data', 'narrative'] },
+      },
+      required: ['scope'],
+    },
+  },
 ] as const;
 
 export const StagedAssetPatchSchema = z.discriminatedUnion('patchKind', [
@@ -295,6 +451,32 @@ export const StagedAssetPatchSchema = z.discriminatedUnion('patchKind', [
   z.object({
     patchKind: z.literal('room-record'),
     room: StoredRoomRecordSchema,
+  }),
+  z.object({
+    patchKind: z.literal('entity-bundle'),
+    spriteNode: SpriteNodeSchema,
+    entity: EntityDefinitionSchema,
+    audioAsset: AudioAssetSchema.optional(),
+  }),
+  z.object({
+    patchKind: z.literal('world-graph'),
+    worldGraph: WorldGraphSchema,
+    room: StoredRoomRecordSchema.optional(),
+  }),
+  z.object({
+    patchKind: z.literal('game-data'),
+    registry: GameDataRegistrySchema,
+  }),
+  z.object({
+    patchKind: z.literal('narrative-bundle'),
+    bundle: ProjectNarrativeBundleSchema,
+  }),
+  z.object({
+    patchKind: z.literal('self-heal-batch'),
+    spriteNodes: z.array(SpriteNodeSchema),
+    worldGraph: WorldGraphSchema.optional(),
+    gameData: GameDataRegistrySchema.optional(),
+    narrativeBundle: ProjectNarrativeBundleSchema.optional(),
   }),
   z.object({
     patchKind: z.literal('sync-preview'),
@@ -972,6 +1154,520 @@ export async function executeStagedToolCall(
           estimatedUsd: 0,
           status: 'pending',
           patch: { patchKind: 'sync-preview', changedPathCount: changedCount },
+        },
+      ];
+    }
+
+    case 'create_entity_from_prompt': {
+      const slug = sanitizeEntitySlug(call.args.slug);
+      const displayName =
+        slug
+          .split('_')
+          .map((p) => (p ? p.charAt(0).toUpperCase() + p.slice(1) : ''))
+          .join(' ') || 'Entity';
+      const w = project.artBible.targetWidth;
+      const h = project.artBible.targetHeight;
+      const seed =
+        Math.abs(slug.split('').reduce((acc, ch) => acc * 31 + ch.charCodeAt(0), 17)) % 99991;
+      const whiteSketch = new Uint8ClampedArray(w * h * 4);
+      whiteSketch.fill(255);
+      const sketchSha = await sha256Bytes(
+        new Uint8Array(whiteSketch.buffer, whiteSketch.byteOffset, whiteSketch.byteLength),
+      );
+      const synthRgba = synthesizeProceduralSprite({
+        sketchRgba: whiteSketch,
+        width: w,
+        height: h,
+        palette: project.artBible.palette,
+        artMode: project.artBible.artMode,
+        lighting: project.artBible.lighting,
+        adherence: 'balanced',
+        seedKey: `${slug}_${seed}_${call.args.prompt}`,
+        variantIndex: 0,
+      });
+      const synthPng = encodeRgbaToPngBytes(synthRgba, w, h);
+      const assetClass = call.args.role === 'prop' ? 'prop' : 'character';
+      const bodyType =
+        call.args.bodyType ?? (assetClass === 'prop' ? 'StaticBody2D' : 'CharacterBody2D');
+
+      const pipe = runZeroTouchAssetPipeline({
+        spriteRgba: { width: w, height: h, data: synthRgba },
+        assetClass,
+        slug,
+        displayName,
+        artBible: project.artBible,
+        bodyType,
+        seed,
+      });
+
+      const [rawBlob, procBlob, normBlob, emissBlob, wavBlob] = await Promise.all([
+        repo.storeBlobDeduplicated(synthPng, 'image/png'),
+        repo.storeBlobDeduplicated(pipe.processedPngBytes, 'image/png'),
+        repo.storeBlobDeduplicated(pipe.normalPngBytes, 'image/png'),
+        repo.storeBlobDeduplicated(pipe.emissionPngBytes, 'image/png'),
+        repo.storeBlobDeduplicated(pipe.sfxWavBytes, 'audio/wav'),
+      ]);
+
+      const nowIso = new Date().toISOString();
+      const spriteNode = SpriteNodeSchema.parse({
+        id: globalThis.crypto.randomUUID(),
+        projectId,
+        parentId: null,
+        kind: 'generation',
+        assetClass,
+        imageBlobId: rawBlob.id,
+        processedBlobId: procBlob.id,
+        postProcessConfig: pipe.postProcessConfig,
+        lightingBake: {
+          normalBlobId: normBlob.id,
+          emissionBlobId: emissBlob.id,
+          normalConfig: pipe.normalConfig,
+          emissionConfig: pipe.emissionConfig,
+          emissivePixelCount: pipe.emissivePixelCount,
+          occluderVertexCount: pipe.collisionShapes[0]?.vertices.length ?? 0,
+          bakedAt: nowIso,
+        },
+        collisionShapes: [...pipe.collisionShapes],
+        sockets: [...pipe.sockets],
+        shaderConfig: pipe.shaderConfig,
+        recipeArtBibleHash: computeArtBibleHash(project.artBible),
+        sketchSha256: sketchSha,
+        generationMeta: {
+          providerId: providerConfig.id,
+          modelId: providerConfig.modelId,
+          seed,
+          adherence: 'balanced',
+          promptDelta: call.args.prompt,
+          compiledPrompt: call.args.prompt,
+          createdAt: nowIso,
+        },
+      });
+
+      const audioAsset = AudioAssetSchema.parse({
+        id: `sfx_${slug}_${spriteNode.id.slice(0, 8)}`,
+        projectId,
+        name: `${slug}_cue`,
+        presetId: 'agent-director-sfx',
+        route: 'local-synth',
+        modelId: 'procedural-synth-v1',
+        wavBlobId: wavBlob.id,
+        variationBlobIds: [wavBlob.id],
+        synthParams: pipe.sfxParams,
+        postProcess: createDefaultAudioPostProcessConfig(),
+        lufs: -14,
+        durationSec: pipe.sfxDurationSec,
+        createdAt: nowIso,
+      });
+
+      const compiledGd = validateAndCompileGdScript(undefined, {
+        slug,
+        displayName,
+        bodyType,
+        spritePrompt: call.args.prompt,
+        turnaroundLayout: 'single',
+        generateNormalMap: true,
+        colliderMode: 'convex-hull',
+        includeHitbox: assetClass === 'character',
+        includeHurtbox: true,
+        sockets: pipe.sockets.map((s) => ({
+          name: s.name,
+          normX: Math.max(0, Math.min(1, s.restPosPx.x / Math.max(1, pipe.width))),
+          normY: Math.max(0, Math.min(1, s.restPosPx.y / Math.max(1, pipe.height))),
+          baseAngleDeg: s.baseAngleDeg,
+        })),
+        sfxSpecs: [
+          {
+            cueName: `${slug}_cue`,
+            category: 'sfx',
+            prompt: `${displayName} cue`,
+            engine: 'procedural',
+            proceduralPreset: 'hit',
+          },
+        ],
+        behavior: {
+          archetype: call.args.role === 'hero' ? 'player' : 'melee-enemy',
+          moveSpeed: 130,
+          maxHealth: 75,
+          attackDamage: 12,
+          states: ['IDLE', 'MOVE', 'ATTACK', 'HURT'],
+        },
+      });
+
+      const entity = EntityDefinitionSchema.parse({
+        id: globalThis.crypto.randomUUID(),
+        projectId,
+        slug,
+        displayName,
+        bodyType,
+        resSubpath: 'entities',
+        primarySpriteNodeId: spriteNode.id,
+        clips: [
+          {
+            name: 'idle',
+            spriteNodeId: spriteNode.id,
+            fps: 8,
+            loop: true,
+            frameAudioTriggers: { '0': audioAsset.id },
+          },
+        ],
+        audioAssetIds: [audioAsset.id],
+        includeNormalMap: true,
+        scriptResPath: `entities/${slug}/${slug}.gd`,
+        scriptContent: compiledGd.code,
+        shaderConfig: pipe.shaderConfig,
+        updatedAt: Date.now(),
+      });
+
+      return [
+        {
+          changeId: globalThis.crypto.randomUUID(),
+          toolName: 'create_entity_from_prompt',
+          targetId: entity.id,
+          targetSlug: slug,
+          kind: 'entity',
+          summary: `Created zero-touch Entity "${slug}" (sprite, normal, hull, sockets, SFX, .gd)`,
+          afterBlobId: procBlob.id,
+          estimatedUsd: 0,
+          status: 'pending',
+          patch: {
+            patchKind: 'entity-bundle',
+            spriteNode,
+            entity,
+            audioAsset,
+          },
+        },
+      ];
+    }
+
+    case 'create_or_connect_room': {
+      const slug = sanitizeRoomSlug(call.args.roomSlug);
+      const existingRoom = rooms.find((r) => sanitizeRoomSlug(r.slug) === slug);
+      const bp = existingRoom
+        ? existingRoom.blueprint
+        : {
+            ...generateMockRoomBlueprint({
+              prompt: call.args.prompt ?? `${slug.replace(/_/g, ' ')} encounter room`,
+              cols: call.args.cols ?? 24,
+              rows: call.args.rows ?? 14,
+              tileSizePx: 32,
+              availableEntitySlugs: entities.map((e) => e.slug),
+            }),
+            slug,
+            displayName: slug
+              .split('_')
+              .map((p) => (p ? p.charAt(0).toUpperCase() + p.slice(1) : ''))
+              .join(' '),
+          };
+      const nextRoom = existingRoom
+        ? existingRoom
+        : StoredRoomRecordSchema.parse({
+            id: globalThis.crypto.randomUUID(),
+            projectId,
+            slug,
+            tileSetNodeId: rooms[0]?.tileSetNodeId ?? null,
+            tileSetMode: 'blob47',
+            parallaxNodeId: rooms[0]?.parallaxNodeId ?? null,
+            blueprint: bp,
+            updatedAt: Date.now(),
+          });
+
+      const currentGraph: WorldGraph =
+        (await repo.getWorldGraph(projectId)) ??
+        createDefaultWorldGraph(
+          projectId,
+          rooms.map((r) => ({
+            id: r.id,
+            slug: r.slug,
+            displayName: r.blueprint.displayName || r.slug,
+          })),
+        );
+
+      const nextRoomsList = [...currentGraph.rooms];
+      if (!nextRoomsList.some((r) => r.roomId === nextRoom.id)) {
+        nextRoomsList.push({
+          roomId: nextRoom.id,
+          label: nextRoom.blueprint.displayName || nextRoom.slug,
+          worldGridPos: { x: nextRoomsList.length, y: 0 },
+          ...(nextRoomsList.length === 0 ? { isStart: true } : {}),
+          grantsFlags: [],
+        });
+      }
+
+      const nextEdges = [...currentGraph.edges];
+      const fromRoom = call.args.connectFromRoomSlug
+        ? rooms.find(
+            (r) => sanitizeRoomSlug(r.slug) === sanitizeRoomSlug(call.args.connectFromRoomSlug!),
+          )
+        : rooms[rooms.length - 1];
+
+      if (fromRoom && fromRoom.id !== nextRoom.id) {
+        const edgeId = `edge_${fromRoom.slug}_${nextRoom.slug}`;
+        if (!nextEdges.some((e) => e.id === edgeId)) {
+          nextEdges.push({
+            id: edgeId,
+            fromRoomId: fromRoom.id,
+            fromDoorId: `door_${nextRoom.slug}`,
+            toRoomId: nextRoom.id,
+            toSpawnId: `spawn_${fromRoom.slug}`,
+            bidirectional: true,
+            requiredFlags: [],
+          });
+        }
+      }
+
+      const nextGraph = WorldGraphSchema.parse({
+        ...currentGraph,
+        rooms: nextRoomsList,
+        edges: nextEdges,
+        updatedAt: Date.now(),
+      });
+
+      return [
+        {
+          changeId: globalThis.crypto.randomUUID(),
+          toolName: 'create_or_connect_room',
+          targetId: nextRoom.id,
+          targetSlug: slug,
+          kind: 'room',
+          summary: `${existingRoom ? 'Connected' : 'Created & connected'} room "${slug}" (${nextGraph.edges.length} portal edge(s))`,
+          textDiff: {
+            before: `${currentGraph.rooms.length} room(s), ${currentGraph.edges.length} portal(s)`,
+            after: `${nextGraph.rooms.length} room(s), ${nextGraph.edges.length} portal(s)`,
+          },
+          estimatedUsd: 0,
+          status: 'pending',
+          patch: {
+            patchKind: 'world-graph',
+            worldGraph: nextGraph,
+            ...(existingRoom ? {} : { room: nextRoom }),
+          },
+        },
+      ];
+    }
+
+    case 'tune_game_balance': {
+      const existingData: GameDataRegistry =
+        (await repo.getGameDataRegistry(projectId)) ?? createDefaultGameDataRegistry(projectId);
+      const normSlug = slugifyAssetLabel(call.args.enemySlug);
+      const targetIdx = existingData.enemies.findIndex(
+        (e) =>
+          slugifyAssetLabel(e.id) === normSlug ||
+          slugifyAssetLabel(e.displayName ?? '') === normSlug,
+      );
+      const idx = targetIdx >= 0 ? targetIdx : 0;
+      const targetEnemy = existingData.enemies[idx];
+      if (!targetEnemy) {
+        throw new Error(`No enemies found in GameDataRegistry to tune.`);
+      }
+
+      const baselineWeapon = existingData.items[0]!;
+      const simBefore = simulateCombatTtk({ maxHp: 100, armor: 2 }, baselineWeapon, targetEnemy, {
+        runs: 200,
+        seed: 42,
+      });
+
+      let tunedMaxHp = call.args.maxHp ?? targetEnemy.maxHp;
+      if (call.args.targetTtkSec !== undefined && call.args.maxHp === undefined) {
+        tunedMaxHp = Math.max(10, Math.round(simBefore.effectiveDps * call.args.targetTtkSec));
+      }
+
+      const updatedEnemy = {
+        ...targetEnemy,
+        maxHp: tunedMaxHp,
+        attackDamage: call.args.attackDamage ?? targetEnemy.attackDamage,
+        armor: call.args.armor ?? targetEnemy.armor,
+      };
+      const simAfter = simulateCombatTtk({ maxHp: 100, armor: 2 }, baselineWeapon, updatedEnemy, {
+        runs: 200,
+        seed: 42,
+      });
+
+      const nextRegistry = GameDataRegistrySchema.parse({
+        ...existingData,
+        enemies: existingData.enemies.map((e, i) => (i === idx ? updatedEnemy : e)),
+        updatedAt: Date.now(),
+      });
+
+      return [
+        {
+          changeId: globalThis.crypto.randomUUID(),
+          toolName: 'tune_game_balance',
+          targetId: projectId,
+          targetSlug: updatedEnemy.id,
+          kind: 'entity',
+          summary: `Tuned "${updatedEnemy.displayName || updatedEnemy.id}" HP ${targetEnemy.maxHp} -> ${updatedEnemy.maxHp} (TTK ${simBefore.p50TtkSec.toFixed(1)}s -> ${simAfter.p50TtkSec.toFixed(1)}s)`,
+          textDiff: {
+            before: JSON.stringify(targetEnemy, null, 2),
+            after: JSON.stringify(updatedEnemy, null, 2),
+          },
+          estimatedUsd: 0,
+          status: 'pending',
+          patch: { patchKind: 'game-data', registry: nextRegistry },
+        },
+      ];
+    }
+
+    case 'author_dialogue_node': {
+      const existingBundle: ProjectNarrativeBundle =
+        (await repo.getNarrativeBundle(projectId)) ?? createDefaultProjectNarrative(projectId);
+      const nodeId = sanitizeEntitySlug(call.args.nodeId);
+      const textKey = `DLG_${nodeId.toUpperCase()}`;
+
+      const nextNodes = [...existingBundle.graph.nodes];
+      const existingIdx = nextNodes.findIndex((n) => n.id === nodeId);
+      const newNode = {
+        id: nodeId,
+        speakerId: call.args.speaker,
+        portraitEmotion: 'neutral' as const,
+        textKey,
+        choices: [],
+      };
+      if (existingIdx >= 0) {
+        nextNodes[existingIdx] = newNode;
+      } else {
+        nextNodes.push(newNode);
+      }
+
+      const nextBundle = applyMissingGlyphFix(
+        ProjectNarrativeBundleSchema.parse({
+          ...existingBundle,
+          graph: {
+            ...existingBundle.graph,
+            nodes: nextNodes,
+          },
+          localization: {
+            ...existingBundle.localization,
+            strings: {
+              ...existingBundle.localization.strings,
+              [textKey]: {
+                en: call.args.enText,
+                pl: call.args.plText ?? call.args.enText,
+                de: call.args.deText ?? call.args.enText,
+              },
+            },
+          },
+          updatedAt: new Date().toISOString(),
+        }),
+      );
+
+      return [
+        {
+          changeId: globalThis.crypto.randomUUID(),
+          toolName: 'author_dialogue_node',
+          targetId: nodeId,
+          targetSlug: nodeId,
+          kind: 'entity',
+          summary: `Authored localized dialogue "${nodeId}" (${call.args.speaker}) & synced M24 glyphs`,
+          textDiff: {
+            before: `${existingBundle.graph.nodes.length} node(s), charset ${existingBundle.fontCharset.length} chars`,
+            after: `${nextBundle.graph.nodes.length} node(s), charset ${nextBundle.fontCharset.length} chars`,
+          },
+          estimatedUsd: 0,
+          status: 'pending',
+          patch: { patchKind: 'narrative-bundle', bundle: nextBundle },
+        },
+      ];
+    }
+
+    case 'run_preflight_autofix': {
+      const [worldGraph, gameData, narrativeBundle] = await Promise.all([
+        repo.getWorldGraph(projectId),
+        repo.getGameDataRegistry(projectId),
+        repo.getNarrativeBundle(projectId),
+      ]);
+
+      const spriteInputs: SelfHealSpriteInput[] = [];
+      const dimsById = new Map<string, { readonly width: number; readonly height: number }>();
+      for (const sp of spriteNodes) {
+        if (sp.kind === 'sketch') continue;
+        const rec = await repo.getBlob(sp.processedBlobId ?? sp.imageBlobId);
+        if (!rec) continue;
+        try {
+          const decoded = await decodePngBytesToRgba(new Uint8Array(await rec.bytes.arrayBuffer()));
+          dimsById.set(sp.id, { width: decoded.width, height: decoded.height });
+          spriteInputs.push({
+            id: sp.id,
+            name: sp.generationMeta.promptDelta || sp.id,
+            width: decoded.width,
+            height: decoded.height,
+            data: decoded.rgba,
+            hasCollider: (sp.collisionShapes?.length ?? 0) > 0,
+          });
+        } catch {
+          // ignore
+        }
+      }
+
+      const report = runSelfHealingPreFlight({
+        paletteHex: project.artBible.palette,
+        sprites: spriteInputs,
+        worldGraph,
+        gameData,
+        narrativeBundle,
+      });
+
+      const patchedSprites: SpriteNode[] = [];
+      for (const sp of spriteNodes) {
+        const healedRgba = report.healedSprites[sp.id];
+        const healedHull = report.healedColliders[sp.id];
+        if (!healedRgba && !healedHull) continue;
+        let nextBlobId = sp.processedBlobId;
+        if (healedRgba) {
+          const dims = dimsById.get(sp.id);
+          if (dims) {
+            const png = encodeRgbaToPngBytes(healedRgba, dims.width, dims.height);
+            const stored = await repo.storeBlobDeduplicated(png, 'image/png');
+            nextBlobId = stored.id;
+          }
+        }
+        const nextShapes = healedHull
+          ? [
+              ...(sp.collisionShapes ?? []),
+              {
+                id: `col_heal_${sp.id.slice(0, 8)}`,
+                name: 'Auto-Healed Collider',
+                layer: 'collider' as const,
+                kind: healedHull.kind,
+                isSensor: false,
+                visible: true,
+                vertices: healedHull.vertices.map((v) => ({ x: v.x, y: v.y })),
+              },
+            ]
+          : sp.collisionShapes;
+        patchedSprites.push(
+          SpriteNodeSchema.parse({
+            ...sp,
+            ...(nextBlobId ? { processedBlobId: nextBlobId } : {}),
+            ...(nextShapes ? { collisionShapes: nextShapes } : {}),
+          }),
+        );
+      }
+
+      return [
+        {
+          changeId: globalThis.crypto.randomUUID(),
+          toolName: 'run_preflight_autofix',
+          targetId: projectId,
+          targetSlug: 'preflight_qa',
+          kind: 'entity',
+          summary: `Pre-flight autofix staged ${report.appliedFixes.length} repair(s) (${report.beforeIssueCount} -> ${report.afterIssueCount} remaining)`,
+          textDiff: {
+            before: `${report.beforeIssueCount} issue(s) detected`,
+            after:
+              report.appliedFixes.map((f) => `• [${f.kind}] ${f.summary}`).join('\n') ||
+              'Project is already clean (0 issues).',
+          },
+          estimatedUsd: 0,
+          status: 'pending',
+          patch: {
+            patchKind: 'self-heal-batch',
+            spriteNodes: patchedSprites,
+            ...(report.healedWorldGraph ? { worldGraph: report.healedWorldGraph } : {}),
+            ...(report.healedGameData ? { gameData: report.healedGameData } : {}),
+            ...(report.healedNarrativeBundle
+              ? { narrativeBundle: report.healedNarrativeBundle }
+              : {}),
+          },
         },
       ];
     }
