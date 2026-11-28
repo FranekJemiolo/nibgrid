@@ -22,6 +22,7 @@ import {
 import type { EntityDirectorBlueprint } from '../processing/entityDirectorBlueprint';
 import { decodePngBytesToRgba } from '../processing/png';
 import { computeArtBibleHash } from '../processing/projectAudit';
+import { useUxModeStore } from '../state/uxModeStore';
 
 export interface CommitZeroTouchOptions {
   readonly slug?: string;
@@ -85,6 +86,12 @@ export async function commitZeroTouchAssetToDb(
   const bodyType: GodotBodyType =
     options.bodyType ?? (assetClass === 'tile' ? 'StaticBody2D' : 'CharacterBody2D');
 
+  const uxNormalStrength =
+    options.normalStrength ??
+    (typeof window !== 'undefined'
+      ? useUxModeStore.getState().proDefaults.sobelBevelStrength
+      : undefined);
+
   const pipelineResult = runZeroTouchAssetPipeline({
     spriteRgba: { width: decoded.width, height: decoded.height, data: decoded.rgba },
     assetClass,
@@ -93,7 +100,7 @@ export async function commitZeroTouchAssetToDb(
     artBible: project.artBible,
     bodyType,
     seed: spriteNode.generationMeta.seed,
-    ...(options.normalStrength !== undefined ? { normalStrength: options.normalStrength } : {}),
+    ...(uxNormalStrength !== undefined ? { normalStrength: uxNormalStrength } : {}),
     ...(options.colliderMaxVertices !== undefined
       ? { colliderMaxVertices: options.colliderMaxVertices }
       : {}),

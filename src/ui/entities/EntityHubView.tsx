@@ -29,6 +29,7 @@ import type { SpriteNode } from '../../domain/schemas';
 import { assembleGodotEntityFiles, type VirtualSyncFile } from '../../export/godotPrefabAssembler';
 import { decodePngBytesToRgba } from '../../processing/png';
 import type { RgbaBuffer } from '../../processing/types';
+import { useUxModeStore } from '../../state/uxModeStore';
 import { useAppStore } from '../../store/useAppStore';
 import {
   collectEntitySyncFiles,
@@ -91,6 +92,7 @@ export function EntityHubView() {
 
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [drawerTab, setDrawerTab] = useState<'config' | 'tscn' | 'gdscript'>('config');
+  const uxMode = useUxModeStore((s) => s.mode);
   const [directorOpen, setDirectorOpen] = useState(false);
   const [playtestEntityId, setPlaytestEntityId] = useState<string | null>(() =>
     route.screen === 'entities' && route.playtestEntityId ? route.playtestEntityId : null,
@@ -885,6 +887,15 @@ export function EntityHubView() {
                 </div>
               ) : drawerTab === 'tscn' ? (
                 <div className="space-y-3 text-xs">
+                  {uxMode === 'creator' && (
+                    <div
+                      data-testid="entity-creator-code-hint"
+                      className="rounded border border-indigo-500/30 bg-indigo-950/30 px-2.5 py-1.5 text-[11px] text-indigo-200"
+                    >
+                      Auto-managed by the Nibgrid Godot 4 Compiler in Creator Mode. Switch to Pro
+                      Mode for manual schema overrides.
+                    </div>
+                  )}
                   <div className="space-y-1">
                     <span className="text-[11px] font-semibold text-slate-300">
                       Generated Prefab Files ({previewFiles.length})
@@ -910,6 +921,15 @@ export function EntityHubView() {
                 </div>
               ) : (
                 <div className="space-y-2 text-xs">
+                  {uxMode === 'creator' && (
+                    <div
+                      data-testid="entity-creator-code-hint"
+                      className="rounded border border-indigo-500/30 bg-indigo-950/30 px-2.5 py-1.5 text-[11px] text-indigo-200"
+                    >
+                      Auto-generated typed Godot 4.3+ controller. Use Composer or Pro Mode to
+                      customize.
+                    </div>
+                  )}
                   <p className="font-mono text-[11px] text-slate-400">
                     {draft.scriptResPath ||
                       `res://${normalizeResSubpath(draft.resSubpath)}/${sanitizeEntitySlug(draft.slug)}/${sanitizeEntitySlug(draft.slug)}.gd`}

@@ -34,6 +34,7 @@ import { encodeRgbaToPngBytes } from '../../processing/png';
 import { computeArtBibleHash } from '../../processing/projectAudit';
 import type { RgbaBuffer } from '../../processing/types';
 import { estimateShaderGenerationCost, generateGdShader } from '../../providers/shaderGenerator';
+import { useUxModeStore } from '../../state/uxModeStore';
 import { useAppStore } from '../../store/useAppStore';
 import {
   compileWebGlProgram,
@@ -163,6 +164,9 @@ export function ShaderStudio({
   );
 
   const [codeTab, setCodeTab] = useState<'gdshader' | 'tres'>('gdshader');
+  const [codeCollapsed, setCodeCollapsed] = useState(false);
+  const uxMode = useUxModeStore((s) => s.mode);
+  const isCodeCollapsed = uxMode === 'creator' && codeCollapsed;
   const [backdrop, setBackdrop] = useState<'checker' | 'dark' | 'light'>('checker');
   const [zoomScale, setZoomScale] = useState<number>(4);
   const [isGenerating, setIsGenerating] = useState(false);
@@ -1021,22 +1025,34 @@ export function ShaderStudio({
             </button>
           </div>
 
-          <span className="inline-flex items-center gap-1 text-[11px]">
-            {allErrors.length === 0 ? (
-              <span
-                data-testid="shader-compile-ok"
-                className="inline-flex items-center gap-1 text-emerald-400"
+          <div className="flex items-center gap-2">
+            {uxMode === 'creator' && (
+              <button
+                type="button"
+                data-testid="shader-toggle-code-btn"
+                onClick={() => setCodeCollapsed((prev) => !prev)}
+                className="rounded border border-slate-700 bg-slate-800/80 px-2 py-0.5 text-[10px] font-medium text-slate-300 hover:border-slate-500 hover:text-white"
               >
-                <CheckCircle2 className="h-3.5 w-3.5" />
-                Valid
-              </span>
-            ) : (
-              <span className="inline-flex items-center gap-1 text-rose-400">
-                <AlertTriangle className="h-3.5 w-3.5" />
-                {allErrors.length} error{allErrors.length > 1 ? 's' : ''}
-              </span>
+                {isCodeCollapsed ? 'Show Code' : 'Tuck Code'}
+              </button>
             )}
-          </span>
+            <span className="inline-flex items-center gap-1 text-[11px]">
+              {allErrors.length === 0 ? (
+                <span
+                  data-testid="shader-compile-ok"
+                  className="inline-flex items-center gap-1 text-emerald-400"
+                >
+                  <CheckCircle2 className="h-3.5 w-3.5" />
+                  Valid
+                </span>
+              ) : (
+                <span className="inline-flex items-center gap-1 text-rose-400">
+                  <AlertTriangle className="h-3.5 w-3.5" />
+                  {allErrors.length} error{allErrors.length > 1 ? 's' : ''}
+                </span>
+              )}
+            </span>
+          </div>
         </div>
 
         {/* Inline Diagnostics Banner */}
@@ -1062,24 +1078,31 @@ export function ShaderStudio({
           </div>
         )}
 
-        <div className="min-h-0 flex-1 p-2.5">
-          {codeTab === 'gdshader' ? (
-            <textarea
-              data-testid="shader-code-editor"
-              spellCheck={false}
-              value={shaderConfig.gdshaderSource}
-              onChange={(e) => handleSourceChange(e.target.value)}
-              className="h-full min-h-[260px] w-full resize-none rounded border border-[#2A2A2E] bg-[#121214] p-2.5 font-mono text-[11px] leading-relaxed text-zinc-100 focus:border-amber-400 focus:outline-none"
-            />
-          ) : (
-            <pre
-              data-testid="shader-tres-preview"
-              className="h-full min-h-[260px] overflow-auto rounded border border-[#2A2A2E] bg-[#121214] p-2.5 font-mono text-[11px] leading-relaxed whitespace-pre-wrap break-words text-zinc-200"
-            >
-              {tresPreviewText}
-            </pre>
-          )}
-        </div>
+        {isCodeCollapsed ? (
+          <div className="flex flex-1 items-center justify-center p-4 text-center text-xs text-slate-400">
+            Raw shader source tucked away in Creator Mode. Click <strong>Show Code</strong> or
+            switch to <strong>Pro Mode</strong> to edit `.gdshader` source directly.
+          </div>
+        ) : (
+          <div className="min-h-0 flex-1 p-2.5">
+            {codeTab === 'gdshader' ? (
+              <textarea
+                data-testid="shader-code-editor"
+                spellCheck={false}
+                value={shaderConfig.gdshaderSource}
+                onChange={(e) => handleSourceChange(e.target.value)}
+                className="h-full min-h-[260px] w-full resize-none rounded border border-[#2A2A2E] bg-[#121214] p-2.5 font-mono text-[11px] leading-relaxed text-zinc-100 focus:border-amber-400 focus:outline-none"
+              />
+            ) : (
+              <pre
+                data-testid="shader-tres-preview"
+                className="h-full min-h-[260px] overflow-auto rounded border border-[#2A2A2E] bg-[#121214] p-2.5 font-mono text-[11px] leading-relaxed whitespace-pre-wrap break-words text-zinc-200"
+              >
+                {tresPreviewText}
+              </pre>
+            )}
+          </div>
+        )}
       </aside>
     </div>
   );

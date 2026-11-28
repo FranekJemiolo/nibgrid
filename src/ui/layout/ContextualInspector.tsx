@@ -1,13 +1,45 @@
 import { Sliders, Sparkles, Terminal } from 'lucide-react';
-import { CURATED_CREATOR_PRESETS, useUxModeStore } from '../../state/uxModeStore';
+import {
+  CURATED_CREATOR_PRESETS,
+  useUxModeStore,
+  type CreatorPresetMeta,
+  type ProTechnicalDefaults,
+} from '../../state/uxModeStore';
+import { useAppStore } from '../../store/useAppStore';
+
+const PRESET_PRO_DEFAULTS: Record<CreatorPresetMeta['id'], ProTechnicalDefaults> = {
+  'crisp-16bit': { sobelBevelStrength: 2.0, rdpEpsilonPx: 1.25 },
+  'cozy-handdrawn': { sobelBevelStrength: 1.5, rdpEpsilonPx: 1.5 },
+  'dynamic-torchlight': { sobelBevelStrength: 3.0, rdpEpsilonPx: 1.0 },
+};
 
 /**
  * Progressive-disclosure Contextual Inspector:
  * - Creator Mode (default): curated 1-click presets & context card, hiding raw shaders/sliders.
- * - Pro Mode: reveals granular M0-M47 shader, Sobel bevel, RDP epsilon, and JSON schema controls.
+ * - Pro Mode: reveals granular M0-M55 shader, Sobel bevel, RDP epsilon, and JSON schema controls.
  */
 export function ContextualInspector() {
-  const { mode, setMode, activePresetId, setActivePresetId, selectedContext } = useUxModeStore();
+  const {
+    mode,
+    setMode,
+    activePresetId,
+    setActivePresetId,
+    selectedContext,
+    proDefaults,
+    setProDefaults,
+  } = useUxModeStore();
+  const activeProject = useAppStore((s) => s.activeProject);
+  const patchActiveArtBible = useAppStore((s) => s.patchActiveArtBible);
+
+  const handleSelectPreset = (preset: CreatorPresetMeta) => {
+    setActivePresetId(preset.id);
+    setProDefaults(PRESET_PRO_DEFAULTS[preset.id]);
+    if (activeProject) {
+      void patchActiveArtBible({
+        artMode: preset.defaultFilterMode === 'hand-drawn' ? 'hd-2d' : 'pixel-art',
+      });
+    }
+  };
 
   const contextLabel = selectedContext
     ? `${selectedContext.kind.toUpperCase()}: ${selectedContext.label}`
@@ -40,7 +72,7 @@ export function ContextualInspector() {
               key={preset.id}
               type="button"
               data-testid={`creator-preset-${preset.id}`}
-              onClick={() => setActivePresetId(preset.id)}
+              onClick={() => handleSelectPreset(preset)}
               className={`rounded border px-2.5 py-2 text-left transition-colors ${
                 active
                   ? 'border-indigo-400 bg-indigo-500/15 text-white'
@@ -78,29 +110,41 @@ export function ContextualInspector() {
           </div>
 
           <label className="flex flex-col gap-1">
-            <span className="text-[11px] text-slate-300">
-              Sobel Normal Bevel Strength (1.0 - 4.0)
-            </span>
+            <div className="flex items-center justify-between text-[11px] text-slate-300">
+              <span>Sobel Normal Bevel Strength (1.0 - 4.0)</span>
+              <span className="font-mono text-[10px] text-amber-300">
+                {proDefaults.sobelBevelStrength.toFixed(2)}
+              </span>
+            </div>
             <input
               data-testid="pro-sobel-bevel-slider"
               type="range"
               min="1"
               max="4"
               step="0.25"
-              defaultValue="2"
+              value={proDefaults.sobelBevelStrength}
+              onChange={(e) =>
+                setProDefaults({ sobelBevelStrength: Number.parseFloat(e.target.value) })
+              }
               className="accent-indigo-500"
             />
           </label>
 
           <label className="flex flex-col gap-1">
-            <span className="text-[11px] text-slate-300">RDP Collider Epsilon (0.5 - 4.0 px)</span>
+            <div className="flex items-center justify-between text-[11px] text-slate-300">
+              <span>RDP Collider Epsilon (0.5 - 4.0 px)</span>
+              <span className="font-mono text-[10px] text-amber-300">
+                {proDefaults.rdpEpsilonPx.toFixed(2)} px
+              </span>
+            </div>
             <input
               data-testid="pro-rdp-epsilon-slider"
               type="range"
               min="0.5"
               max="4"
               step="0.25"
-              defaultValue="1.25"
+              value={proDefaults.rdpEpsilonPx}
+              onChange={(e) => setProDefaults({ rdpEpsilonPx: Number.parseFloat(e.target.value) })}
               className="accent-indigo-500"
             />
           </label>

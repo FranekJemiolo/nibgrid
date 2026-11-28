@@ -4,6 +4,7 @@ import {
   BookOpen,
   Bot,
   Boxes,
+  Clapperboard,
   ClipboardCheck,
   Command,
   Compass,
@@ -266,6 +267,16 @@ export function App() {
                 <Rocket className="h-3.5 w-3.5" />
                 Ship to Godot
               </button>
+              <button
+                type="button"
+                data-testid="nav-director-studio"
+                onClick={() => void navigate({ screen: 'director', projectId: activeProject.id })}
+                className={navButtonClass(route.screen === 'director')}
+                title="Full-Game Director Studio Autopilot"
+              >
+                <Clapperboard className="h-3.5 w-3.5" />
+                Director
+              </button>
             </>
           )}
 
@@ -418,7 +429,7 @@ export function App() {
           <span className="text-[11px] text-slate-400">
             {uxMode === 'creator'
               ? 'Creator Mode · Curated Presets Active'
-              : 'Pro Mode · Full M0–M50 Controls Visible'}
+              : 'Pro Mode · Full M0–M55 Controls Visible'}
           </span>
         </div>
       )}

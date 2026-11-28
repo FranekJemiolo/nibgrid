@@ -4,6 +4,11 @@ export type UxMode = 'creator' | 'pro';
 export type CreatorPresetId = 'crisp-16bit' | 'cozy-handdrawn' | 'dynamic-torchlight';
 export type ContextTargetKind = 'entity' | 'door' | 'ui' | 'tile' | 'sprite';
 
+export interface ProTechnicalDefaults {
+  readonly sobelBevelStrength: number;
+  readonly rdpEpsilonPx: number;
+}
+
 export interface ContextualSelection {
   readonly kind: ContextTargetKind;
   readonly id: string;
@@ -67,16 +72,22 @@ interface UxModeState {
   mode: UxMode;
   activePresetId: CreatorPresetId;
   selectedContext: ContextualSelection | null;
+  proDefaults: ProTechnicalDefaults;
   setMode: (mode: UxMode) => void;
   toggleMode: () => void;
   setActivePresetId: (presetId: CreatorPresetId) => void;
   setSelectedContext: (ctx: ContextualSelection | null) => void;
+  setProDefaults: (patch: Partial<ProTechnicalDefaults>) => void;
 }
 
 export const useUxModeStore = create<UxModeState>((set, get) => ({
   mode: readStoredMode(),
   activePresetId: 'crisp-16bit',
   selectedContext: null,
+  proDefaults: {
+    sobelBevelStrength: 2.0,
+    rdpEpsilonPx: 1.25,
+  },
   setMode: (mode) => {
     persistMode(mode);
     set({ mode });
@@ -88,4 +99,11 @@ export const useUxModeStore = create<UxModeState>((set, get) => ({
   },
   setActivePresetId: (activePresetId) => set({ activePresetId }),
   setSelectedContext: (selectedContext) => set({ selectedContext }),
+  setProDefaults: (patch) =>
+    set((state) => ({
+      proDefaults: {
+        ...state.proDefaults,
+        ...patch,
+      },
+    })),
 }));

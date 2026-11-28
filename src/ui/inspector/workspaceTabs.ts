@@ -185,17 +185,7 @@ export function resolveInspectorTabs(
   let primary: InspectorTab[];
   switch (assetClass) {
     case 'prop':
-      primary = [
-        'postprocess',
-        'normal',
-        'sockets',
-        'collider',
-        'palette-lut',
-        'sandbox',
-        'data-foundry',
-        'dialogue-l10n',
-        'ship-godot',
-      ];
+      primary = ['postprocess', 'normal', 'sockets', 'collider', 'palette-lut', 'sandbox'];
       break;
     case 'tile':
       primary = [
@@ -204,7 +194,6 @@ export function resolveInspectorTabs(
         'autotile',
         'parallax',
         'room',
-        'world-map',
         'normal',
         'palette-lut',
       ];

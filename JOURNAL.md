@@ -831,3 +831,28 @@
 
 - **GameKit & EditorPlugin Exporter (`src/export/godotGameKitExporter.ts`, `src/export/godotPrefabBuilder.ts`, `src/export/godotPluginExporter.ts`, `src/sync/fsaaSyncEngine.ts`, `src/ui/export/ShipToGodotPanel.tsx`, `docs/ARCHITECTURE.md`):** Implemented 3 starter templates (`side-platformer`, `top-down-action`, `cozy-rpg`) emitting `project.godot`, `default_bus_layout.tres`, playable `main.tscn` (`GameShell.gd`), composable Entity `.tscn` prefabs (`HealthComponent`, `HurtboxComponent`, `HitboxComponent`, `AnimationPlayer`, `StateMachine`), and `addons/nibgrid_sync/` auto-scanning `EditorPlugin`, integrated directly into M25 FSAA sync and **Ship to Godot**.
 - **Verification (`tests/unit/m50-godot-gamekit.test.ts`, `tests/e2e/m50-gamekit-sync-e2e.spec.ts`):** Verified valid `project.godot` InputMap/layers/integer scaling, exact `load_steps` + `AnimationPlayer` tracks in composable `.tscn` prefabs, valid `@tool extends EditorPlugin`, and full FSAA sync in E2E with zero console/page errors and zero orphan blobs.
+
+## Milestone 51: Closed-Loop Godot 4 Project Compiler, Deletion-Aware Sync & ZIP Fallback
+
+- **Project Compiler & Incremental Deletions (`src/export/godotProjectCompiler.ts`, `src/export/godotPluginExporter.ts`, `src/sync/syncDiff.ts`, `src/sync/fsaaSyncEngine.ts`, `src/ui/export/ShipToGodotPanel.tsx`, `docs/ARCHITECTURE.md`):** Added `validateGodotSceneGraph()` verifying all `res://` `ext_resource` targets prior to disk/ZIP export, `resolveEntityGameKitAssets()`, `removedPaths` hash pruning & `removeFilesFromDirectoryHandle()` in FSAA sync, M20/M23 bundle inclusion in `collectProjectGodotSyncFiles()`, and non-Chromium ZIP fallback in **Ship to Godot**.
+- **Verification (`tests/unit/m51-godot-compiler.test.ts`, `tests/e2e/m51-godot-compiler-e2e.spec.ts`):** Verified dangling `res://` rejection, deletion-aware diffing, real asset wiring in GameKit entity prefabs, and UI badge/toggle/ZIP flows across unit and E2E suites.
+
+## Milestone 52: Zero-Touch Asset Auto-Pipeline & Self-Healing Pre-Flight QA
+
+- **Auto-Pipeline & Pre-Flight Auto-Heal (`src/processing/assetAutoPipeline.ts`, `src/sync/autoPipelineCommit.ts`, `src/processing/selfHealingQa.ts`, `src/sync/selfHealingCommit.ts`, `docs/ARCHITECTURE.md`):** Built deterministic single-click pipeline (`runZeroTouchAssetPipeline` -> `commitZeroTouchAssetToDb`) producing sprite + normal + emissive + collider + sockets + shader + SFX WAV + `.tscn` in one Dexie transaction, plus multi-pass `runSelfHealingPreFlight` invoked via `ship-autoheal-btn`.
+- **Verification (`tests/unit/m52-auto-pipeline-heal.test.ts`, `tests/e2e/m52-auto-pipeline-e2e.spec.ts`):** Verified byte-identical auto-assembly outputs, zero orphan blobs on commit, iterative Fix-It auto-healing, and full E2E green pass.
+
+## Milestone 53: Full-Game Reactive Autopilot DAG & Director Studio Workspace
+
+- **17-Stage Reactive DAG & Director Studio (`src/processing/verticalSliceSchema.ts`, `src/processing/sliceDagRunner.ts`, `src/providers/verticalSliceDirector.ts`, `src/ui/director/DirectorStudioView.tsx`, `docs/ARCHITECTURE.md`):** Expanded vertical slice synthesis to multi-room `WorldGraph`, `GameDataRegistry`, `ProjectNarrativeBundle`, M52 Self-Healing QA, and GameKit ZIP/sync outputs behind selective cast invalidation and a top-level `#/project/:id/director` workspace.
+- **Verification (`tests/unit/m53-director-autopilot.test.ts`, `tests/e2e/m53-director-studio-e2e.spec.ts`):** Verified selective DAG hash invalidation, 17-node multi-room GameKit synthesis (`0 broken res:// refs`), FSAA sync, reload persistence, and zero errors.
+
+## Milestone 54: Director Verbs in Composer & MCP, Bidirectional Delta Sync & Headless Check
+
+- **13 Studio Tools, 14 MCP Tools & Delta Sync (`src/agent/studioToolRegistry.ts`, `src/agent/stagingTransactions.ts`, `src/providers/assetAgentAdapter.ts`, `src/sync/bidirectionalSync.ts`, `packages/vscode-extension/src/extension.ts`, `docs/ARCHITECTURE.md`):** Added `create_entity_from_prompt`, `create_or_connect_room`, `tune_game_balance`, `author_dialogue_node`, and `run_preflight_autofix` across Composer (`Cmd+L`), VS Code `lm` tools, and MCP server with full rollback support, `reconcileGodotEditorDelta()`, and optional headless Godot 4 check-only integration.
+- **Verification (`tests/unit/m54-director-agent-mcp.test.ts`, `tests/e2e/m54-director-composer-e2e.spec.ts`, `npm run verify:parity`):** Verified `13` Studio Tools / `14` MCP Tools parity, bidirectional delta reconciliation (`jumpVelocityPx` constraint compliance), Composer staged diff + checkpoint rollback, and extension bundle build.
+
+## Milestone 55: Streamlined 4-Stage UX, Wired Creator/Pro Controls, Screenshots & Docs
+
+- **Creator/Pro Control Wiring & Navigation Polish (`src/state/uxModeStore.ts`, `src/ui/layout/ContextualInspector.tsx`, `src/ui/inspector/ShaderStudio.tsx`, `src/ui/entities/EntityHubView.tsx`, `src/ui/inspector/workspaceTabs.ts`, `src/App.tsx`, `scripts/capture-readme-screenshots.mjs`):** Wired `useUxModeStore` `proDefaults` into controlled Pro Mode sliders and auto-pipeline defaults, connected curated Creator presets to live `ArtBible.artMode` updates, decluttered `prop`/`tile` primary tabs while preserving all 21 parity-tracked tabs, added `nav-director-studio`, and captured Playwright screenshots for Director Studio, Ship to Godot, and Director Composer.
+- **Verification (`tests/unit/m55-ux-wiring.test.ts`, `tests/e2e/m55-ux-director-flow-e2e.spec.ts`):** Verified full pre-push verification gate (`typecheck`, `lint`, `format:check`, `verify:parity`, unit suite, VS Code extension bundle, desktop smoke check, production PWA build, and full Playwright E2E suite).

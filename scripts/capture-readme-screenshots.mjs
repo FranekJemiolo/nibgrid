@@ -30,6 +30,37 @@ await page.getByTestId('dialogue-add-node-btn').click();
 await page.getByTestId('audit-glyph-status').getByText('Missing Glyph').first().waitFor();
 await page.screenshot({ path: `${out}/pwa-dialogue-l10n.png` });
 
+// Director Studio Full-Game Reactive Autopilot (M53)
+await page.getByTestId('nav-director-studio').click();
+await page.getByTestId('director-studio-view').waitFor();
+await page
+  .getByTestId('director-prompt-input')
+  .fill('Cozy 16-bit dungeon crawler with red cat knight, slime enemy, dungeon room, sword item, and intro dialogue');
+await page.getByTestId('director-scope-select').selectOption('multi-room-dungeon');
+await page.getByTestId('director-tier-select').selectOption('instant-draft');
+await page.getByTestId('director-start-btn').click();
+await page.getByTestId('director-anchor-gate').waitFor({ timeout: 15000 });
+await page.getByTestId('director-approve-build-btn').click();
+await page.getByTestId('director-completion-bar').waitFor({ timeout: 30000 });
+await page.screenshot({ path: `${out}/pwa-director-studio.png` });
+
+// Ship to Godot Closed-Loop Compiler & Self-Healing QA (M51/M52)
+await page.getByTestId('nav-ship-godot').click();
+await page.getByTestId('ship-graph-integrity-badge').waitFor();
+await page.getByTestId('ship-autoheal-btn').click();
+await page.getByTestId('ship-autoheal-report').waitFor({ timeout: 15000 });
+await page.screenshot({ path: `${out}/pwa-ship-godot-compiler.png` });
+
+// Director Asset Composer & Staged Diff (M54)
+await page.getByTestId('nav-composer-btn').click();
+await page.getByTestId('asset-composer-rail').waitFor();
+await page
+  .getByTestId('composer-prompt-input')
+  .fill('create enemy frost_bat and autofix preflight');
+await page.getByTestId('composer-submit-btn').click();
+await page.getByTestId('staged-change-card').first().waitFor({ timeout: 15000 });
+await page.screenshot({ path: `${out}/pwa-director-composer.png` });
+
 await page.goto(url);
 await page.getByText('Red Cat Warrior').first().waitFor();
 await page.screenshot({ path: `${out}/pwa-project-hub.png` });

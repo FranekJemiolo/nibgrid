@@ -8,6 +8,18 @@ Local-first, zero-server Bring-Your-Own-Key / Bring-Your-Own-Model (BYOK/BYOM) P
 
 ### GitHub Pages PWA (`https://franekjemiolo.github.io/nibgrid/`)
 
+Director Studio Full-Game Reactive Autopilot (M53) with 17-node DAG orchestration, Style Anchor Gate, and live `0 broken res:// refs` graph validation:
+
+![Nibgrid PWA — Director Studio Full-Game Autopilot](docs/screenshots/pwa-director-studio.png)
+
+Ship to Godot 4 Closed-Loop Compiler, Turnkey GameKit & Self-Healing Pre-Flight QA (M51/M52) with Creator/Pro Contextual Inspector:
+
+![Nibgrid PWA — Ship to Godot & Self-Healing Pre-Flight](docs/screenshots/pwa-ship-godot-compiler.png)
+
+Agentic Asset Composer (`Cmd+L`) executing M54 Director Verbs (`create_entity_from_prompt`, `run_preflight_autofix`) with staged Visual Diffs:
+
+![Nibgrid PWA — Director Composer Staged Visual Diffs](docs/screenshots/pwa-director-composer.png)
+
 Dialogue & Localization Studio with live M24 glyph-coverage and M33 text-overflow audits:
 
 ![Nibgrid PWA — Dialogue & Localization Studio](docs/screenshots/pwa-dialogue-l10n.png)
@@ -120,7 +132,11 @@ _Regenerate PWA screenshots against GitHub Pages (`SHOT_URL=https://franekjemiol
 | In-Browser Entity Mini-Playtest Stage             | `Entities` → `▶ Playtest`                      | `$0.00 Local` (60 Hz Fixed-Timestep)         | Live WASD/Space combat feel, M16/M21 debug overlay, M27 hit-flash & synced `.gd` `@export` stats     |
 | Single-Prompt Vertical Slice Autopilot            | Header **`+ Vertical Slice`** / `Cmd/Ctrl+K`   | `$0.00` Draft or Hybrid/Full BYOK            | Complete Godot 4 slice: `main.tscn`, `levels/`, `entities/`, `tiles/`, `parallax/`, `ui/`, `#share=` |
 | Agentic Asset Composer & Inline Canvas Edits      | **`Composer`** (`Cmd/Ctrl+L`) / Canvas `Cmd+K` | `$0.00` Offline Mock or Gemini Function Call | Diff-staged M7/M14/M16/M21/M27/M31/M35 edits + instant Dexie rollback checkpoints                    |
-| Standalone Desktop IDE & Antigravity MCP Router   | **`Models`** Header / `packages/` + `desktop/` | `$0.00` Local (`LiteRT`/`Ollama`) or ACP/MCP | VSCodium-style desktop bundle, 9-tool MCP server & safe `~/.gemini/config/mcp_config.json` auto-link |
+| Standalone Desktop IDE & Antigravity MCP Router   | **`Models`** Header / `packages/` + `desktop/` | `$0.00` Local (`LiteRT`/`Ollama`) or ACP/MCP | VSCodium-style desktop bundle, 14-tool MCP server & safe `~/.gemini/config/mcp_config.json` auto-link |
+| Closed-Loop Godot 4 Compiler & Bidirectional Sync | **`Ship to Godot`** + `addons/nibgrid_sync`   | `$0.00 Local` (Graph Validator + FSAA)       | `res://` integrity validation, pruning deleted files, GameKit entity wiring & `.godot_delta.json` sync |
+| Zero-Touch Entity Assembly & Self-Healing QA      | **`Sprite Studio`**, **`Entities`**, **`Ship`**| `$0.00 Local` (Pure-TS Pipeline)             | 1-click Cutout, Palette, Normal, Hull, Sockets, Shader, SFX, `.tscn` + auto-healed glyphs/traps/palette |
+| Full-Game Director Studio Autopilot               | **`Director`** Header / `#/project/:id/director`| `$0.00` Instant Draft or Hybrid/Full BYOK    | 17-node reactive DAG, multi-room `WorldGraph`, `GameDataRegistry`, `NarrativeBundle` & F5 GameKit ZIP  |
+| Director Verbs in Composer (`Cmd+L`) & MCP        | **`Composer`** / VS Code `lm` & MCP Server     | `$0.00` Mock / BYOK / Antigravity MCP        | 13 Studio Tools (`create_entity_from_prompt`, `create_or_connect_room`, `tune_game_balance`, etc.)     |
 
 ---
 
