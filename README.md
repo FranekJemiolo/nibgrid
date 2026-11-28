@@ -4,6 +4,8 @@ Local-first, zero-server Bring-Your-Own-Key / Bring-Your-Own-Model (BYOK/BYOM) P
 
 **Live App (GitHub Pages):** https://franekjemiolo.github.io/nibgrid/
 
+> **New Complete Game Tutorial:** Follow **[Zero-to-Godot Game Tutorial: *Crimson Whisker: Lunar Starbase* (`docs/TUTORIAL_RED_CAT_STARBASE.md`)](docs/TUTORIAL_RED_CAT_STARBASE.md)** — a 10-step visual walkthrough building a playable 2D platformer featuring the **Red Cat with glowing lightsaber defeating rogue robots in a lunar starbase**, with step-by-step screenshots through **F5 Godot 4** launch.
+
 ## Screenshots
 
 ### GitHub Pages PWA (`https://franekjemiolo.github.io/nibgrid/`)
@@ -44,6 +46,7 @@ _Regenerate PWA screenshots against GitHub Pages (`SHOT_URL=https://franekjemiol
 
 ## Table of Contents
 
+- [Zero-to-Godot Tutorial: Red Cat vs. Lunar Starbase Robots](docs/TUTORIAL_RED_CAT_STARBASE.md)
 - [Use-Case Matrix: What Can You Build with Nibgrid?](#use-case-matrix-what-can-you-build-with-nibgrid)
 - [Part 1 — End-to-End Hero Tutorial: 2D Platformer Red Cat Warrior](#part-1--end-to-end-hero-tutorial-2d-platformer-red-cat-warrior)
   - [1.1 Lock Your Art Bible (Screen 2)](#11-lock-your-art-bible-screen-2)
